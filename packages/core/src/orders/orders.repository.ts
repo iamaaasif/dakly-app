@@ -20,6 +20,7 @@ import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { itemPreview } from './order-item-preview.repository';
 
 const summaryColumns = {
   id: orders.id,
@@ -64,6 +65,8 @@ const detailColumns = {
   deliveredAt: orders.deliveredAt,
   codCollectedAt: orders.codCollectedAt,
   possibleDuplicateOfOrderId: orders.possibleDuplicateOfOrderId,
+  note: orders.note,
+  teamNote: orders.teamNote,
 };
 
 export type OrderWrite = Omit<typeof orders.$inferInsert, 'storeId'>;
@@ -97,6 +100,8 @@ export type StageWrite = Partial<
 
 export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
   stages?: OrderStage[];
+  // To confirm leaves out orders waiting for an advance; they show in Pending.
+  withoutAdvanceRequest?: boolean;
   timeZone: string | null;
   phone?: string;
   overdueBefore: Date;
@@ -129,7 +134,7 @@ export class OrdersRepository {
       tx
         .select({ stage: orders.stage, count: count() })
         .from(orders)
-        .where(eq(orders.storeId, storeId))
+        .where(and(eq(orders.storeId, storeId), notAwaitingAdvanceInToConfirm))
         .groupBy(orders.stage),
     );
   }
@@ -351,31 +356,24 @@ export class OrdersRepository {
   }
 }
 
-const itemPreview = sql<string | null>`(
-  select string_agg(label, ', ' order by id)
-  from (
-    select item.id, item.product_name || case when item.variant_title = 'Default' then ''
-      else ' (' || item.variant_title || ')' end || ' × ' || item.quantity::text as label
-    from ${orderItems} item
-    where item.store_id = "orders"."store_id" and item.order_id = "orders"."id"
-    order by item.id limit 2
-  ) lines
-)`;
-
 export function orderMatchingConditions(tx: Transaction, storeId: string, filter: OrderMatch) {
   return and(
     eq(orders.storeId, storeId),
     filter.stages ? inArray(orders.stage, filter.stages) : undefined,
+    filter.withoutAdvanceRequest ? ne(orders.paymentStatus, 'advance_requested') : undefined,
     orderSearch(filter.search, filter.phone),
     orderFilters(filter),
     filter.alert ? orderAlertFilter(tx, storeId, filter.alert, filter.overdueBefore) : undefined,
   );
 }
 
+const notAwaitingAdvanceInToConfirm = sql`not (${orders.stage} = 'to_confirm' and ${orders.paymentStatus} = 'advance_requested')`;
+
 const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
 
 function orderFilters({
   source,
+  paymentStatus,
   courier,
   buyerContactId,
   createdFrom,
@@ -385,6 +383,7 @@ function orderFilters({
   return and(
     buyerContactId ? eq(orders.buyerContactId, buyerContactId) : undefined,
     source ? eq(orders.source, source) : undefined,
+    paymentStatus ? eq(orders.paymentStatus, paymentStatus) : undefined,
     courier ? eq(orders.courier, courier) : undefined,
     createdFrom
       ? sql`${orders.createdAt} >= ${createdFrom}::date::timestamp at time zone ${timeZone}`

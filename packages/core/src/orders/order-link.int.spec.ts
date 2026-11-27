@@ -5,7 +5,7 @@ import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { PlaceOrderLinkOrderInput } from '@dakly/contracts/orders';
+import type { PlaceOrderLinkOrderInput } from '@dakly/contracts/order-link';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { DeliveryModule } from '../delivery/delivery.module';

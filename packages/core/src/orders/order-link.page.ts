@@ -1,4 +1,5 @@
 import { formatMoney } from '@dakly/contracts/money';
+import { isInStock } from '@dakly/contracts/product-editor-fields';
 
 import { escapeHtml } from './order-confirmation.page';
 import type { OrderLinkView } from './order-link.service';
@@ -100,7 +101,7 @@ ${widget}
 }
 
 function isOrderable(product: OrderLinkView['product'], variant: Variant): boolean {
-  return !product.isStockTracked || variant.available > 0;
+  return isInStock(product, variant.available);
 }
 
 function variantRow(product: OrderLinkView['product'], variant: Variant, checked: boolean): string {

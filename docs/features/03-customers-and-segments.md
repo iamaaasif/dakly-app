@@ -39,21 +39,25 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   (default 50, at most 100). `sort` is `newest` (default), `last_purchase`, `highest_spend`,
   `most_orders` or `name`; the cursor is the last row's id, and its sort key is read back from
   the database. Filters: `kind`, one `tag`, `source`, `type`, `minSpendPoisha`,
-  `maxSpendPoisha`, `lastPurchase` (`7_days`, `30_days`, `90_days`, `over_90_days`, `never`) and
+  `maxSpendPoisha`, `hasOrdered=true`, `lastPurchase` (`7_days`, `30_days`, `90_days`, `over_90_days`, `never`) and
   `search`, which finds a name, an email or an area (3 letters or more) or a phone as before.
   `type` is a customer list tab: `new`, `returning` (regulars), `vip` (best), `inactive`
   (stopped buying), `at_risk` (slipping away) or `high_value`, the top 10% of customers by net
   spend whatever their stage (at least one customer). The response carries `total`, the
-  number of contacts the filters match, not just this page. Deleted contacts are never listed.
+  number of contacts the filters match, not just this page. `hasOrdered=true` keeps only
+  contacts with at least one non-cancelled order (`contact_stats.orders_count > 0`, which includes orders brought in
+  by store sync, POS and khata); this is the Customers page, and without it the list is every contact. Deleted contacts are never listed.
   Each row also carries `whatsappPhone` (masked like `phone`), `email`, `district`, `source`
   and `consentedChannels`, the channels whose latest consent answer is granted, and from
   `contact_stats` `ordersCount`, `netSpendPoisha`, `lastOrderAt`, `lifecycleStage` and
   `isHighValue` (zero, null and `none` for a contact with no stats row). The profile and the
   other routes keep the short contact shape.
-- `GET /contacts/counts` (`customers.view`) returns the tab counts `all`, `new`, `returning`,
+- `GET /contacts/counts` (`customers.view`) returns the tab counts `all` (every contact), `new`, `returning`,
   `vip`, `inactive`, `highValue`, `atRisk`, plus `boughtMoreThanOnce` and `canReceiveMarketing`
-  (consent granted on any channel) for the page subtitle. It counts the whole shop, not the
-  current filters.
+  (consent granted on any channel) for the page subtitle, and `customers`, the contacts with at
+  least one non-cancelled order. It counts the whole shop, not the current filters; with
+  `hasOrdered=true` every count covers only people who ordered. The export takes the same
+  `hasOrdered` filter.
 - `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
   identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.
@@ -457,6 +461,19 @@ Computed nightly from orders. Each insight type has a fixed calculation, then th
 | Places                              | Orders and repeat rate by district                                                   | Target top district or adjust delivery charge |
 
 An insight is shown only with at least 100 orders in the period; otherwise "Insights appear after 100 orders". "Not useful" hides it and is logged.
+
+**Customer profile reads (DSN-13)**
+
+All routes are under `/contacts/:contactId`, need `customers.view` (`customers.edit` to change), and show phone numbers masked unless the member may see full phones.
+
+1. `GET /summary`: contact details, lifecycle stage and the six header numbers. Average order value is net spend divided by orders. Lifetime value is net spend to date (glossary) and is `null` until the first order, when the screen says "Not enough data yet".
+2. `GET /orders`: the customer's orders newest first, each with its first item, how many more lines it has, a photo link, the stage and the total.
+3. `GET /activity`: one timeline of orders placed, delivered, returned and cancelled, campaign messages sent, read and tapped, workflow runs entered, consent changes and notes. Segment joins are not shown because segments are rule based and keep no join history.
+4. `GET /campaigns`: one row per campaign message with the furthest result (tapped, read, delivered, sent or failed). Messages not yet sent are left out.
+5. `GET /notes` and `POST /notes`: staff notes with author and date, kept in `contact_notes`. The note typed in Add contact or an import stays on the contact and is listed last, as the oldest note, with no author. Notes move with a contact merge and come back on undo. They are separate from the AI memory facts, which the model may rewrite.
+6. `GET /marketing-preferences` and `PUT /marketing-preferences/:channel`: the current answer per channel. Staff can switch WhatsApp and SMS; each switch adds a consent row with the member who made it and publishes `consent.changed`. Email is shown but cannot be switched until email campaigns ship (D20), and Messenger or Instagram opt-in must come from the customer.
+
+The orders, timeline and campaigns routes take `limit` (up to 50) and the `cursor` from the page before.
 
 ### Business rules
 

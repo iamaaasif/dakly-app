@@ -134,7 +134,7 @@ describe('order export over Fastify and Postgres', () => {
   it('exports saved lines that match the pipeline filters and masks the phone in CSV', async () => {
     await access(true, true);
     const response = await download(
-      `format=csv&stage=to_confirm&search=Buyer&source=manual&courier=pathao&createdFrom=2026-10-12&createdThrough=2026-10-12&buyerContactId=${buyerId}`,
+      `format=csv&stage=on_hold&search=Buyer&source=manual&courier=pathao&createdFrom=2026-10-12&createdThrough=2026-10-12&buyerContactId=${buyerId}`,
     );
     expect(response.statusCode).toBe(200);
     expect(response.headers).toMatchObject({

@@ -19,7 +19,11 @@ import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductDuplicateService } from './product-duplicate.service';
+import { ProductListService } from './product-list.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductTagsRepository } from './product-tags.repository';
+import { ProductTagsService } from './product-tags.service';
 import { ProductsController } from './products.controller';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
@@ -45,47 +49,55 @@ describe('ProductsService with Postgres', () => {
     transaction,
   );
   const brands = new ProductBrandsService(new ProductBrandsRepository(tenant), transaction);
+  const tags = new ProductTagsService(new ProductTagsRepository(tenant));
+  const stores = {
+    settings: async (storeId: string) => ({
+      id: storeId,
+      name: 'Fixture store',
+      slug: null,
+      extensions: [],
+      legalName: null,
+      businessType: null,
+      phone: null,
+      email: null,
+      address: null,
+      district: null,
+      vatBin: null,
+      tradeLicenceNumber: null,
+      sending: {
+        quietHours: { startHour: 21, endHour: 9 },
+        frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+        onlyOwnersAndAdminsApprove: true,
+        sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
+      },
+      stock: { lowStockThreshold: 3 },
+    }),
+  } as StoresService;
+  const sales = { unitsToConfirm: async () => [] } as never;
   const service = new ProductsService(
     repository,
     new ProductOrderVariantsRepository(tenant),
     transaction,
     new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     { now: () => instant } as Clock,
-    {
-      settings: async (storeId: string) => ({
-        id: storeId,
-        name: 'Fixture store',
-        slug: null,
-        extensions: [],
-        legalName: null,
-        businessType: null,
-        phone: null,
-        email: null,
-        address: null,
-        district: null,
-        vatBin: null,
-        tradeLicenceNumber: null,
-        sending: {
-          quietHours: { startHour: 21, endHour: 9 },
-          frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
-          onlyOwnersAndAdminsApprove: true,
-          sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
-        },
-        stock: { lowStockThreshold: 3 },
-      }),
-    } as StoresService,
+    stores,
     {} as FileStorageDriver,
     categories,
     brands,
-    {} as never,
+    sales,
+    tags,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
   const team = new TeamService({} as ConstructorParameters<typeof TeamService>[0]);
-  const controller = new ProductsController(service, team);
+  const lists = new ProductListService(service, repository, sales, stores);
+  const duplicates = new ProductDuplicateService(repository, service);
+  const controller = new ProductsController(service, team, duplicates, lists);
   beforeAll(() => f.setup());
   afterAll(async () => {
     for (const table of [
       'outbox_events',
+      'product_tag_links',
+      'product_tags',
       'product_variants',
       'products',
       'product_categories',
@@ -369,6 +381,118 @@ describe('ProductsService with Postgres', () => {
       code: 'PRODUCT_SKU_TAKEN',
     });
     expect((await service.list(f.a, { limit: 50, search: 'SKU product' })).items).toHaveLength(1);
+  });
+
+  it('shows the product code, the source and the matching total on the list', async () => {
+    const tag = `Code${randomUUID().slice(0, 8)}`;
+    const typed = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: `Typed ${tag}`,
+        options: [{ name: 'Size', values: ['M', 'L'] }],
+        variants: [
+          { optionValues: { Size: 'M' }, sku: null },
+          { optionValues: { Size: 'L' }, sku: `${tag}-L` },
+        ],
+      }),
+      actor,
+    );
+    const imported = await service.create(
+      f.a,
+      createProductSchema.parse({ name: `Imported ${tag}` }),
+      actor,
+      { source: 'import' },
+    );
+    expect(typed).toMatchObject({ code: `${tag}-L`, source: 'manual' });
+    expect(imported).toMatchObject({ code: null, source: 'import' });
+
+    const byCode = await service.list(f.a, { limit: 50, search: tag.toLowerCase() });
+    expect(byCode.items.map((item) => item.id).sort()).toEqual([typed.id, imported.id].sort());
+    const firstPage = await lists.list(f.a, { limit: 1, search: tag }, false);
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.totalCount).toBe(2);
+    expect((await lists.list(f.b, { limit: 50, search: tag }, false)).totalCount).toBe(0);
+  });
+
+  it('copies a product as a hidden draft with no stock, photos or codes', async () => {
+    const source = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Cotton Panjabi',
+        description: 'Soft cotton',
+        pricePoisha: 245000,
+        compareAtPricePoisha: 295000,
+        options: [{ name: 'Size', values: ['M', 'L'] }],
+        variants: [
+          { optionValues: { Size: 'M' }, sku: 'PJ-M', costPoisha: 150000 },
+          { optionValues: { Size: 'L' }, sku: 'PJ-L', priceOverridePoisha: 260000 },
+        ],
+      }),
+      actor,
+    );
+    await f.connection.pool.query('update product_variants set on_hand = 7 where product_id = $1', [
+      source.id,
+    ]);
+
+    const copy = await duplicates.duplicate(f.a, source.id, actor);
+
+    expect(copy.id).not.toBe(source.id);
+    expect(copy).toMatchObject({
+      name: 'Cotton Panjabi (copy)',
+      description: 'Soft cotton',
+      status: 'hidden',
+      source: 'manual',
+      code: null,
+      pricePoisha: 245000,
+      compareAtPricePoisha: 295000,
+      imageFileIds: [],
+    });
+    expect(
+      copy.variants.map(({ optionValues, sku, costPoisha, priceOverridePoisha, onHand }) => ({
+        optionValues,
+        sku,
+        costPoisha,
+        priceOverridePoisha,
+        onHand,
+      })),
+    ).toEqual([
+      {
+        optionValues: { Size: 'M' },
+        sku: null,
+        costPoisha: 150000,
+        priceOverridePoisha: null,
+        onHand: 0,
+      },
+      {
+        optionValues: { Size: 'L' },
+        sku: null,
+        costPoisha: null,
+        priceOverridePoisha: 260000,
+        onHand: 0,
+      },
+    ]);
+    expect((await service.getById(f.a, source.id)).variants.map((v) => v.onHand)).toEqual([7, 7]);
+  });
+
+  it('keeps a long name within the limit when it is copied', async () => {
+    const source = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'x'.repeat(200) }),
+      actor,
+    );
+    expect((await duplicates.duplicate(f.a, source.id, actor)).name).toHaveLength(200);
+  });
+
+  it('does not copy a product of another shop or an archived one', async () => {
+    const other = await service.create(f.b, createProductSchema.parse({ name: 'Theirs' }), actor);
+    await expect(duplicates.duplicate(f.a, other.id, actor)).rejects.toMatchObject({
+      code: 'PRODUCT_NOT_FOUND',
+    });
+    const gone = await service.create(f.a, createProductSchema.parse({ name: 'Gone' }), actor);
+    await service.remove(f.a, gone.id, actor);
+    await expect(duplicates.duplicate(f.a, gone.id, actor)).rejects.toMatchObject({
+      code: 'PRODUCT_NOT_FOUND',
+    });
   });
 
   it('archives a product without removing its variant or changing past stock', async () => {
@@ -693,5 +817,57 @@ describe('ProductsService with Postgres', () => {
     await expect(categories.resolvePath(f.a, 'A > B > C')).rejects.toMatchObject({
       code: 'PRODUCT_CATEGORY_TOO_DEEP',
     });
+  });
+
+  it('saves the editor fields', async () => {
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Silk scarf',
+        pricePoisha: 45000,
+        shortDescription: 'Soft and light',
+        barcode: '8901234567890',
+        isStockTracked: false,
+        stockStatus: 'out_of_stock',
+        options: [{ name: 'Colour', values: ['Red', 'Blue'], colors: { Red: '#D32F2F' } }],
+        variants: [{ optionValues: { Colour: 'Red' } }, { optionValues: { Colour: 'Blue' } }],
+      }),
+      actor,
+    );
+    expect(product).toMatchObject({
+      shortDescription: 'Soft and light',
+      barcode: '8901234567890',
+      stockStatus: 'out_of_stock',
+      options: [{ colors: { Red: '#D32F2F' } }],
+      readiness: expect.arrayContaining(['out_of_stock']),
+    });
+    expect(await service.edit(f.a, product.id, { barcode: null }, actor)).toMatchObject({
+      barcode: null,
+      shortDescription: 'Soft and light',
+    });
+  });
+
+  it('saves tags by name, keeps them on a later edit and lists the most used first', async () => {
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Cap', pricePoisha: 9000, tags: ['Eid', 'eid', 'Gift'] }),
+      actor,
+    );
+    expect(product.tags).toEqual(['Eid', 'Gift']);
+    expect(await service.edit(f.a, product.id, { barcode: '123' }, actor)).toMatchObject({
+      tags: ['Eid', 'Gift'],
+    });
+    const second = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Scarf', pricePoisha: 9000, tags: ['gift'] }),
+      actor,
+    );
+    expect(second.tags).toEqual(['Gift']);
+    expect((await tags.list(f.a)).items).toMatchObject([
+      { name: 'Gift', productCount: 2 },
+      { name: 'Eid', productCount: 1 },
+    ]);
+    expect((await tags.list(f.b)).items).toEqual([]);
+    expect((await service.edit(f.a, second.id, { tags: [] }, actor)).tags).toEqual([]);
   });
 });

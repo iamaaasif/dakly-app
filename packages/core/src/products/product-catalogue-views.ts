@@ -73,6 +73,7 @@ export function orderCatalogueProduct(
     id: product.id,
     name: product.name,
     isStockTracked: product.isStockTracked,
+    stockStatus: product.stockStatus,
     variants: product.variants.map((variant) => orderCatalogueVariant(product, variant, storage)),
   };
 }
@@ -102,9 +103,9 @@ export function productResponse(
   if (!product.imageFileIds.length) readiness.push('needs_photo');
   if (product.status === 'hidden') readiness.push('hidden');
   if (
-    product.isStockTracked &&
-    variants.length &&
-    variants.every((variant) => variant.available <= 0)
+    product.isStockTracked
+      ? variants.length && variants.every((variant) => variant.available <= 0)
+      : product.stockStatus === 'out_of_stock'
   )
     readiness.push('out_of_stock');
   else if (
@@ -116,6 +117,7 @@ export function productResponse(
     readiness.push('running_low');
   return {
     ...product,
+    code: productCode(variants),
     ...(showNegotiationPrices ? { negotiationOpeningPoisha, negotiationFloorPoisha } : {}),
     status: product.status,
     photos: product.photos.map((photo) => ({
@@ -127,4 +129,8 @@ export function productResponse(
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };
+}
+
+function productCode(variants: { sku: string | null }[]): string | null {
+  return variants.find((variant) => variant.sku)?.sku ?? null;
 }

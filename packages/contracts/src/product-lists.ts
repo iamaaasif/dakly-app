@@ -21,6 +21,11 @@ export type ChangeProductCategoryInput = z.infer<typeof changeProductCategorySch
 export const productBrandSchema = z.strictObject({ name: listName });
 export type ProductBrandInput = z.infer<typeof productBrandSchema>;
 
+// Tags are made by typing a name on a product, so the list is read only; the panel shows the
+// most used first.
+export type ProductTagResponse = { id: string; name: string; productCount: number };
+export type ProductTagListResponse = { items: ProductTagResponse[] };
+
 export type ProductCategoryResponse = {
   id: string;
   name: string;

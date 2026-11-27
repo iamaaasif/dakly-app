@@ -1,6 +1,15 @@
 import { z } from 'zod';
 
+import {
+  optionalTextInput,
+  productEditorChanges,
+  productEditorFields,
+  productEditorFormFields,
+  productOptionSchema,
+} from './product-editor-fields';
+
 export const productStatuses = ['active', 'hidden', 'archived'] as const;
+export const productSources = ['manual', 'import', 'chat'] as const;
 export const stockMovementKinds = [
   'reserve',
   'release',
@@ -18,14 +27,6 @@ const money = z
   .min(0, 'The amount cannot be negative')
   .max(Number.MAX_SAFE_INTEGER, 'That amount is too large');
 const text = z.string().trim().min(1, 'Enter a value').max(200, 'Use 200 characters or fewer');
-const optionSchema = z.strictObject({
-  name: text,
-  values: z
-    .array(text)
-    .min(1, 'Add at least one value')
-    .max(100, 'Use 100 values or fewer')
-    .refine((values) => new Set(values).size === values.length, 'Each value must be different'),
-});
 const variantSchema = z.strictObject({
   optionValues: z.record(z.string(), text).default({}),
   sku: text.nullable().default(null),
@@ -55,6 +56,7 @@ export const createProductSchema = z
       .default(null),
     categoryId: z.uuid().nullable().default(null),
     brandId: z.uuid().nullable().default(null),
+    ...productEditorFields,
     weightGrams: weightGrams.nullable().default(null),
     aliases: z.array(text).max(100).default([]),
     pricePoisha: money.default(0),
@@ -62,7 +64,7 @@ export const createProductSchema = z
     negotiationEnabled: z.boolean().default(false),
     negotiationOpeningPoisha: money.nullable().default(null),
     negotiationFloorPoisha: money.nullable().default(null),
-    options: z.array(optionSchema).max(3).default([]),
+    options: z.array(productOptionSchema).max(3).default([]),
     variants: z.array(variantSchema).max(100).default([]),
     isStockTracked: z.boolean().default(true),
     isVisibleInChats: z.boolean().default(true),
@@ -73,7 +75,7 @@ export const createProductSchema = z
 
 function validateVariants(
   product: {
-    options: z.infer<typeof optionSchema>[];
+    options: z.infer<typeof productOptionSchema>[];
     variants: z.infer<typeof editVariantSchema>[];
   },
   context: z.RefinementCtx,
@@ -108,6 +110,7 @@ export const changeProductSchema = z
     expectedVersion: z.int().positive().max(2147483647).optional(),
     name: text.optional(),
     description: z.string().trim().max(10000).nullable().optional(),
+    ...productEditorChanges,
     categoryId: z.uuid().nullable().optional(),
     brandId: z.uuid().nullable().optional(),
     weightGrams: weightGrams.nullable().optional(),
@@ -117,7 +120,7 @@ export const changeProductSchema = z
     negotiationEnabled: z.boolean().optional(),
     negotiationOpeningPoisha: money.nullable().optional(),
     negotiationFloorPoisha: money.nullable().optional(),
-    options: z.array(optionSchema).max(3).optional(),
+    options: z.array(productOptionSchema).max(3).optional(),
     variants: z.array(editVariantSchema).max(100).optional(),
     isStockTracked: z.boolean().optional(),
     isVisibleInChats: z.boolean().optional(),
@@ -162,10 +165,6 @@ const optionalCount = z.union(
   ],
   { error: 'Enter a whole number' },
 );
-const optionalTextInput = z
-  .string()
-  .nullable()
-  .transform((value) => value?.trim() || null);
 
 const optionalWeightInput = z.union(
   [
@@ -181,6 +180,7 @@ export const productFormSchema = z
     description: optionalTextInput
       .pipe(createProductSchema.shape.description.unwrap())
       .default(null),
+    ...productEditorFormFields,
     aliases: z
       .array(z.string())
       .transform((values) => values.filter((value) => value.trim()))
@@ -320,7 +320,7 @@ export const productScreenQuerySchema = productListQuerySchema
     (query) => [query.adjust, query.import].filter(Boolean).length <= 1,
     'Choose one product action at a time',
   );
-export type ProductOption = z.infer<typeof optionSchema>;
+export type ProductOption = z.infer<typeof productOptionSchema>;
 export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   id: string;
   title: string;
@@ -332,12 +332,16 @@ export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   reserved: number;
   available: number;
 };
+export type ProductSource = (typeof productSources)[number];
 export type ProductResponse = Omit<
   CreateProductInput,
   'variants' | 'negotiationOpeningPoisha' | 'negotiationFloorPoisha'
 > & {
   id: string;
   version: number;
+  source: ProductSource;
+  // The product code: the SKU of its first variant, null when no variant has one.
+  code: string | null;
   negotiationOpeningPoisha?: number | null;
   negotiationFloorPoisha?: number | null;
   // The category's name, with its parent first ("Clothing > T-shirts"), and the brand's name.
@@ -350,7 +354,17 @@ export type ProductResponse = Omit<
   createdAt: string;
   updatedAt: string;
 };
-export type ProductListResponse = { items: ProductResponse[]; nextCursor: string | null };
+export type ProductPage = { items: ProductResponse[]; nextCursor: string | null };
+export type ProductListItem = ProductResponse & {
+  // Units on orders in the To confirm stage.
+  waitingToConfirmCount: number;
+};
+export type ProductListResponse = {
+  items: ProductListItem[];
+  nextCursor: string | null;
+  // All products that match the filters, for the "Showing 12 of 2,486" footer.
+  totalCount: number;
+};
 
 export type StockMovementKind = (typeof stockMovementKinds)[number];
 export const stockAdjustmentSchema = z.strictObject({

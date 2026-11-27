@@ -23,6 +23,8 @@ const page = {
 };
 
 const saved: ProductResponse = {
+  source: 'manual',
+  code: null,
   ...createProductSchema.parse({ name: 'Cotton T-shirt', pricePoisha: 120000 }),
   version: 1,
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
@@ -129,13 +131,14 @@ describe('Variants card', () => {
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByLabelText('Price for Black')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    expect(screen.getByLabelText('Price for Black')).toBeTruthy();
-    expect(screen.getByLabelText('Price for White')).toBeTruthy();
+    expect(await screen.findByLabelText('Price for Black')).toBeTruthy();
+    expect(await screen.findByLabelText('Price for White')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Edit Color' }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove Black from Color' }));
     await userEvent.click(screen.getByRole('button', { name: 'Cancel option changes' }));
-    expect(screen.getByLabelText('Price for Black')).toBeTruthy();
-  });
+    expect(await screen.findByLabelText('Price for Black')).toBeTruthy();
+    // Eleven user actions in a row are slow on a busy CI runner.
+  }, 20_000);
 
   it('builds the grid as values are typed and moves the stock to the first value', async () => {
     show(saved);

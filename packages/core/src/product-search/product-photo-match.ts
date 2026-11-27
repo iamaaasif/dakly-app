@@ -1,3 +1,5 @@
+import { isInStock } from '@dakly/contracts/product-editor-fields';
+
 import type { ChatProduct } from '../products/products.service';
 import { lexicalScore, mainColour } from './product-search-ranking';
 import { searchWords } from './search-text';
@@ -26,7 +28,7 @@ const sureMargin = 0.4;
 const choiceLimit = 3;
 
 export function isSellable(product: ChatProduct): boolean {
-  return !product.isStockTracked || product.variants.some((variant) => variant.available > 0);
+  return product.variants.some((variant) => isInStock(product, variant.available));
 }
 
 // `found` is in search order and `scores` says how strongly the photo names each product.

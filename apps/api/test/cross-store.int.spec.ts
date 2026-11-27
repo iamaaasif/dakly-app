@@ -276,6 +276,7 @@ fixture('GET /orders/catalogue', async () => {
         id: own.id,
         name: 'Panjabi',
         isStockTracked: true,
+        stockStatus: 'in_stock',
         variants: [
           {
             id: own.variants[0].id,
@@ -957,6 +958,24 @@ async function productCategory(shop: Shop, name: string) {
 async function productBrand(shop: Shop, name: string) {
   return (await success(shop, 'POST', '/products/brands', 201, { name })).json().id as string;
 }
+fixture('GET /products/tags', async () => {
+  const { a, b } = await pair();
+  for (const [shop, tag] of [
+    [a, 'Eid'],
+    [b, 'Winter'],
+  ] as const)
+    await success(shop, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 1000,
+      tags: [tag],
+    });
+  const names = async (shop: Shop) =>
+    (await success(shop, 'GET', '/products/tags', 200))
+      .json()
+      .items.map((row: { name: string }) => row.name);
+  expect(await names(a)).toEqual(['Eid']);
+  expect(await names(b)).toEqual(['Winter']);
+});
 fixture('GET /products/categories', async () => {
   const { a, b } = await pair();
   await productCategory(a, 'Clothing');
@@ -1077,6 +1096,23 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('products', foreignId)).toEqual(before);
   });
+fixture('POST /products/:productId/duplicate', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const before = await f.row('products', foreignId);
+  const copy = (await success(b, 'POST', `/products/${own}/duplicate`, 201, {})).json();
+  expect(copy).toMatchObject({ status: 'hidden' });
+  expect(copy.id).not.toBe(own);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/duplicate`,
+    foreignId,
+    () => ({}),
+  );
+  expect(await f.row('products', foreignId)).toEqual(before);
+});
 fixture('POST /products/bulk-edits', async () => {
   const { a, b } = await pair(),
     foreignId = await product(a),
@@ -1824,6 +1860,55 @@ fixture('POST /contacts/:contactId/consents', async () => {
     [id],
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
+});
+for (const part of [
+  'summary',
+  'orders',
+  'activity',
+  'campaigns',
+  'notes',
+  'marketing-preferences',
+]) {
+  fixture(`GET /contacts/:contactId/${part}`, async () => {
+    const { a, b } = await pair(),
+      id = await contact(a);
+    await success(a, 'GET', `/contacts/${id}/${part}`, 200);
+    await hidden(b, 'GET', (value) => `/contacts/${value}/${part}`, id);
+  });
+}
+fixture('POST /contacts/:contactId/notes', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  const own = await success(a, 'POST', `/contacts/${id}/notes`, 201, { body: 'শুক্রবারে ডেলিভারি' });
+  await hidden(
+    b,
+    'POST',
+    (value) => `/contacts/${value}/notes`,
+    id,
+    () => ({ body: 'অন্যের নোট' }),
+  );
+  const rows = await f.admin.pool.query(
+    'select id, store_id from contact_notes where contact_id=$1',
+    [id],
+  );
+  expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id }]);
+});
+fixture('PUT /contacts/:contactId/marketing-preferences/:channel', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  const own = await success(a, 'PUT', `/contacts/${id}/marketing-preferences/sms`, 200, {
+    subscribed: true,
+  });
+  expect(own.json()[1]).toMatchObject({ channel: 'sms', status: 'granted' });
+  await hidden(
+    b,
+    'PUT',
+    (value) => `/contacts/${value}/marketing-preferences/sms`,
+    id,
+    () => ({ subscribed: false }),
+  );
+  const rows = await f.admin.pool.query('select status from consents where contact_id=$1', [id]);
+  expect(rows.rows).toEqual([{ status: 'granted' }]);
 });
 const khataPage = { contentType: 'image/jpeg', sizeBytes: 2_000_000 };
 async function newKhataPage(shop: Shop) {
@@ -4440,6 +4525,46 @@ fixture('GET /conversations/counts', async () => {
     needsYou: 0,
     snoozed: 0,
     resolved: 0,
+  });
+});
+
+async function seedInquiry(shop: Shop) {
+  const id = await seedConversation(shop);
+  await f.admin.pool.query("update conversations set intent_tag='price' where id=$1", [id]);
+  return id;
+}
+
+fixture('GET /orders/inquiries', async () => {
+  const { a, b } = await pair();
+  await seedInquiry(a);
+  await seedInquiry(a);
+  const own = await seedInquiry(b);
+  await enableChats(a);
+  await enableChats(b);
+  const result = (await success(b, 'GET', '/orders/inquiries', 200)).json();
+  expect(result.items).toEqual([expect.objectContaining({ conversationId: own })]);
+  expect(result.nextCursor).toBeNull();
+});
+
+fixture('GET /orders/tab-counts', async () => {
+  const { a, b } = await pair();
+  await order(a);
+  await order(a, 1002);
+  await order(b);
+  await seedInquiry(a);
+  await seedInquiry(a);
+  await seedInquiry(b);
+  await enableChats(a);
+  await enableChats(b);
+  expect((await success(b, 'GET', '/orders/tab-counts', 200)).json()).toEqual({
+    inquiries: 1,
+    to_confirm: 1,
+    on_hold: 0,
+    to_pack: 0,
+    with_courier: 0,
+    delivered: 0,
+    pending: 0,
+    returned: 0,
   });
 });
 

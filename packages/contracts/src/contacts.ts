@@ -153,6 +153,8 @@ export const contactListQuerySchema = z.strictObject({
   // A name, an email, an area, a full phone number, or the start of a number for members who see full phones.
   search: z.string().trim().min(1).max(120).optional(),
   type: z.enum(contactListTypes).optional(),
+  // Customers are the contacts with at least one non-cancelled order; without this the list is every contact.
+  hasOrdered: z.stringbool().optional(),
   source: z.enum(contactSources).optional(),
   minSpendPoisha: z.coerce.number().int().min(0).optional(),
   maxSpendPoisha: z.coerce.number().int().min(0).optional(),
@@ -166,6 +168,9 @@ export const contactExportQuerySchema = contactListQuerySchema.omit({
   limit: true,
   sort: true,
 });
+
+// The Customers page counts only people who ordered; the Contacts page counts everyone.
+export const contactCountsQuerySchema = z.strictObject({ hasOrdered: z.stringbool().optional() });
 
 export const matchSuggestionListQuerySchema = z.strictObject({ contactId: z.uuid() });
 
@@ -268,6 +273,7 @@ export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;
 export type ContactExportQuery = z.infer<typeof contactExportQuerySchema>;
 export type ContactListQuery = z.infer<typeof contactListQuerySchema>;
+export type ContactCountsQuery = z.infer<typeof contactCountsQuerySchema>;
 export type ContactImportMapping = z.infer<typeof contactImportMappingSchema>;
 export type ContactImportRow = z.infer<typeof contactImportRowSchema>;
 export type ContactImportField = keyof ContactImportRow;
@@ -354,6 +360,8 @@ export type ContactListResponse = {
 // The tab counts and the page subtitle. Only deleted contacts are left out, whatever the filters.
 export type ContactCountsResponse = {
   all: number;
+  // Contacts with at least one non-cancelled order, whatever the filter. This is "Total customers".
+  customers: number;
   new: number;
   returning: number;
   vip: number;
