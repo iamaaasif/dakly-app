@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { type BrowserContext, expect, type Page, test } from '@playwright/test';
+import { type BrowserContext, expect, type Locator, type Page, test } from '@playwright/test';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { createDatabase } from '@dakly/db/client';
@@ -243,6 +243,7 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await page.getByRole('button', { name: 'Fit to screen' }).click();
     await page.getByRole('button', { name: 'Add a step here' }).first().click();
     await page.getByRole('menuitem', { name: 'Tag contact' }).click();
+    await page.getByRole('button', { name: 'Fit to screen' }).click();
     await page.getByRole('button', { name: /Options for step 1/ }).click();
     await page.getByRole('menuitem', { name: 'Delete step' }).click();
     await expect(steps.getByText('Tag contact')).toHaveCount(0);
@@ -354,6 +355,19 @@ test('blocks Start workflow for a trigger the shop cannot use yet', async ({
   }
 });
 
+// The canvas re-centres while the page and its panels finish loading, so measure once it is still.
+async function stableBox(locator: Locator) {
+  let last = await locator.boundingBox();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await locator.page().waitForTimeout(150);
+    const next = await locator.boundingBox();
+    if (last && next && Math.abs(next.x - last.x) < 0.5 && Math.abs(next.y - last.y) < 0.5)
+      return next;
+    last = next;
+  }
+  throw new Error('The canvas did not settle');
+}
+
 test('pans, zooms and fits the canvas like a design tool', async ({ page, context, baseURL }) => {
   const { headers } = await signIn(context, baseURL!);
   const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
@@ -369,10 +383,10 @@ test('pans, zooms and fits the canvas like a design tool', async ({ page, contex
       exact: true,
     });
     await expect(trigger).toBeVisible();
+    const before = await stableBox(trigger);
     const frame = (await canvas.boundingBox())!;
 
     // Dragging empty background moves the flow by the drag distance.
-    const before = (await trigger.boundingBox())!;
     const startX = frame.x + 40;
     const startY = frame.y + frame.height / 2;
     await page.mouse.move(startX, startY);
@@ -443,7 +457,7 @@ test('keeps the view after a reload and pans from a step', async ({ page, contex
     await expect(trigger).toBeVisible();
 
     // A long drag that starts on a step pans and does not open the step.
-    const start = (await trigger.boundingBox())!;
+    const start = await stableBox(trigger);
     const box = (await step.boundingBox())!;
     await page.mouse.move(box.x + 20, box.y + 10);
     await page.mouse.down();
