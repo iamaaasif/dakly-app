@@ -123,3 +123,52 @@ describe('WorkflowStepPanel', () => {
     );
   });
 });
+
+describe('comment reply steps', () => {
+  const comment = automationTemplates.comment_to_dm_price.graph.steps;
+
+  it('checks every public wording for a price as the owner types', () => {
+    const onChange = open(comment.public!);
+    expect(screen.getAllByText('No price, number or link. Safe to post.')).toHaveLength(3);
+    fireEvent.change(screen.getByLabelText('Wording 1'), {
+      target: { value: 'দাম মাত্র ৫০০ টাকা' },
+    });
+    expect(onChange).toHaveBeenCalled();
+    cleanup();
+    open({
+      kind: 'action',
+      action: { action: 'reply_to_comment', lines: ['Price 500 taka', 'Inbox e details dilam'] },
+      next: 'end',
+    });
+    expect(screen.getByRole('alert').textContent).toBe('A public reply cannot hold numbers');
+  });
+
+  it('keeps between 2 and 5 wordings', () => {
+    const wording = (lines: string[]) =>
+      ({ kind: 'action', action: { action: 'reply_to_comment', lines }, next: 'end' }) as const;
+    open(wording(['Inbox e details dilam', 'ইনবক্সে জানিয়েছি']));
+    expect(screen.getByRole('button', { name: 'Remove wording 1' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    cleanup();
+    open(wording(['a one', 'a two', 'a three', 'a four', 'a five']));
+    expect(screen.queryByRole('button', { name: 'Add a wording' })).toBeNull();
+  });
+
+  it('turns the product card on and previews the message', () => {
+    const onChange = open(comment.private!);
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('switch'));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ action: expect.objectContaining({ includeProduct: false }) }),
+    );
+  });
+
+  it('lets a send step add Instagram', () => {
+    const onChange = open(automationTemplates.price_question_in_chat.graph.steps.follow_up!);
+    expect(screen.getByText(/Instagram sends text only/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Messenger' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ channels: ['instagram'] }));
+  });
+});

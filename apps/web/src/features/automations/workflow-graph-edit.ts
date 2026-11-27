@@ -7,7 +7,31 @@ import {
 
 import { TRIGGER_KEY } from './workflow-canvas-layout';
 
-export type NewStepKind = 'sms' | 'whatsapp' | 'delay' | 'tag' | 'split';
+export type NewStepKind =
+  | 'sms'
+  | 'whatsapp'
+  | 'messenger'
+  | 'instagram'
+  | 'delay'
+  | 'tag'
+  | 'split'
+  | 'public_reply'
+  | 'private_reply';
+
+type ReplyAction = 'reply_to_comment' | 'send_private_reply';
+
+function hasAction(graph: AutomationGraph, action: ReplyAction) {
+  return Object.values(graph.steps).some(
+    (step) => step.kind === 'action' && step.action.action === action,
+  );
+}
+
+// Reply steps work only in a comment flow, and a flow has at most one of each.
+export function canAddKind(graph: AutomationGraph, kind: NewStepKind) {
+  if (kind !== 'public_reply' && kind !== 'private_reply') return true;
+  if (graph.trigger.key !== 'comment_on_post') return false;
+  return !hasAction(graph, kind === 'public_reply' ? 'reply_to_comment' : 'send_private_reply');
+}
 
 type Steps = AutomationGraph['steps'];
 
@@ -16,12 +40,22 @@ type Steps = AutomationGraph['steps'];
 export const PLACEHOLDER_MESSAGE = 'Hi {first_name}, thank you for shopping with us.';
 export const PLACEHOLDER_TAG = 'new_tag';
 
+// The default wordings from feature 04, so a new reply step is ready to publish.
+const DEFAULT_PUBLIC_LINES = [
+  'ইনবক্সে দাম জানিয়ে দিয়েছি',
+  'Inbox e details dilam',
+  'Sent you the details in Messenger',
+];
+const DEFAULT_PRIVATE_TEXT = 'ধন্যবাদ! আপনার প্রশ্নের উত্তর নিচে দিলাম।';
+
 // Every new step passes the contract, so a person can save at once and then edit the details in
 // the workflow settings.
 function newStep(kind: NewStepKind, next: string): AutomationStep {
   switch (kind) {
     case 'sms':
     case 'whatsapp':
+    case 'messenger':
+    case 'instagram':
       return {
         kind: 'send',
         category: 'marketing',
@@ -40,6 +74,18 @@ function newStep(kind: NewStepKind, next: string): AutomationStep {
         kind: 'condition',
         paths: [{ condition: { kind: 'placed_order' }, next }],
         elseNext: next,
+      };
+    case 'public_reply':
+      return {
+        kind: 'action',
+        action: { action: 'reply_to_comment', lines: DEFAULT_PUBLIC_LINES },
+        next,
+      };
+    case 'private_reply':
+      return {
+        kind: 'action',
+        action: { action: 'send_private_reply', text: DEFAULT_PRIVATE_TEXT, includeProduct: true },
+        next,
       };
   }
 }
@@ -115,6 +161,10 @@ export function insertDelay(
 
 // The palette adds to the end of the main flow, just before the last exit that is reached.
 export function appendStep(graph: AutomationGraph, kind: NewStepKind) {
+  // Meta takes the private reply before the public one, so it goes first.
+  if (kind === 'private_reply') {
+    return insertStep(graph, { parent: TRIGGER_KEY, target: graph.firstStepKey }, kind);
+  }
   const exits = Object.keys(graph.steps).filter((key) => graph.steps[key]!.kind === 'exit');
   const exit = exits.at(-1)!;
   const parent =
