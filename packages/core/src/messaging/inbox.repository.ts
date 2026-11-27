@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import type {
+  ChatIntent,
   ConversationCountsResponse,
   ConversationListQuery,
   ConversationMessageListQuery,
@@ -15,34 +16,8 @@ import { contacts } from '@dakly/db/schema/contacts';
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { conversationFields as fields } from './conversation-fields.repository';
 import { folderCondition, folderCounts, statusOfState } from './conversation-folders.repository';
-
-const fields = {
-  id: conversations.id,
-  channel: conversations.channel,
-  contactId: conversations.contactId,
-  contactName: sql<
-    string | null
-  >`(select ${contacts.name} from ${contacts} where ${contacts.storeId} = ${conversations.storeId} and ${contacts.id} = ${conversations.contactId})`,
-  // The shop's labels on a chat are the contact's tags.
-  labels: sql<
-    string[]
-  >`(select ${contacts.tags} from ${contacts} where ${contacts.storeId} = ${conversations.storeId} and ${contacts.id} = ${conversations.contactId})`,
-  status: conversations.status,
-  responder: conversations.responder,
-  assigneeUserId: conversations.assigneeUserId,
-  handoverReason: conversations.handoverReason,
-  handoverSummary: conversations.handoverSummary,
-  handedOverAt: conversations.handedOverAt,
-  aiResumesAt: conversations.aiResumesAt,
-  // Keep PostgreSQL's microseconds in cursor timestamps.
-  lastMessageAt: sql<
-    string | null
-  >`to_char(${conversations.lastMessageAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-  lastMessagePreview: conversations.lastMessagePreview,
-  windowExpiresAt: conversations.windowExpiresAt,
-  unreadCount: conversations.unreadCount,
-};
 
 // A ranked cursor reads rank_time_id; the plain one reads time_id. A chat with no message has "none".
 function afterCursor(query: ConversationListQuery, group: SQL, activityAt: SQL) {
@@ -86,6 +61,7 @@ type ConversationChange = UpdateConversationInput & {
   handoverReason?: (typeof handoverReasons)[number] | null;
   handoverSummary?: string | null;
   handedOverAt?: Date | null;
+  intentTag?: ChatIntent;
 };
 
 @Injectable()

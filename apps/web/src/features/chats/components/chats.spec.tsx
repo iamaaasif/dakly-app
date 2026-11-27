@@ -23,6 +23,7 @@ const sadia: ConversationResponse = {
   id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e5f',
   contactId: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e60',
   contactName: 'Sadia Islam',
+  contactKind: 'customer',
   labels: [],
   channel: 'messenger',
   status: 'open',
@@ -34,6 +35,8 @@ const sadia: ConversationResponse = {
   aiResumesAt: null,
   lastMessageAt: '2026-11-19T04:03:00.000000Z',
   lastMessagePreview: 'Price koto? Mirpur e delivery charge koto?',
+  lastMessageFrom: 'customer',
+  intentTag: 'price',
   windowExpiresAt: null,
   unreadCount: 3,
 };
@@ -297,6 +300,28 @@ describe('Chat list', () => {
     );
     show();
     expect(await screen.findByText('Needs you · Refund or exchange')).toBeTruthy();
+  });
+
+  it('says who wrote last and whether the customer still owes an answer', async () => {
+    const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+    respond(() =>
+      ok([
+        { ...sadia, lastMessageFrom: 'ai', lastMessageAt: recent, contactKind: 'lead' },
+        {
+          ...sadia,
+          id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e61',
+          contactName: 'Mitu Akter',
+          lastMessageFrom: 'user',
+          lastMessageAt: '2026-11-09T04:03:00.000000Z',
+        },
+      ]),
+    );
+    show();
+    expect(await screen.findByText(`Dakly AI: ${sadia.lastMessagePreview}`)).toBeTruthy();
+    expect(screen.getByText(`You: ${sadia.lastMessagePreview}`)).toBeTruthy();
+    expect(screen.getByText('Waiting for them')).toBeTruthy();
+    expect(screen.getByText('No reply')).toBeTruthy();
+    expect(screen.getAllByText('Lead saved')).toHaveLength(1);
   });
 
   it('marks the chats assigned to you and shows recent activity in minutes', async () => {

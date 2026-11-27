@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { chatChannels } from './channels';
+import type { ContactKind } from './contacts';
 import { searchText } from './search-text';
 
 export const conversationStatuses = ['open', 'needs_you', 'later', 'done'] as const;
@@ -17,6 +18,22 @@ export const handoverReasons = [
   'allowance_used',
   'ai_paused',
   'store_read_only',
+  'other',
+] as const;
+// What the customer's latest messages are about, as the classifier reads them.
+export const chatIntents = [
+  'greeting',
+  'price',
+  'size_or_stock',
+  'delivery',
+  'payment',
+  'order',
+  'confirm',
+  'order_status',
+  'exchange',
+  'complaint',
+  'photo',
+  'special_request',
   'other',
 ] as const;
 export const leadTemperatures = ['hot', 'warm', 'cold'] as const;
@@ -231,6 +248,7 @@ export type ConversationResponse = {
   id: string;
   contactId: string;
   contactName: string | null;
+  contactKind: ContactKind;
   labels: string[];
   channel: (typeof chatChannels)[number];
   status: (typeof conversationStatuses)[number];
@@ -242,9 +260,14 @@ export type ConversationResponse = {
   aiResumesAt: string | null;
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
+  // Who wrote the newest sent message: Waiting for them and the preview's "You:" read it.
+  lastMessageFrom: (typeof messageAuthorTypes)[number] | null;
+  intentTag: ChatIntent | null;
   windowExpiresAt: string | null;
   unreadCount: number;
 };
+
+export type ChatIntent = (typeof chatIntents)[number];
 
 export type ConversationMessageResponse = {
   id: string;

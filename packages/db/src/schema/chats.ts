@@ -23,6 +23,7 @@ import {
   conversationResponders,
   conversationStatuses,
   handoverReasons,
+  chatIntents,
   leadTemperatures,
   messageAuthorTypes,
   messageDirections,
@@ -67,7 +68,7 @@ export const conversations = pgTable(
     handedOverAt: timestamptz('handed_over_at'),
     // When the AI takes the chat back after a person's last message (return timer).
     aiResumesAt: timestamptz('ai_resumes_at'),
-    intentTag: text('intent_tag'),
+    intentTag: text('intent_tag', { enum: chatIntents }),
     leadTemperature: text('lead_temperature', { enum: leadTemperatures }),
     // Q7: Inquiry is a chat flag, not an order stage, until Asif decides.
     hasBuyingInterest: boolean('has_buying_interest').notNull().default(false),
@@ -137,6 +138,7 @@ export const conversations = pgTable(
     check('conversations_responder', isOneOf(table.responder, conversationResponders)),
     check('conversations_handover_reason', isOneOf(table.handoverReason, handoverReasons)),
     check('conversations_lead_temperature', isOneOf(table.leadTemperature, leadTemperatures)),
+    check('conversations_intent_tag', isOneOf(table.intentTag, chatIntents)),
   ],
 );
 

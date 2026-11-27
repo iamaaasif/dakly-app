@@ -27,10 +27,9 @@ import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { cardMessages } from './card-messages';
 import { CardTapRepliesService } from './card-tap-replies.service';
-import { ChatClassifierService } from './chat-classifier.service';
+import { ChatClassifierService, type Classified } from './chat-classifier.service';
 import { type ConversationEntry, conversationEntries } from './chat-memory';
 import { declineReply, holdingReply } from './decline-reply';
-import type { HandoverCheckRules } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { burstText, isFlood, isSameTurn, replyToolChat } from './reply-burst';
 import { outageRetryDelay, retryAt } from './reply-retry';
@@ -178,40 +177,31 @@ export class AiAgentService {
     earlier: ConversationEntry[],
     screenTexts: string[],
   ) {
-    const { storeId, contactId, customerTexts: texts, rules } = compose;
+    const { storeId, rules } = compose;
     const screened = screenCustomerTexts(screenTexts, {
       handOverDiscounts: rules.handover.discounts,
       earlier,
     });
     const prepared = screened ? undefined : this.sales.prepare(compose);
     prepared?.catch(() => undefined);
-    const reason =
-      screened ??
-      (await this.classifyWithAllowance({
-        storeId,
-        contactId,
-        texts,
-        earlier,
-        rules: {
-          ...rules.handover,
-          takesOrders: rules.takeOrders,
-          shopReplies: earlier.filter(({ from }) => from === 'shop').length,
-        },
-      }));
-    return { reason, prepared };
+    const classified: Classified = screened
+      ? { reason: screened }
+      : await this.classifyWithAllowance(compose, earlier);
+    if (classified.intent && compose.chat)
+      await this.inbox.setIntentTag(storeId, compose.chat.conversationId, classified.intent);
+    return { reason: classified.reason, prepared };
   }
 
-  private async classifyWithAllowance(input: {
-    storeId: string;
-    contactId: string;
-    texts: string[];
-    earlier: ConversationEntry[];
-    rules: HandoverCheckRules;
-  }) {
-    const { storeId, contactId, texts, earlier, rules } = input;
-    return (await this.hasAllowanceRoom(storeId, contactId))
-      ? this.classifier.classify(storeId, texts, earlier, rules)
-      : 'allowance_used';
+  private async classifyWithAllowance(
+    { storeId, contactId, customerTexts, rules }: ComposeInput,
+    earlier: ConversationEntry[],
+  ): Promise<Classified> {
+    if (!(await this.hasAllowanceRoom(storeId, contactId))) return { reason: 'allowance_used' };
+    return this.classifier.classify(storeId, customerTexts, earlier, {
+      ...rules.handover,
+      takesOrders: rules.takeOrders,
+      shopReplies: earlier.filter(({ from }) => from === 'shop').length,
+    });
   }
 
   // The chat before the burst being classified, oldest first.

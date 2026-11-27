@@ -95,9 +95,7 @@ function ChatRowContent({
           ) : null}
         </div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
-          <p className="truncate text-sm text-text-muted">
-            {conversation.lastMessagePreview ?? ''}
-          </p>
+          <p className="truncate text-sm text-text-muted">{previewOf(conversation)}</p>
           <UnreadCount count={conversation.unreadCount} />
         </div>
         <ChatRowBadges conversation={conversation} />
@@ -138,28 +136,43 @@ function UnreadCount({ count }: { count: number }) {
 }
 
 function ChatRowBadges({ conversation }: { conversation: ConversationResponse }) {
-  const needsYou = conversation.status === 'needs_you';
+  const { status, handoverReason, responder, contactKind, assigneeUserId } = conversation;
+  const waiting = waitingState(conversation, new Date());
+  const chips = [
+    waiting === 'no_reply' ? (
+      <Badge key="waiting" variant="danger" size="sm">
+        No reply
+      </Badge>
+    ) : null,
+    waiting === 'waiting' ? (
+      <Badge key="waiting" size="sm">
+        Waiting for them
+      </Badge>
+    ) : null,
+    responder === 'human' ? null : (
+      <Badge key="responder" variant="inverse" size="sm">
+        {responder === 'ai' ? 'AI' : 'AI paused'}
+      </Badge>
+    ),
+    contactKind === 'lead' ? (
+      <Badge key="lead" variant="success" size="sm">
+        Lead saved
+      </Badge>
+    ) : null,
+  ].filter(Boolean);
   return (
     <>
-      {needsYou ? (
-        <div className="mt-1.5 flex">
-          <Badge variant="danger" size="sm">
-            {conversation.handoverReason
-              ? `Needs you · ${handoverReasonLabels[conversation.handoverReason]}`
-              : 'Needs you'}
-          </Badge>
+      {status === 'needs_you' ? (
+        <p className="mt-1 text-xs font-medium text-danger">
+          {handoverReason ? `Needs you · ${handoverReasonLabels[handoverReason]}` : 'Needs you'}
+        </p>
+      ) : null}
+      {chips.length || assigneeUserId ? (
+        <div className="mt-1.5 flex min-h-5 flex-wrap items-center gap-1">
+          {chips}
+          <AssigneeMark userId={assigneeUserId} />
         </div>
       ) : null}
-      {conversation.responder === 'human' && !conversation.assigneeUserId ? null : (
-        <div className="mt-1.5 flex min-h-5 items-center gap-1">
-          {conversation.responder === 'human' ? null : (
-            <Badge variant="inverse" size="sm">
-              {conversation.responder === 'ai' ? 'AI' : 'AI paused'}
-            </Badge>
-          )}
-          <AssigneeMark userId={conversation.assigneeUserId} />
-        </div>
-      )}
     </>
   );
 }
@@ -181,6 +194,24 @@ function AssigneeMark({ userId }: { userId: string | null }) {
       <span aria-hidden="true">{mine ? 'Me' : name.trim().slice(0, 2)}</span>
     </span>
   );
+}
+
+const NO_REPLY_AFTER_MS = 24 * 60 * 60 * 1000;
+
+// The shop wrote last: Waiting for them, and No reply once a day has passed without an answer.
+function waitingState(conversation: ConversationResponse, now: Date) {
+  const { lastMessageFrom, lastMessageAt } = conversation;
+  if (!lastMessageFrom || lastMessageFrom === 'customer' || !lastMessageAt) return null;
+  return now.getTime() - new Date(lastMessageAt).getTime() > NO_REPLY_AFTER_MS
+    ? 'no_reply'
+    : 'waiting';
+}
+
+function previewOf({ lastMessagePreview, lastMessageFrom }: ConversationResponse) {
+  if (!lastMessagePreview) return '';
+  if (lastMessageFrom === 'ai' || lastMessageFrom === 'system')
+    return `Dakly AI: ${lastMessagePreview}`;
+  return lastMessageFrom === 'user' ? `You: ${lastMessagePreview}` : lastMessagePreview;
 }
 
 function LastActivity({ value }: { value: string }) {
