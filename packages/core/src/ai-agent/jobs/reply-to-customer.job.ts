@@ -15,8 +15,23 @@ const payload = z.strictObject({
 export class ReplyToCustomerJob implements JobHandler {
   constructor(@Inject(AiAgentService) private readonly agent: AiAgentService) {}
 
-  handle(data: unknown) {
+  async handle(data: unknown, finalAttempt: boolean) {
     const { storeId, conversationId, messageId } = payload.parse(data);
-    return this.agent.reply(storeId, conversationId, messageId);
+    try {
+      return await this.agent.reply(storeId, conversationId, messageId);
+    } catch (error) {
+      if (finalAttempt) await this.handOverFailedReply(storeId, conversationId, messageId);
+      throw error;
+    }
+  }
+
+  // The job still fails with its own error, which is the one worth reporting, so a hand-over
+  // that fails too is not allowed to replace it.
+  private async handOverFailedReply(storeId: string, conversationId: string, messageId: string) {
+    try {
+      await this.agent.handOverAfterFailure(storeId, conversationId, messageId);
+    } catch {
+      // Left for the job's own failure report.
+    }
   }
 }
