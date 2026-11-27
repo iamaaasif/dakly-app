@@ -1162,3 +1162,11 @@ listed under Valid OAuth Redirect URIs in Facebook Login settings. The app needs
 `public_profile` and `email` permissions and Live mode. `FACEBOOK_IDENTITY_DRIVER=fake` is for
 local and test use only. With no Meta settings in production, the Facebook route answers
 "unavailable".
+
+## Keyboard shortcuts
+
+The signed-in shell listens for a few keys. `/` focuses the first visible search box, `n` clicks the
+visible button marked `data-shortcut="new"` on a list page, and `?` opens a help list. Esc and
+Ctrl or Cmd with Enter or S work while typing; the plain keys do not. Ctrl or Cmd with Enter or S
+submits the form that holds focus, unless a screen such as the product editor or new order page
+already handled the key. Dialogs and side panels close on Esc through their own components.
