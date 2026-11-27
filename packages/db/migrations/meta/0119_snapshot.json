@@ -1,5 +1,5 @@
 {
-  "id": "31a54ad3-f8c4-41fb-babd-8152fcbbd5b5",
+  "id": "5fb86e4d-4a0e-43ef-b3cf-577e9f0ba579",
   "prevId": "25186499-eb35-4ee9-8d58-6a4d72d332be",
   "version": "7",
   "dialect": "postgresql",
@@ -5341,12 +5341,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "trigger_comment_id": {
-          "name": "trigger_comment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "current_step_key": {
           "name": "current_step_key",
           "type": "text",
@@ -5665,19 +5659,6 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "automation_runs_trigger_comment_id_social_comments_id_fk": {
-          "name": "automation_runs_trigger_comment_id_social_comments_id_fk",
-          "tableFrom": "automation_runs",
-          "tableTo": "social_comments",
-          "columnsFrom": [
-            "trigger_comment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
         "automation_runs_automation_id_store_fk": {
           "name": "automation_runs_automation_id_store_fk",
           "tableFrom": "automation_runs",
@@ -5734,7 +5715,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable', 'order_not_awaiting_confirmation')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable', 'order_not_awaiting_confirmation', 'staff_replied')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",

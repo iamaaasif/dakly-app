@@ -10,7 +10,11 @@ export function ProductWarnAtField() {
   const form = useFormContext<ProductFormValues>();
   const value = form.watch('variants.0.lowStockThreshold');
   return (
-    <FormField name="variants.0.lowStockThreshold" label="Low stock warning">
+    <FormField
+      name="variants.0.lowStockThreshold"
+      label="Low stock threshold"
+      hint="Warn me when stock falls below this amount."
+    >
       {(control) => (
         <Input
           {...control}

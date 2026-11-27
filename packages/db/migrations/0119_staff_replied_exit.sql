@@ -1,0 +1,2 @@
+ALTER TABLE "automation_runs" DROP CONSTRAINT "automation_runs_exit_reason";--> statement-breakpoint
+ALTER TABLE "automation_runs" ADD CONSTRAINT "automation_runs_exit_reason" CHECK ("automation_runs"."exit_reason" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable', 'order_not_awaiting_confirmation', 'staff_replied'));
