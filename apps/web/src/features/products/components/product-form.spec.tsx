@@ -130,6 +130,7 @@ function show(
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.unstubAllGlobals();
 });
 
