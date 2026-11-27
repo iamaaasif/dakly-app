@@ -10,13 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ContactDetailResponse,
   ContactListItemResponse,
-  ContactListQuery,
   ContactResponse,
 } from '@dakly/contracts/contacts';
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ToastProvider } from '@dakly/ui/toast';
 
 import { defaultCustomerColumns } from '../customer-columns';
+import { AddContactsFlow } from './add-contacts-flow';
 import { CustomerProfile } from './customer-profile';
 import { CustomersScreen } from './customers-screen';
 import { ImportResultStep } from './import-result-step';
@@ -55,7 +55,6 @@ const rahimaInList: ContactListItemResponse = {
   lifecycleStage: 'none',
   isHighValue: false,
 };
-const allCustomers: ContactListQuery = { limit: 50, sort: 'newest' };
 
 type Reply = { status?: number; body?: unknown };
 type Sent = { path: string; method: string; body: unknown };
@@ -149,59 +148,110 @@ afterEach(() => {
   replace.mockReset();
 });
 
+const ordered = { limit: 50, sort: 'last_purchase', hasOrdered: true } as const;
+const counts = {
+  all: 2486,
+  customers: 2486,
+  new: 186,
+  returning: 1124,
+  vip: 42,
+  inactive: 128,
+  highValue: 158,
+  atRisk: 96,
+  boughtMoreThanOnce: 1124,
+  canReceiveMarketing: 2203,
+};
+const stats = {
+  ordersCount: 11,
+  netSpendPoisha: 3_890_000,
+  lastOrderAt: '2026-10-30T08:00:00Z',
+  lifecycleStage: 'best',
+} as const;
+
+// The list and the tab counts come from the same fake API.
+function respondWithList(items: ContactListItemResponse[], extra: Record<string, unknown> = {}) {
+  respond((path) =>
+    path.startsWith('/api/contacts/counts')
+      ? { body: counts }
+      : { body: { items, nextCursor: null, total: items.length, ...extra } },
+  );
+}
+
 describe('All customers', () => {
   it('shows a skeleton while the list loads', async () => {
     respond(() => new Promise<never>(() => undefined));
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
     expect(await screen.findByText('Loading customers')).toBeTruthy();
   });
 
-  it('says the store has no customers yet', async () => {
-    respond(() => ({ body: { items: [], nextCursor: null } }));
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
-    expect(await screen.findByText('No customers yet. Customers you add show here.')).toBeTruthy();
+  it('asks only for people who ordered', async () => {
+    respondWithList([rahimaInList]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    await screen.findByRole('table');
+    expect(sent.find((request) => request.path.startsWith('/api/contacts?'))?.path).toBe(
+      '/api/contacts?limit=50&sort=last_purchase&hasOrdered=true',
+    );
+    expect(screen.queryByRole('button', { name: /Add/ })).toBeNull();
+  });
+
+  it('says the store has no customers yet, without tabs or filters', async () => {
+    respondWithList([]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    expect(await screen.findByText("You don't have any customer yet")).toBeTruthy();
+    expect(screen.queryByRole('tablist')).toBeNull();
+  });
+
+  it('says no customer matches a search', async () => {
+    respondWithList([]);
+    show(
+      <CustomersScreen query={{ ...ordered, search: 'zzz' }} columns={defaultCustomerColumns} />,
+    );
+    expect(await screen.findByText('No customers match')).toBeTruthy();
   });
 
   it('offers a retry when the list fails', async () => {
     respond(() => apiError(503, 'UNAVAILABLE', 'Customers are not available right now'));
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
     expect(await screen.findByText('Customers are not available right now')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry customers' })).toBeTruthy();
   });
 
-  it('shows the phone as the API sent it and links to the next page', async () => {
-    respond(() => ({
-      body: {
-        items: [
-          rahimaInList,
-          { ...rahimaInList, id: 'other', name: 'Karim Mia', phone: '01812345678' },
-        ],
-        nextCursor: contactId,
-      },
-    }));
-    show(
-      <CustomersScreen
-        query={{ ...allCustomers, kind: 'customer' }}
-        columns={defaultCustomerColumns}
-      />,
+  it('shows the phone as the API sent it, the stats and the type, and links to the next page', async () => {
+    respond((path) =>
+      path.startsWith('/api/contacts/counts')
+        ? { body: counts }
+        : {
+            body: {
+              items: [
+                { ...rahimaInList, ...stats },
+                { ...rahimaInList, id: 'other', name: 'Karim Mia', phone: '01812345678' },
+              ],
+              nextCursor: contactId,
+              total: 120,
+            },
+          },
     );
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
     const table = within(await screen.findByRole('table'));
     expect(table.getByText('01712-XXX678')).toBeTruthy();
     expect(table.getByText('01812-345678')).toBeTruthy();
+    expect(table.getByText('VIP')).toBeTruthy();
+    expect(table.getByText('৳38,900')).toBeTruthy();
+    expect(table.getByText('Oct 30')).toBeTruthy();
     expect(table.getByRole('link', { name: 'Rahima Akter' }).getAttribute('href')).toBe(
       `/customers/${contactId}`,
     );
+    expect(screen.getByText('Showing 2 of 120 customers')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Next page' }).getAttribute('href')).toBe(
-      `/customers?kind=customer&cursor=${contactId}`,
+      `/customers?cursor=${contactId}`,
     );
-    expect(sent[0]?.path).toBe('/api/contacts?limit=50&sort=newest&kind=customer');
   });
 
   it('shows the columns the address names and no others', async () => {
-    respond(() => ({ body: { items: [rahimaInList], nextCursor: null } }));
+    respondWithList([rahimaInList]);
     show(
       <CustomersScreen
-        query={allCustomers}
+        query={ordered}
         columns={['email', 'location', 'source', 'tags', 'consent']}
       />,
     );
@@ -213,28 +263,24 @@ describe('All customers', () => {
     expect(table.getByText('SMS')).toBeTruthy();
     expect(table.queryByRole('columnheader', { name: 'Phone' })).toBeNull();
     expect(table.queryByText('01712-XXX678')).toBeNull();
+    expect(table.getByRole('columnheader', { name: 'Orders' })).toBeTruthy();
   });
 
   it('shows a quiet note where a column has no value', async () => {
-    respond(() => ({
-      body: {
-        items: [
-          {
-            ...rahimaInList,
-            tags: [],
-            whatsappPhone: null,
-            phone: null,
-            email: null,
-            district: null,
-            consentedChannels: [],
-          },
-        ],
-        nextCursor: null,
+    respondWithList([
+      {
+        ...rahimaInList,
+        tags: [],
+        whatsappPhone: null,
+        phone: null,
+        email: null,
+        district: null,
+        consentedChannels: [],
       },
-    }));
+    ]);
     show(
       <CustomersScreen
-        query={allCustomers}
+        query={ordered}
         columns={['whatsapp', 'email', 'location', 'tags', 'consent']}
       />,
     );
@@ -247,73 +293,42 @@ describe('All customers', () => {
   });
 
   it('puts a column choice in the address and keeps the filters', async () => {
-    respond(() => ({ body: { items: [rahimaInList], nextCursor: null } }));
+    respondWithList([rahimaInList]);
     show(
-      <CustomersScreen
-        query={{ ...allCustomers, kind: 'customer' }}
-        columns={defaultCustomerColumns}
-      />,
+      <CustomersScreen query={{ ...ordered, search: 'zzz' }} columns={defaultCustomerColumns} />,
     );
     await screen.findByRole('table');
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Columns' }));
     await user.click(screen.getByRole('menuitemcheckbox', { name: 'Email' }));
-    expect(replace).toHaveBeenCalledWith(
-      '/customers?kind=customer&columns=phone%2Cwhatsapp%2Cemail',
-    );
     // The screen is not re-rendered by the mocked router, so this starts from the defaults again.
-    await user.click(screen.getByRole('menuitemcheckbox', { name: 'WhatsApp' }));
-    expect(replace).toHaveBeenLastCalledWith('/customers?kind=customer&columns=phone');
+    expect(replace).toHaveBeenCalledWith(
+      '/customers?search=zzz&columns=phone%2Cwhatsapp%2Clocation%2Csource%2Ctags',
+    );
   });
 
   it('shows a short name search as an error on the search field', async () => {
     respond(() =>
       apiError(400, 'CONTACT_SEARCH_TOO_SHORT', 'Type at least 3 letters to search by name'),
     );
-    show(
-      <CustomersScreen
-        query={{ ...allCustomers, search: 'ra' }}
-        columns={defaultCustomerColumns}
-      />,
-    );
+    show(<CustomersScreen query={{ ...ordered, search: 'ra' }} columns={defaultCustomerColumns} />);
     const search = await screen.findByRole('searchbox', { name: 'Search' });
     await waitFor(() => expect(search.getAttribute('aria-invalid')).toBe('true'));
     expect(screen.getByRole('alert').textContent).toBe('Type at least 3 letters to search by name');
     expect(screen.queryByRole('button', { name: 'Retry customers' })).toBeNull();
   });
 
-  it('puts the search and tag in the address and starts from the first page', async () => {
-    respond(() => ({ body: { items: [], nextCursor: null } }));
+  it('puts the search in the address when Enter is pressed and starts from the first page', async () => {
+    respondWithList([rahimaInList]);
     show(
       <CustomersScreen
-        query={{ ...allCustomers, kind: 'lead', cursor: contactId }}
+        query={{ ...ordered, cursor: contactId }}
         columns={defaultCustomerColumns}
       />,
     );
     const user = userEvent.setup();
-    await user.type(await screen.findByRole('searchbox', { name: 'Search' }), '01712345678');
-    await user.type(screen.getByLabelText('Tag'), ' eid ');
-    await user.click(screen.getByRole('button', { name: 'Search customers' }));
-    expect(push).toHaveBeenCalledWith('/customers?kind=lead&search=01712345678&tag=eid');
-  });
-
-  it('shows a taken phone on the add form phone field', async () => {
-    respond((_path, method) =>
-      method === 'POST'
-        ? apiError(409, 'CONTACT_PHONE_TAKEN', 'A contact with this phone number already exists')
-        : { body: { items: [], nextCursor: null } },
-    );
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Add customers' }));
-    await user.click(screen.getByRole('button', { name: /Add manually/ }));
-    await user.type(screen.getByLabelText('Name'), 'Rahima Akter');
-    await user.type(screen.getByLabelText('Phone'), '01712345678');
-    await user.click(screen.getByRole('button', { name: 'Add customer' }));
-    await waitFor(() =>
-      expect(screen.getByLabelText('Phone').getAttribute('aria-invalid')).toBe('true'),
-    );
-    expect(screen.getByText('A contact with this phone number already exists')).toBeTruthy();
+    await user.type(await screen.findByRole('searchbox', { name: 'Search' }), '01712345678{Enter}');
+    expect(push).toHaveBeenCalledWith('/customers?search=01712345678');
   });
 });
 
@@ -623,9 +638,9 @@ describe('Import customers', () => {
       if (path === `/api/imports/${importId}`) return { body: done('done') };
       return { body: { items: [], nextCursor: null } };
     });
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
+    show(<AddContactsFlow />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), file);
     expect((await screen.findByRole('status')).textContent).toContain('2 rows · 2 columns');
@@ -661,9 +676,9 @@ describe('Import customers', () => {
         ? { body: { importId, uploadUrl: 'https://files.example.test/up' } }
         : { body: { items: [], nextCursor: null } },
     );
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
+    show(<AddContactsFlow />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(
       screen.getByLabelText('Customer file'),
@@ -698,10 +713,7 @@ describe('Import customers', () => {
       Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined }),
     );
     show(
-      <CustomersScreen
-        query={{ limit: 50, sort: 'newest', kind: 'lead', tag: 'eid' }}
-        columns={defaultCustomerColumns}
-      />,
+      <CustomersScreen query={{ ...ordered, search: 'rah' }} columns={defaultCustomerColumns} />,
       true,
       true,
     );
@@ -710,21 +722,23 @@ describe('Import customers', () => {
     expect(
       await screen.findByText(`Exporting ${said} to Excel. Check your downloads in a moment.`),
     ).toBeTruthy();
-    expect(urls.some((url) => url === '/api/contacts/export?kind=lead&tag=eid')).toBe(true);
+    expect(urls.some((url) => url === '/api/contacts/export?search=rah&hasOrdered=true')).toBe(
+      true,
+    );
   });
 
   it('offers no Export button without the Download customer lists switch', async () => {
-    respond(() => ({ body: { items: [], nextCursor: null } }));
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
-    await screen.findByText('No customers yet. Customers you add show here.');
+    respondWithList([rahimaInList]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    await screen.findByRole('table');
     expect(screen.queryByRole('button', { name: 'Export' })).toBeNull();
   });
 
   it('refuses a file that is not Excel or CSV before uploading it', async () => {
     respond(() => ({ body: { items: [], nextCursor: null } }));
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
+    show(<AddContactsFlow />);
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.pdf'));
     expect((await screen.findByRole('alert')).textContent).toContain('Only Excel (.xlsx) or CSV');
@@ -733,9 +747,9 @@ describe('Import customers', () => {
 
   it('refuses an .xlsx file that is not a spreadsheet', async () => {
     respond(() => ({ body: { items: [], nextCursor: null } }));
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
+    show(<AddContactsFlow />);
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
     expect((await screen.findByRole('alert')).textContent).toContain('could not be read');
@@ -748,9 +762,9 @@ describe('Import customers', () => {
         ? { body: { importId, uploadUrl: 'https://files.example.test/up' } }
         : { status: 200, body: { items: [], nextCursor: null } },
     );
-    show(<CustomersScreen query={allCustomers} columns={defaultCustomerColumns} />);
+    show(<AddContactsFlow />);
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     const bytes = readFileSync('src/lib/fixtures/customers.xlsx');
     await user.upload(screen.getByLabelText('Customer file'), new File([bytes], 'shop-list.xlsx'));
