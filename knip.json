@@ -11,7 +11,9 @@
     "apps/worker": {
       "entry": ["src/main.ts"]
     },
-    "apps/web": {},
+    "apps/web": {
+      "entry": ["src/features/customers/components/add-contacts-flow.tsx"]
+    },
     "apps/admin": {},
     "packages/*": {
       "entry": ["src/**/*.ts"],

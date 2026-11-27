@@ -1,8 +1,11 @@
+'use client';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { consentChannels, type ContactListItemResponse } from '@dakly/contracts/contacts';
+import { formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
+import { Checkbox } from '@dakly/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import {
@@ -10,54 +13,173 @@ import {
   contactSourceLabels,
   customerColumnLabels,
 } from '../customer-columns';
-import { channelLabels, customerKindLabels, customerPhone } from '../customer-labels';
+import { channelLabels, customerPhone, customerTypePill } from '../customer-labels';
 import { CustomerTags } from './customer-tags';
+import { formatShortDate } from '@/lib/format-date';
 import { formatPhone } from '@/lib/format-phone';
 import { initialsOf } from '@/lib/initials';
 
-// Type always shows, between Location and Source as in the design.
-const tableColumns = [
-  'phone',
-  'whatsapp',
-  'email',
-  'location',
-  'type',
-  'source',
-  'tags',
-  'consent',
-] as const;
-type TableColumn = (typeof tableColumns)[number];
+// Columns before and after the always-on stats, in the order of the design.
+const leadingColumns = ['phone', 'whatsapp', 'email', 'location'] as const;
+const trailingColumns = ['source', 'tags', 'consent'] as const;
 
-type CustomerListProps = { customers: ContactListItemResponse[]; columns: CustomerColumn[] };
+type CustomerListProps = {
+  customers: ContactListItemResponse[];
+  columns: CustomerColumn[];
+  onSelectionChange: (count: number) => void;
+};
 
-export function CustomerList({ customers, columns }: CustomerListProps) {
+export function CustomerList({ customers, columns, onSelectionChange }: CustomerListProps) {
   return (
-    <div className="space-y-4">
+    <>
       <CustomerMobileList customers={customers} columns={columns} />
-      <CustomerTable customers={customers} columns={columns} />
+      <CustomerTable
+        customers={customers}
+        columns={columns}
+        onSelectionChange={onSelectionChange}
+      />
+    </>
+  );
+}
+
+const headClass =
+  'whitespace-nowrap text-xs font-semibold tracking-wider text-text-muted uppercase';
+
+function shownColumns(columns: CustomerColumn[], list: readonly CustomerColumn[]) {
+  return list.filter((column) => columns.includes(column));
+}
+
+function selectAllState(customers: ContactListItemResponse[], selected: ReadonlySet<string>) {
+  if (customers.every((customer) => selected.has(customer.id))) return true;
+  return selected.size ? 'indeterminate' : false;
+}
+
+function CustomerTable({ customers, columns, onSelectionChange }: CustomerListProps) {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const choose = (next: Set<string>) => {
+    setSelected(next);
+    onSelectionChange(next.size);
+  };
+  const toggle = (id: string, on: boolean) => {
+    const next = new Set(selected);
+    if (on) next.add(id);
+    else next.delete(id);
+    choose(next);
+  };
+  return (
+    <div className="hidden md:block">
+      <Table bare>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="w-10 pl-4">
+              <Checkbox
+                aria-label="Select all customers on this page"
+                checked={selectAllState(customers, selected)}
+                onCheckedChange={(on) =>
+                  choose(on === true ? new Set(customers.map((each) => each.id)) : new Set())
+                }
+              />
+            </TableHead>
+            <TableHead className={headClass}>Customer</TableHead>
+            {shownColumns(columns, leadingColumns).map((column) => (
+              <TableHead key={column} className={headClass}>
+                {customerColumnLabels[column]}
+              </TableHead>
+            ))}
+            <TableHead className={headClass}>Type</TableHead>
+            <TableHead className={`${headClass} text-right`}>Orders</TableHead>
+            <TableHead className={`${headClass} text-right`}>Spent</TableHead>
+            <TableHead className={headClass}>Last purchase</TableHead>
+            {shownColumns(columns, trailingColumns).map((column) => (
+              <TableHead key={column} className={headClass}>
+                {customerColumnLabels[column]}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {customers.map((customer) => (
+            <CustomerTableRow
+              key={customer.id}
+              customer={customer}
+              columns={columns}
+              selected={selected.has(customer.id)}
+              onToggle={(on) => toggle(customer.id, on)}
+            />
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
 
-function CustomerMobileList({ customers, columns }: CustomerListProps) {
+type CustomerTableRowProps = {
+  customer: ContactListItemResponse;
+  columns: CustomerColumn[];
+  selected: boolean;
+  onToggle: (on: boolean) => void;
+};
+
+function CustomerTableRow({ customer, columns, selected, onToggle }: CustomerTableRowProps) {
   return (
-    <ul className="space-y-3 md:hidden">
+    <TableRow data-state={selected ? 'selected' : undefined}>
+      <TableCell className="pl-4">
+        <Checkbox
+          aria-label={`Select ${customer.name ?? 'No name'}`}
+          checked={selected}
+          onCheckedChange={(on) => onToggle(on === true)}
+        />
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <Avatar name={customer.name} />
+          <CustomerLink customer={customer} />
+        </div>
+      </TableCell>
+      {shownColumns(columns, leadingColumns).map((column) => (
+        <TableCell key={column} className="whitespace-nowrap">
+          <ColumnValue customer={customer} column={column} />
+        </TableCell>
+      ))}
+      <TableCell>
+        <TypePill customer={customer} />
+      </TableCell>
+      <TableCell className="text-right">{customer.ordersCount}</TableCell>
+      <TableCell className="text-right font-medium whitespace-nowrap">
+        {formatMoney(customer.netSpendPoisha)}
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        <LastPurchase customer={customer} />
+      </TableCell>
+      {shownColumns(columns, trailingColumns).map((column) => (
+        <TableCell key={column} className="whitespace-nowrap">
+          <ColumnValue customer={customer} column={column} />
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+}
+
+function CustomerMobileList({ customers, columns }: Omit<CustomerListProps, 'onSelectionChange'>) {
+  return (
+    <ul className="divide-y divide-border md:hidden">
       {customers.map((customer) => (
-        <li key={customer.id} className="space-y-2 rounded-lg border border-border bg-surface p-4">
+        <li key={customer.id} className="space-y-2 p-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-text-muted">
-              {initialsOf(customer.name ?? 'No name')}
-            </span>
+            <Avatar name={customer.name} />
             <div className="min-w-0 flex-1">
               <CustomerLink customer={customer} />
               {columns.includes('phone') ? (
-                <p className="text-sm text-text-muted tabular-nums">{customerPhone(customer)}</p>
+                <p className="font-mono text-xs text-text-muted">{customerPhone(customer)}</p>
               ) : null}
             </div>
-            <Badge variant={customer.kind === 'customer' ? 'neutral' : 'info'}>
-              {customerKindLabels[customer.kind]}
-            </Badge>
+            <TypePill customer={customer} />
           </div>
+          <p className="text-sm text-text-muted tabular-nums">
+            {customer.ordersCount} {customer.ordersCount === 1 ? 'order' : 'orders'} ·{' '}
+            <span className="font-medium text-text">{formatMoney(customer.netSpendPoisha)}</span> ·
+            Last purchase <LastPurchase customer={customer} />
+          </p>
           <dl className="space-y-1 text-sm">
             {columns
               .filter((column) => column !== 'phone')
@@ -76,70 +198,44 @@ function CustomerMobileList({ customers, columns }: CustomerListProps) {
   );
 }
 
-function CustomerTable({ customers, columns }: CustomerListProps) {
-  const shownColumns = tableColumns.filter(
-    (column) => column === 'type' || columns.includes(column),
-  );
+// Initials sit on a soft tint picked from the name, so the same person keeps the same colour.
+const avatarTints = [
+  'bg-primary-soft text-action-hover',
+  'bg-info-soft text-info',
+  'bg-success-soft text-success',
+  'bg-ai-soft text-ai',
+  'bg-warning-soft text-warning',
+  'bg-danger-soft text-danger',
+];
+
+function Avatar({ name }: { name: string | null }) {
+  const label = name ?? 'No name';
+  const tint =
+    avatarTints[[...label].reduce((sum, char) => sum + char.charCodeAt(0), 0) % avatarTints.length];
   return (
-    <div className="hidden overflow-hidden rounded-lg border border-border bg-surface md:block">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-surface-muted/50 hover:bg-surface-muted/50">
-            <TableHead className="text-xs font-semibold tracking-wider text-text-muted uppercase">
-              Customer
-            </TableHead>
-            {shownColumns.map((column) => (
-              <TableHead
-                key={column}
-                className="text-xs font-semibold tracking-wider text-text-muted uppercase"
-              >
-                {column === 'type' ? 'Type' : customerColumnLabels[column]}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {customers.map((customer) => (
-            <CustomerTableRow key={customer.id} customer={customer} shownColumns={shownColumns} />
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <span
+      aria-hidden="true"
+      className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${tint}`}
+    >
+      {initialsOf(label)}
+    </span>
   );
 }
 
-function CustomerTableRow({
-  customer,
-  shownColumns,
-}: {
-  customer: ContactListItemResponse;
-  shownColumns: TableColumn[];
-}) {
-  const name = customer.name ?? 'No name';
+function TypePill({ customer }: { customer: ContactListItemResponse }) {
+  const { label, variant } = customerTypePill(customer);
   return (
-    <TableRow className="hover:bg-surface-muted/30">
-      <TableCell>
-        <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-text-muted">
-            {initialsOf(name)}
-          </span>
-          <div className="min-w-0">
-            <CustomerLink customer={customer} />
-          </div>
-        </div>
-      </TableCell>
-      {shownColumns.map((column) => (
-        <TableCell key={column} className="text-sm">
-          {column === 'type' ? (
-            <Badge variant={customer.kind === 'customer' ? 'neutral' : 'info'}>
-              {customerKindLabels[customer.kind]}
-            </Badge>
-          ) : (
-            <ColumnValue customer={customer} column={column} />
-          )}
-        </TableCell>
-      ))}
-    </TableRow>
+    <Badge variant={variant} className="whitespace-nowrap">
+      {label}
+    </Badge>
+  );
+}
+
+function LastPurchase({ customer }: { customer: ContactListItemResponse }) {
+  return customer.lastOrderAt ? (
+    <time dateTime={customer.lastOrderAt}>{formatShortDate(customer.lastOrderAt)}</time>
+  ) : (
+    <Missing>No orders</Missing>
   );
 }
 
@@ -147,7 +243,7 @@ function CustomerLink({ customer }: { customer: ContactListItemResponse }) {
   return (
     <Link
       href={`/customers/${customer.id}`}
-      className="inline-flex min-h-10 items-center font-semibold text-text hover:underline"
+      className="inline-flex min-h-10 items-center font-semibold whitespace-nowrap text-text hover:text-action hover:underline"
     >
       {customer.name ?? 'No name'}
     </Link>
@@ -161,12 +257,12 @@ function Missing({ children }: { children: string }) {
 type ColumnProps = { customer: ContactListItemResponse };
 
 const columnValues: Record<CustomerColumn, (props: ColumnProps) => ReactNode> = {
-  phone: ({ customer }) => <span className="tabular-nums">{customerPhone(customer)}</span>,
+  phone: ({ customer }) => <span className="font-mono text-xs">{customerPhone(customer)}</span>,
   // Messages go to the WhatsApp number, or the phone when none is set.
   whatsapp: ({ customer }) => {
     const number = customer.whatsappPhone ?? customer.phone;
     return number ? (
-      <span className="tabular-nums">{formatPhone(number)}</span>
+      <span className="font-mono text-xs">{formatPhone(number)}</span>
     ) : (
       <Missing>No number</Missing>
     );
@@ -175,7 +271,11 @@ const columnValues: Record<CustomerColumn, (props: ColumnProps) => ReactNode> = 
   location: ({ customer }) => customer.district ?? <Missing>No location</Missing>,
   source: ({ customer }) => contactSourceLabels[customer.source],
   tags: ({ customer }) =>
-    customer.tags.length ? <CustomerTags tags={customer.tags} /> : <Missing>No tags</Missing>,
+    customer.tags.length ? (
+      <CustomerTags tags={customer.tags} variant="neutral" />
+    ) : (
+      <Missing>No tags</Missing>
+    ),
   consent: ({ customer }) => {
     const agreed = consentChannels.filter((channel) =>
       customer.consentedChannels.includes(channel),
