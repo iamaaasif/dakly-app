@@ -78,6 +78,7 @@ describe('ProductImportService with Postgres', () => {
     brands,
     {} as never,
     {} as never,
+    { attach: async () => undefined } as never,
   );
   const stock = new ProductStockService(
     new ProductStockRepository(tenant),

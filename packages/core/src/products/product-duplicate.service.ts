@@ -31,6 +31,7 @@ export class ProductDuplicateService {
       {
         name: `${source.name.slice(0, MAX_COPY_SOURCE_NAME_LENGTH)} (copy)`,
         description: source.description,
+        imageFileIds: [],
         categoryId: source.categoryId,
         brandId: source.brandId,
         weightGrams: source.weightGrams,

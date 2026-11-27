@@ -82,6 +82,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
   objectKey: string;
   uploadedByUserId: string | null;
   createdAt: Date;
+  expiresAt?: Date;
 };
 
 type ProductDetails = Omit<CreateProductInput, 'variants' | 'tags'>;
