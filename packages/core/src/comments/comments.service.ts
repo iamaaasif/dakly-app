@@ -108,7 +108,7 @@ export class CommentsService {
         this.clock.now(),
       );
       if (!id) return 'duplicate';
-      if (input.kind === 'facebook_page' && !input.parentExternalCommentId) {
+      if (!input.parentExternalCommentId) {
         await this.outbox.publish({
           type: 'comment.received',
           storeId,
@@ -118,6 +118,26 @@ export class CommentsService {
       }
       return 'stored';
     });
+  }
+
+  // Replies to comments, answered or hidden comments and comments with no words never start one.
+  async triggerFacts(storeId: string, id: string) {
+    const row = await this.repository.find(storeId, id);
+    if (!row?.body || !row.authorExternalId || row.parentExternalCommentId !== null) return;
+    if (row.status !== 'new' || row.classification === 'spam') return;
+    return {
+      commentId: row.id,
+      channel: channelOf(row.kind),
+      channelConnectionId: row.channelConnectionId,
+      externalPostId: row.externalPostId,
+      authorExternalId: row.authorExternalId,
+      text: row.body,
+      classification: row.classification,
+    };
+  }
+
+  claimForAutomation(storeId: string, id: string) {
+    return this.repository.claimForAutomation(storeId, id, this.clock.now());
   }
 
   async list(storeId: string, query: CommentListQuery) {

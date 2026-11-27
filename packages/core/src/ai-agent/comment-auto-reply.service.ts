@@ -2,12 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { BillingService } from '../billing/billing.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { CommentPostProductsService } from '../comments/comment-post-products.service';
 import { CommentsService } from '../comments/comments.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
-import { ProductSearchService } from '../product-search/product-search.service';
-import { ProductSearchSourceService } from '../products/product-search-source.service';
 import { ProductsService } from '../products/products.service';
-import { PublishedPostsService } from '../social/published-posts.service';
 import { StoresService } from '../stores/stores.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import {
@@ -24,10 +22,8 @@ export class CommentAutoReplyService {
     @Inject(AiAgentSettingsRepository) private readonly settings: AiAgentSettingsRepository,
     @Inject(CommentsService) private readonly comments: CommentsService,
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
-    @Inject(ProductSearchSourceService) private readonly source: ProductSearchSourceService,
     @Inject(ProductsService) private readonly products: ProductsService,
-    @Inject(ProductSearchService) private readonly search: ProductSearchService,
-    @Inject(PublishedPostsService) private readonly posts: PublishedPostsService,
+    @Inject(CommentPostProductsService) private readonly postProducts: CommentPostProductsService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(BillingService) private readonly billing: BillingService,
     @Inject(KillSwitchesService) private readonly switches: KillSwitchesService,
@@ -76,19 +72,9 @@ export class CommentAutoReplyService {
     storeId: string,
     target: { channelConnectionId: string; externalPostId: string },
   ) {
-    const post = await this.posts.content(storeId, target);
-    if (!post) return;
-    // Products hidden after publication still count when deciding what the post shows.
-    const photos = await this.source.postProductsByPhotos(storeId, post.mediaFileIds);
-    if (photos.length > 1 || photos.some(({ variantPhoto }) => variantPhoto)) return;
-    const named = post.caption
-      ? await this.search.productsNamedInCaption(storeId, post.caption)
-      : [];
-    if (!named) return;
-    const candidates = [...new Set([...photos.map(({ id }) => id), ...named])];
-    const [productId] = candidates;
-    if (candidates.length !== 1 || !productId) return;
-    const [product] = await this.products.getManyForChat(storeId, [productId]);
+    const { singleProductId } = await this.postProducts.forPost(storeId, target);
+    if (!singleProductId) return;
+    const [product] = await this.products.getManyForChat(storeId, [singleProductId]);
     return product;
   }
 }

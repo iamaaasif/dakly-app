@@ -336,3 +336,23 @@ it('retries a refused public reply without sending the confirmed private reply a
   const { items } = await comments.list(storeId, { limit: 50 });
   expect(items).toMatchObject([{ status: 'replied', publicReplied: true }]);
 });
+
+it('lets one automation claim a comment, and offers only top-level comments that await an answer', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-claim', { text: 'দাম কত' });
+  expect(await comments.triggerFacts(storeId, comment.id)).toMatchObject({
+    text: 'দাম কত',
+    channel: 'messenger',
+    authorExternalId: 'author-1',
+  });
+  const claims = await Promise.all([
+    comments.claimForAutomation(storeId, comment.id),
+    comments.claimForAutomation(storeId, comment.id),
+  ]);
+  expect(claims.sort()).toEqual([false, true]);
+  await comments.replyPublicly(storeId, staff, comment.id, { body: 'Inbox e dilam' });
+  // Staff answered, so the comment no longer starts anything.
+  expect(await comments.triggerFacts(storeId, comment.id)).toBeUndefined();
+  const reply = await stored(storeId, 'c-nested', { parentExternalCommentId: 'c-claim' });
+  expect(await comments.triggerFacts(storeId, reply.id)).toBeUndefined();
+});

@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import { automationRuns, automations, automationVersions } from '@dakly/db/schema/automations';
+import { socialComments } from '@dakly/db/schema/chats';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -13,6 +14,7 @@ type NewRun = Pick<
   | 'contactId'
   | 'triggerKey'
   | 'triggerOrderId'
+  | 'triggerCommentId'
   | 'currentStepKey'
   | 'enteredAt'
   | 'wakeAt'
@@ -33,7 +35,8 @@ export class AutomationEntryRepository {
             eq(automations.triggerType, trigger),
             eq(automations.status, 'active'),
           ),
-        ),
+        )
+        .orderBy(automations.createdAt, automations.id),
     );
   }
 
@@ -84,6 +87,37 @@ export class AutomationEntryRepository {
         .limit(1),
     );
     return run;
+  }
+
+  async hasEntryForPost(
+    storeId: string,
+    automationId: string,
+    contactId: string,
+    post: { channelConnectionId: string; externalPostId: string },
+  ) {
+    const [entry] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: automationRuns.id })
+        .from(automationRuns)
+        .innerJoin(
+          socialComments,
+          and(
+            eq(socialComments.storeId, storeId),
+            eq(socialComments.id, automationRuns.triggerCommentId),
+          ),
+        )
+        .where(
+          and(
+            eq(automationRuns.storeId, storeId),
+            eq(automationRuns.automationId, automationId),
+            eq(automationRuns.contactId, contactId),
+            eq(socialComments.channelConnectionId, post.channelConnectionId),
+            eq(socialComments.externalPostId, post.externalPostId),
+          ),
+        )
+        .limit(1),
+    );
+    return !!entry;
   }
 
   async insert(storeId: string, run: NewRun): Promise<void> {

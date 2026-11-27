@@ -114,6 +114,24 @@ export class CommentsRepository {
     return row;
   }
 
+  // The first automation to claim a comment answers it; the AI agent and later automations skip it.
+  async claimForAutomation(storeId: string, id: string, now: Date): Promise<boolean> {
+    const claimed = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(socialComments)
+        .set({ automationClaimedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(socialComments.storeId, storeId),
+            eq(socialComments.id, id),
+            isNull(socialComments.automationClaimedAt),
+          ),
+        )
+        .returning({ id: socialComments.id }),
+    );
+    return claimed.length > 0;
+  }
+
   async claimPrivateReply(
     storeId: string,
     id: string,

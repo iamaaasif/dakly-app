@@ -9,6 +9,8 @@ import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import type { ChatIntent } from '@dakly/contracts/chats';
 import { createDatabase } from '@dakly/db/client';
 
+import { CommentPostProductsService } from '../comments/comment-post-products.service';
+import { CommentsService } from '../comments/comments.service';
 import { ContactsModule } from '../contacts/contacts.module';
 import { ContactsService } from '../contacts/contacts.service';
 import { ConversationIntentService } from '../messaging/conversation-intent.service';
@@ -92,6 +94,8 @@ describe('AutomationEntryService (Postgres)', () => {
         AutomationEntryRepository,
         { provide: Clock, useValue: { now: () => now } },
         { provide: ConversationIntentService, useValue: { burstText: async () => spoken } },
+        { provide: CommentsService, useValue: {} },
+        { provide: CommentPostProductsService, useValue: {} },
       ],
     })(TestModule);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });

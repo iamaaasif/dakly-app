@@ -4,7 +4,7 @@ import { privateReplyWindowDays } from '@dakly/contracts/comments';
 import { DAY_MS } from '../platform/time';
 import type { CommentRow } from './comments.repository';
 
-export function channelOf(kind: CommentRow['kind']) {
+export function channelOf(kind: CommentRow['kind']): 'instagram' | 'messenger' {
   return kind === 'instagram' ? 'instagram' : 'messenger';
 }
 
