@@ -222,14 +222,24 @@ const amountKey = /taka|poisha|price|charge|total|fee|cost|amount|discount|subto
 // number, SKU or stock count that equals an invented price must not make it look checked.
 function amountsIn(value: unknown, key = '', found = new Set<number>()) {
   if (typeof value === 'number') {
-    if (!amountKey.test(key)) return found;
-    found.add(/poisha/i.test(key) ? value / 100 : value);
+    const amount = moneyFieldAmount(key, value);
+    if (amount !== undefined) found.add(amount);
   } else if (typeof value === 'string') {
     for (const { value: amount } of claimedAmounts(toAsciiDigits(value))) found.add(amount);
-  } else if (Array.isArray(value)) for (const item of value) amountsIn(item, key, found);
-  else if (value && typeof value === 'object')
-    for (const [name, item] of Object.entries(value)) amountsIn(item, name, found);
+  } else for (const [name, item] of fieldsOf(value, key)) amountsIn(item, name, found);
   return found;
+}
+
+// Array items keep the field name of the list they sit in.
+function fieldsOf(value: unknown, key: string): [string, unknown][] {
+  if (Array.isArray(value)) return value.map((item) => [key, item]);
+  return value && typeof value === 'object' ? Object.entries(value) : [];
+}
+
+// The amount in taka, or nothing when the field is not money.
+function moneyFieldAmount(key: string, value: number) {
+  if (!amountKey.test(key)) return undefined;
+  return /poisha/i.test(key) ? value / 100 : value;
 }
 
 const idPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
