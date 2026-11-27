@@ -9,6 +9,15 @@ export function formatDateTime(value: string): string {
   return `${formatted} (Asia/Dhaka)`;
 }
 
+// With seconds, for names that must not repeat within a minute.
+export function formatDateTimeWithSeconds(value: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+    timeZone: 'Asia/Dhaka',
+  }).format(parseInstant(value));
+}
+
 const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
 
 export function formatRelativeTime(value: string, now = Date.now()): string {

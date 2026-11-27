@@ -45,7 +45,7 @@ like any segment. `POST /segments/hand-picked` makes one from up to 100 ids and 
 ids that are not in yet and returns them; Undo sends them to `.../customers/remove`. A segment built
 from rules refuses with `SEGMENT_NOT_HAND_PICKED`, a full one with `SEGMENT_HAND_PICKED_FULL`, and the
 last customer cannot be removed (`SEGMENT_HAND_PICKED_EMPTY`). Send campaign saves the selection as
-a segment named "Picked <date and time>" and opens `/campaigns/new?segment=<id>`, which puts it in the
+a segment named "Picked <date, time with seconds> (count)" and opens `/campaigns/new?segment=<id>`, which puts it in the
 new draft's audience. The segment builder shows such a condition as "N customers picked on the list"
 and does not offer it in the field list.
 

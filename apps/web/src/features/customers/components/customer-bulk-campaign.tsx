@@ -5,7 +5,13 @@ import { Button } from '@dakly/ui/button';
 import { useToast } from '@dakly/ui/toast';
 
 import { useCreateHandPickedSegment } from '../api/hand-picked-segments';
-import { formatDateTime } from '@/lib/format-date';
+import { formatDateTimeWithSeconds } from '@/lib/format-date';
+
+// Segment names are unique, so the name carries the seconds and the count.
+function pickedName(count: number) {
+  const when = formatDateTimeWithSeconds(new Date().toISOString());
+  return `Picked ${when} (${count})`;
+}
 
 type CustomerBulkCampaignProps = { contactIds: string[] };
 
@@ -18,7 +24,7 @@ export function CustomerBulkCampaign({ contactIds }: CustomerBulkCampaignProps) 
   const start = () =>
     create.mutate(
       {
-        name: `Picked ${formatDateTime(new Date().toISOString()).replace(' (Asia/Dhaka)', '')}`,
+        name: pickedName(contactIds.length),
         contactIds,
       },
       {
