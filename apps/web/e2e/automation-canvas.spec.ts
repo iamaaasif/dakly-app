@@ -126,7 +126,7 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
       await expect(steps.getByText('Exit', { exact: true }).first()).toBeVisible();
       if (index === 1) {
         await expect(steps.getByText('Tapped the link in step 1')).toBeVisible();
-        await expect(page.getByText('Else', { exact: true })).toBeVisible();
+        await expect(page.getByText('No', { exact: true })).toBeVisible();
       }
       await captureEvidence(page, evidence, `canvas-${index + 1}`);
     }
