@@ -30,10 +30,10 @@ type OrdersScreenProps = { query: OrderListQuery; selected?: string; labelOrderI
 export function OrdersScreen(initial: OrdersScreenProps) {
   const { query, selected, labelOrderIds = [] } = useUrlQuery(initial, parseOrdersScreen);
   const orders = useOrders(query);
+  const pendingListRefresh = orders.fetchStatus !== 'idle';
   const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
   const navigationQuery = { ...query, labelOrderIds };
-  const listHref = `/orders?${ordersSearch(navigationQuery)}`;
 
   function changeLabelSelection(ids: string[]) {
     router.replace(`/orders?${ordersSearch({ ...query, selected, labelOrderIds: ids })}`);
@@ -81,9 +81,9 @@ export function OrdersScreen(initial: OrdersScreenProps) {
             key={selected}
             id={selected}
             restoreFocusTo={() =>
-              orderRowFocus(heading.current, orders.fetchStatus === 'idle' ? selected : undefined)
+              orderRowFocus(heading.current, pendingListRefresh ? undefined : selected)
             }
-            onClose={() => router.replace(listHref)}
+            onClose={() => router.replace(`/orders?${ordersSearch(navigationQuery)}`)}
           />
         ) : null}
       </main>
