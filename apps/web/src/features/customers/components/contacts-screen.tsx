@@ -14,6 +14,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { TableCard } from '@dakly/ui/table';
 
 import { useContactCounts } from '../api/contact-counts';
+import { useContactTags } from '../api/contact-tags';
 import { useCustomers } from '../api/customers';
 import {
   type ContactsScreenState,
@@ -111,8 +112,7 @@ function ContactsTable({
     contacts.error instanceof ApiError && contacts.error.code === 'CONTACT_SEARCH_TOO_SHORT'
       ? contacts.error.message
       : undefined;
-  // The API has no list of every tag yet, so the select offers the tags on the rows now on screen.
-  const tags = [...new Set((contacts.data?.items ?? []).flatMap((item) => item.tags))];
+  const tags = useContactTags().data ?? [];
   return (
     <>
       <ContactTabs query={query} columns={columns} counts={counts} hrefFor={hrefFor} />
