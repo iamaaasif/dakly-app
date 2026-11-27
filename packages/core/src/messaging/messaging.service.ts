@@ -365,6 +365,9 @@ export class MessagingService {
         now,
       );
       if (!message) throw messagingError('MESSAGE_OPERATION_CONFLICT');
+      // A person or the AI answered, so the hand-over draft is spent. An automatic line is not an answer.
+      if (created && input.actor.kind !== 'system')
+        await this.outbound.clearSuggestedReply(storeId, conversation.id);
       if (created && requestSend)
         await this.outbox.publish({
           type: 'message.send_requested',

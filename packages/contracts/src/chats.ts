@@ -263,6 +263,9 @@ export type ConversationResponse = {
   // Who wrote the newest sent message: Waiting for them and the preview's "You:" read it.
   lastMessageFrom: (typeof messageAuthorTypes)[number] | null;
   intentTag: ChatIntent | null;
+  // The AI's draft for the team after a hand-over, until someone or the AI writes, or the customer
+  // writes again.
+  suggestedReply: string | null;
   windowExpiresAt: string | null;
   unreadCount: number;
 };

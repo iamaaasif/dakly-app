@@ -37,6 +37,7 @@ const sadia: ConversationResponse = {
   lastMessagePreview: 'Price koto? Mirpur e delivery charge koto?',
   lastMessageFrom: 'customer',
   intentTag: 'price',
+  suggestedReply: null,
   windowExpiresAt: null,
   unreadCount: 3,
 };
@@ -439,7 +440,11 @@ describe('Conversation', () => {
   const posts: { path: string; body: unknown }[] = [];
   const saved: (typeof inbound)[] = [];
 
-  function respondToThread(windowExpiresAt: string | null, failures = 0) {
+  function respondToThread(
+    windowExpiresAt: string | null,
+    failures = 0,
+    change: Partial<ConversationResponse> = {},
+  ) {
     vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
@@ -463,7 +468,7 @@ describe('Conversation', () => {
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
         return Response.json({ items: [...saved, inbound], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
-        return Response.json({ ...sadia, unreadCount: 0, windowExpiresAt }, verified);
+        return Response.json({ ...sadia, unreadCount: 0, windowExpiresAt, ...change }, verified);
       if (path.startsWith('/api/saved-replies'))
         return Response.json(
           {
@@ -480,6 +485,29 @@ describe('Conversation', () => {
   afterEach(() => {
     posts.length = 0;
     saved.length = 0;
+  });
+
+  it("sends the AI's suggested reply or puts it in the box to edit", async () => {
+    const open = new Date(Date.now() + 22 * 3_600_000).toISOString();
+    const draft = { suggestedReply: 'Ji, size bodlano jabe.', handoverReason: 'refund' as const };
+    respondToThread(open, 0, draft);
+    const view = show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const card = await screen.findByRole('region', { name: 'Suggested reply' });
+    expect(within(card).getByText('Refund or exchange · suggested reply')).toBeTruthy();
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+    expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe(
+      'Ji, size bodlano jabe.',
+    );
+    expect(screen.queryByRole('region', { name: 'Suggested reply' })).toBeNull();
+    expect(posts).toEqual([]);
+    view.unmount();
+
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const again = await screen.findByRole('region', { name: 'Suggested reply' });
+    await userEvent.click(within(again).getByRole('button', { name: 'Send' }));
+    expect(posts.map(({ body }) => (body as { body: string }).body)).toEqual([
+      'Ji, size bodlano jabe.',
+    ]);
   });
 
   it('shows the thread with the reply window and sends a reply', async () => {

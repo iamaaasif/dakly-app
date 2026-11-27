@@ -183,6 +183,15 @@ export class OutboundMessagingRepository {
     return updated !== undefined;
   }
 
+  clearSuggestedReply(storeId: string, conversationId: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .update(conversations)
+        .set({ suggestedReply: null })
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, conversationId))),
+    );
+  }
+
   advanceConversation(
     storeId: string,
     conversationId: string,

@@ -23,7 +23,7 @@ These need no backend and are in the Inbox now: the icon rail and the fixed page
 | Post rows in the list ("Post: New winter Kurti · 9 comments asking price")          | Comments have their own view behind the Comments channel        | Q4      |
 | System line "Dakly AI called your team · Exchange request"                          | No system messages are written                                  | CHAT-11 |
 | Reply arrow under a customer message                                                | Copy only                                                       | CHAT-11 |
-| Suggested reply card (reason, the AI's draft, Send, Edit)                           | Not built                                                       | CHAT-12 |
+| Suggested reply card (reason, the AI's draft, Send, Edit)                           | Built in CHAT-12                                                | CHAT-12 |
 | Composer: emoji, attach, AI rewrite, Send product, Write with AI, Order link        | Saved replies only                                              | CHAT-13 |
 | Ask customer for missing details                                                    | Not built                                                       | CHAT-14 |
 | Header more menu (three dots)                                                       | Not built                                                       | CHAT-14 |
@@ -42,10 +42,6 @@ CHAT-9 is Done (#619). Build order for the rest, one PR each: CHAT-10, CHAT-12, 
 
 - `messages` of kind `system` written in the same transaction as the event: the AI hands over (with the reason), an order is created from the chat, the contact is marked not a customer. The web already draws system messages as a centred line.
 - Reply arrow: quote a customer message into the reply box (web only).
-
-### CHAT-12 Suggested reply
-
-- On hand-over the AI drafts one reply through `AiService` (no send), stored on the conversation with the reason and cleared on the next staff or AI message. Send posts it through the normal reply path; Edit puts it in the reply box. Bangla, Banglish and English eval cases in the same PR.
 
 ### CHAT-13 Composer tools
 

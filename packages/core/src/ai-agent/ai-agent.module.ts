@@ -21,10 +21,12 @@ import { AiAgentService } from './ai-agent.service';
 import { CardTapRepliesService } from './card-tap-replies.service';
 import { ChatClassifierService } from './chat-classifier.service';
 import { AnswerCardTap } from './jobs/answer-card-tap.job';
+import { DraftSuggestedReply } from './jobs/draft-suggested-reply.job';
 import { ReplyToCustomerJob } from './jobs/reply-to-customer.job';
 import { RestartReturnOnStaffReply } from './jobs/restart-return-on-staff-reply.job';
 import { ScheduleAiReplyOnMessage } from './jobs/schedule-ai-reply-on-message.job';
 import { SalesAgentModule } from './sales-agent.module';
+import { SuggestedReplyService } from './suggested-reply.service';
 
 @Module({
   imports: [
@@ -51,9 +53,11 @@ import { SalesAgentModule } from './sales-agent.module';
     CardTapRepliesService,
     ChatClassifierService,
     AnswerCardTap,
+    DraftSuggestedReply,
     ReplyToCustomerJob,
     RestartReturnOnStaffReply,
     ScheduleAiReplyOnMessage,
+    SuggestedReplyService,
   ],
 })
 export class AiAgentModule {}
