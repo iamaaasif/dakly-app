@@ -52,8 +52,12 @@ const product: ProductResponse = {
 function show(
   initial?: ProductResponse,
   page?: ComponentProps<typeof ProductForm>['page'],
-  duplicateSource?: ProductResponse,
+  extras: {
+    duplicateSource?: ProductResponse;
+    photos?: ComponentProps<typeof ProductForm>['photos'];
+  } = {},
 ) {
+  const { duplicateSource, photos } = extras;
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -115,6 +119,7 @@ function show(
         onSaved={onSaved}
         page={page}
         duplicateSource={duplicateSource}
+        photos={photos}
       />
     </QueryClientProvider>
   );
@@ -189,6 +194,36 @@ describe('Product form on a full page', () => {
       expect(submitted).toMatchObject({ pricePoisha, compareAtPricePoisha, status: 'hidden' });
     },
   );
+
+  it('attaches the photos uploaded before Create, in order', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const ids = ['019c01ea-cf15-7d31-a7f5-d73d66007b01', '019c01ea-cf15-7d31-a7f5-d73d66007b02'];
+    const { onSaved } = show(undefined, page, {
+      photos: { fileIds: ids, uploading: 0, failed: 0 },
+    });
+    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '300' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toMatchObject({ imageFileIds: ids });
+  });
+
+  it('waits for photos that are still uploading and blocks Create after a failed one', async () => {
+    const { onSaved } = show(undefined, page, { photos: { fileIds: [], uploading: 2, failed: 0 } });
+    const button = screen.getByRole('button', { name: 'Uploading 2 photos…' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    show(undefined, page, { photos: { fileIds: [], uploading: 0, failed: 1 } });
+    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '300' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(await screen.findByText(/A photo did not upload/)).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
 
   it('clears the old price when an edit removes the sell price', async () => {
     let submitted: unknown;
@@ -298,13 +333,15 @@ describe('Product form on a full page', () => {
       return Response.json(product, { headers: { 'x-session-context': 'verified' } });
     });
     show(undefined, page, {
-      ...product,
-      description: 'Handwoven cotton',
-      status: 'active',
-      compareAtPricePoisha: 295000,
-      weightGrams: 1250,
-      imageFileIds: ['original-photo'],
-      variants: [{ ...product.variants[0]!, imageFileIds: ['original-variant-photo'] }],
+      duplicateSource: {
+        ...product,
+        description: 'Handwoven cotton',
+        status: 'active',
+        compareAtPricePoisha: 295000,
+        weightGrams: 1250,
+        imageFileIds: ['original-photo'],
+        variants: [{ ...product.variants[0]!, imageFileIds: ['original-variant-photo'] }],
+      },
     });
     expect(screen.getByLabelText<HTMLInputElement>('Product name').value).toBe(
       'Cotton Panjabi copy',
