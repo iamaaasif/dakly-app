@@ -1,5 +1,4 @@
 import type {
-  ContactKind,
   ContactListItemResponse,
   ContactListType,
   ContactResponse,
@@ -7,13 +6,6 @@ import type {
 } from '@dakly/contracts/contacts';
 
 import { formatPhone } from '@/lib/format-phone';
-
-export const customerKindLabels: Record<ContactKind, string> = {
-  customer: 'Customer',
-  lead: 'Lead',
-  chat_only: 'Chat only',
-  not_customer: 'Not a customer',
-};
 
 export const channelLabels = {
   whatsapp: 'WhatsApp',
