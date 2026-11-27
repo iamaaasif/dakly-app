@@ -30,8 +30,11 @@ export function ShellFrame({
   actions,
   children,
 }: ShellFrameProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  // The Inbox asks for the rail; starting there means the server's first paint already has it.
+  const [collapsed, setCollapsed] = useState(
+    pathname === '/chats' || pathname.startsWith('/chats/'),
+  );
   const needsStore = !data.currentStore && pathname !== '/security' && pathname !== '/setup';
   return (
     <div className="flex min-h-dvh flex-col">

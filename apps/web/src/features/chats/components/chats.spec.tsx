@@ -261,7 +261,7 @@ describe('Chat list', () => {
   it('collapses and reopens the Inbox folders', async () => {
     respond(() => ok([sadia]));
     show();
-    const toggle = screen.getByRole('button', { name: 'Collapse inbox folders' });
+    const toggle = await screen.findByRole('button', { name: 'Collapse inbox folders' });
     expect(screen.getByRole('navigation', { name: 'Chat folders' })).toBeTruthy();
     await userEvent.click(toggle);
     expect(
@@ -409,6 +409,8 @@ describe('Chat list', () => {
     connectionKinds = [];
     respond(() => ok([]));
     show();
+    // The inbox must not paint first and then turn into the Connect page.
+    expect(screen.queryByRole('group', { name: 'Inbox controls' })).toBeNull();
     expect(await screen.findByRole('heading', { name: 'Connect your channel' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Connect with Channel' }).getAttribute('href')).toBe(
       '/integrations',
