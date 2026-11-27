@@ -10,7 +10,6 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useChatChannels } from '../api/chat-channels';
 import { chatScreenQuerySchema, chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
-import { ChatChannelFilter } from './chat-channel-filter';
 import { ChatFolders } from './chat-folders';
 import { ChatList } from './chat-list';
 import { ChatToolbar } from './chat-search-bar';
@@ -149,11 +148,7 @@ function InboxControls({ query, folders }: { query: ChatScreenQuery; folders: In
       ) : (
         <InboxHeading folders={folders} />
       )}
-      <ChatToolbar
-        query={query}
-        foldersOpen={folders.expanded}
-        channel={<ChatChannelFilter query={query} />}
-      />
+      <ChatToolbar query={query} foldersOpen={folders.expanded} />
     </div>
   );
 }

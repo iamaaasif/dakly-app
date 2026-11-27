@@ -684,3 +684,7 @@ Emits `campaign.approval_started`, `campaign.approved`, `campaign.sent`, `messag
 ## Open questions
 
 Q2 (BSP and margin). Still to confirm outside Dakly: Messenger utility template availability for Bangladesh Pages, and whether WhatsApp in-window utility messages are billed after 1 Oct 2026.
+
+## List polish
+
+The campaigns list searches 250 ms after the last key and on Enter, with a clear button and no Search button. Status and channel use the shared select. A shop with no campaigns sees an empty state with a Create campaign button and no filters; a filter with no match shows "No campaigns match" and a Clear filters link. A shop with no workflows sees the three starter templates (Comment to DM: price on request, Price question in chat, Order intent follow-up) instead of the tabs.

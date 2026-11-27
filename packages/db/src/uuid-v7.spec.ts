@@ -16,4 +16,10 @@ describe('uuidv7', () => {
 
     expect(first < second).toBe(true);
   });
+
+  it('sorts ids made in the same millisecond in the order they were made', () => {
+    const ids = Array.from({ length: 5000 }, () => uuidv7());
+
+    expect([...ids].sort()).toEqual(ids);
+  });
 });
