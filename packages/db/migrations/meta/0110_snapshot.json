@@ -1,6 +1,6 @@
 {
-  "id": "55f01b13-54a3-4e92-b59c-b7d83779772e",
-  "prevId": "8f3d8b23-95c7-4a8d-9bc9-9deef13f2899",
+  "id": "566d0a6c-73b9-4f8d-9729-6f6e8130980e",
+  "prevId": "5fb7acac-37f4-49c7-825e-b4e81d0acbf1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3618,7 +3618,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -10383,12 +10383,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "suggested_reply": {
-          "name": "suggested_reply",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "handed_over_at": {
           "name": "handed_over_at",
           "type": "timestamp with time zone",
@@ -10820,10 +10814,6 @@
         "conversations_intent_tag": {
           "name": "conversations_intent_tag",
           "value": "\"conversations\".\"intent_tag\" in ('greeting', 'price', 'size_or_stock', 'delivery', 'payment', 'order', 'confirm', 'order_status', 'exchange', 'complaint', 'photo', 'special_request', 'other')"
-        },
-        "conversations_suggested_reply_length": {
-          "name": "conversations_suggested_reply_length",
-          "value": "char_length(\"conversations\".\"suggested_reply\") <= 2000"
         }
       },
       "isRLSEnabled": false
@@ -22140,6 +22130,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "created_at": {
           "name": "created_at",

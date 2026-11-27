@@ -1,5 +1,5 @@
 {
-  "id": "8f3d8b23-95c7-4a8d-9bc9-9deef13f2899",
+  "id": "5fb7acac-37f4-49c7-825e-b4e81d0acbf1",
   "prevId": "18311c13-cf6d-47c7-80e9-4ad64f144ac3",
   "version": "7",
   "dialect": "postgresql",
@@ -10810,10 +10810,6 @@
         "conversations_lead_temperature": {
           "name": "conversations_lead_temperature",
           "value": "\"conversations\".\"lead_temperature\" in ('hot', 'warm', 'cold')"
-        },
-        "conversations_intent_tag": {
-          "name": "conversations_intent_tag",
-          "value": "\"conversations\".\"intent_tag\" in ('greeting', 'price', 'size_or_stock', 'delivery', 'payment', 'order', 'confirm', 'order_status', 'exchange', 'complaint', 'photo', 'special_request', 'other')"
         }
       },
       "isRLSEnabled": false
@@ -22130,6 +22126,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "created_at": {
           "name": "created_at",
