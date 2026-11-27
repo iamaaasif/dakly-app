@@ -164,10 +164,11 @@ export class AiAgentService {
       customerTexts: burst.texts,
       rules: candidate.rules,
     };
-    const { reason, prepared } = await this.checkHandOver(compose, earlier, burst);
+    const { reason, read, prepared } = await this.checkHandOver(compose, earlier, burst);
     if (reason === 'busy') return retryAt(this.clock.now());
     if (reason)
       return this.stop(storeId, conversationId, candidate, { reason, texts: burst.texts });
+    if (await this.unread.isAnsweredByAutomation(storeId, conversationId, read)) return;
     const composed = await this.sales.compose(compose, prepared);
     if (composed.kind === 'busy') return retryAt(this.clock.now());
     if (composed.kind === 'handover')
@@ -182,7 +183,7 @@ export class AiAgentService {
     earlier: ConversationEntry[],
     burst: Pick<ReturnType<typeof burstText>, 'screenTexts' | 'messageIds'>,
   ) {
-    const { storeId, rules } = compose;
+    const { storeId, rules, chat, contactId } = compose;
     const screened = screenCustomerTexts(burst.screenTexts, {
       handOverDiscounts: rules.handover.discounts,
       earlier,
@@ -193,14 +194,15 @@ export class AiAgentService {
       ? { reason: screened }
       : await this.classifyWithAllowance(compose, earlier);
     // A busy model retries the whole reply, so its burst is announced once it has been read.
-    if (classified.reason !== 'busy' && compose.chat)
-      await this.intents.record(storeId, compose.chat.conversationId, {
-        contactId: compose.contactId,
-        channel: compose.chat.channel,
-        intent: classified.intent ?? null,
-        messageIds: burst.messageIds,
-      });
-    return { reason: classified.reason, prepared };
+    const read = chat && {
+      contactId,
+      channel: chat.channel,
+      intent: classified.intent ?? null,
+      messageIds: burst.messageIds,
+    };
+    if (classified.reason !== 'busy' && chat && read)
+      await this.intents.record(storeId, chat.conversationId, read);
+    return { reason: classified.reason, read, prepared };
   }
 
   private async classifyWithAllowance(
