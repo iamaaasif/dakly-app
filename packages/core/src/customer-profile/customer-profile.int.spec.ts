@@ -185,10 +185,11 @@ describe('Customer profile (Postgres)', () => {
     const areaName = (await sql(`select name from bd_areas where id = $1`, [areaId])).rows[0].name;
     await sql(
       `insert into orders(id,store_id,number,buyer_contact_id,source,created_by_type,stage,
-         recipient_name,recipient_district,recipient_bd_area_id,items_subtotal_poisha,
+         recipient_name,recipient_phone,recipient_address,recipient_district,recipient_bd_area_id,
+         items_subtotal_poisha,
          order_discount_poisha,delivery_charge_poisha,cod_amount_poisha,created_at)
-       values ($1,$2,9001,$3,'messenger','user','to_confirm','করিম','Khulna',null,1000,0,0,1000,'2026-11-01T04:00:00Z'),
-              ($4,$2,9002,$3,'messenger','user','to_confirm','করিম','Dhaka',$5,1000,0,0,1000,'2026-11-02T04:00:00Z')`,
+       values ($1,$2,9001,$3,'messenger','user','to_confirm','করিম','01710000007','House 1','Khulna',null,1000,0,0,1000,'2026-11-01T04:00:00Z'),
+              ($4,$2,9002,$3,'messenger','user','to_confirm','করিম','01710000007','House 2','Dhaka',$5,1000,0,0,1000,'2026-11-02T04:00:00Z')`,
       [randomUUID(), fixture.a, otherContactId, randomUUID(), areaId],
     );
     const summary = await service.summary(fixture.a, otherContactId, fullAccess);
