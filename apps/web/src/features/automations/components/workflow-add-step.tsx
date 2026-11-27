@@ -16,10 +16,11 @@ type Props = {
   x: number;
   y: number;
   disabled: boolean;
+  canAddKind: (kind: NewStepKind) => boolean;
   onAdd: (kind: NewStepKind) => void;
 };
 
-function AddStepButton({ x, y, disabled, onAdd }: Props) {
+function AddStepButton({ x, y, disabled, canAddKind, onAdd }: Props) {
   return (
     <div
       className="absolute -translate-x-1/2 -translate-y-1/2"
@@ -27,7 +28,7 @@ function AddStepButton({ x, y, disabled, onAdd }: Props) {
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         const choice = stepChoices.find(
-          (item) => item.kind === event.dataTransfer.getData(dragType),
+          (item) => item.kind === event.dataTransfer.getData(dragType) && canAddKind(item.kind),
         );
         if (!disabled && choice) onAdd(choice.kind);
       }}
@@ -41,12 +42,14 @@ function AddStepButton({ x, y, disabled, onAdd }: Props) {
           <Plus size={14} aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          {stepChoices.map(({ kind, label, icon: Icon }) => (
-            <DropdownMenuItem key={kind} onSelect={() => onAdd(kind)}>
-              <Icon size={16} aria-hidden="true" />
-              {label}
-            </DropdownMenuItem>
-          ))}
+          {stepChoices
+            .filter(({ kind }) => canAddKind(kind))
+            .map(({ kind, label, icon: Icon }) => (
+              <DropdownMenuItem key={kind} onSelect={() => onAdd(kind)}>
+                <Icon size={16} aria-hidden="true" />
+                {label}
+              </DropdownMenuItem>
+            ))}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -68,6 +71,7 @@ export function EdgeAddButtons({
           x={edge.midX}
           y={edge.midY}
           disabled={!editing.canAdd}
+          canAddKind={editing.canAddKind}
           onAdd={(kind) => editing.insert({ parent: edge.from, target: edge.to }, kind)}
         />
       ))}
@@ -77,6 +81,7 @@ export function EdgeAddButtons({
           x={merge.x}
           y={merge.plusY}
           disabled={!editing.canAdd}
+          canAddKind={editing.canAddKind}
           onAdd={(kind) => editing.insertAfterMerge(merge.id, kind)}
         />
       ))}

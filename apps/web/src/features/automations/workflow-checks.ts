@@ -85,7 +85,7 @@ function readinessChecks(graph: AutomationGraph, stepNumber: StepNumber) {
       checks.push({
         id: `no-channel:${key}`,
         level: 'block',
-        message: `Step ${stepNumber(key)} has no channel that can send yet. Only SMS sends today; change the channels in the workflow settings.`,
+        message: `Step ${stepNumber(key)} has no channel that can send yet. Only SMS, Messenger and Instagram send today; change the channels in this step.`,
       });
   return checks;
 }
