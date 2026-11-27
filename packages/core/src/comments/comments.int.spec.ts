@@ -291,6 +291,24 @@ it('automatically replies once even when the comment job is delivered twice', as
   expect(sendPublic.mock.calls.map(([, payload]) => payload.text)).toEqual([reply.publicBody]);
 });
 
+it('lets an automation claim a comment, so the AI sends nothing on it, and refuses one already answered', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-claim');
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  expect(await comments.claimForAutomation(storeId, comment.id)).toBe(true);
+  expect(await comments.claimForAutomation(storeId, comment.id)).toBe(true);
+  await comments.replyAutomatically(storeId, comment.id, {
+    privateBody: 'Blue Kurti costs ৳1,200.',
+    publicBody: 'I sent the price in Messenger.',
+    stillAllowed,
+  });
+  expect(sendPrivate).not.toHaveBeenCalled();
+
+  const answered = await stored(storeId, 'c-claim-answered');
+  await comments.replyPublicly(storeId, staff, answered.id, { body: 'Inbox e dilam' });
+  expect(await comments.claimForAutomation(storeId, answered.id)).toBe(false);
+});
+
 it.each(['unavailable', 'invalid_response'] as const)(
   'leaves the public reply available when the private send is unconfirmed (%s)',
   async (errorCode) => {

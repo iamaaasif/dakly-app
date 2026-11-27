@@ -16,6 +16,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsModule } from '../segments/segments.module';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 
@@ -118,6 +119,7 @@ describe('comment_on_post entry (Postgres)', () => {
         AutomationEntryRepository,
         { provide: Clock, useValue: { now: () => now } },
         { provide: ConversationIntentService, useValue: {} },
+        { provide: SendPolicyService, useValue: {} },
         {
           provide: CommentsService,
           useValue: {

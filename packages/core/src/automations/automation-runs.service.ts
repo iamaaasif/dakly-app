@@ -143,15 +143,11 @@ export class AutomationRunsService {
     const held = holdOrEnd(run, now);
     if (held) return started ? endWithUnknownOutcome(held) : held;
     const facts: RunFacts = {
+      ...run,
       storeId,
-      graph: run.graph,
-      automationId: run.automationId,
-      templateKey: run.templateKey,
       runId: claim.runId,
-      contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
-      wakeAt: run.wakeAt,
       orderId: run.triggerOrderId,
       commentId: run.triggerCommentId,
     };

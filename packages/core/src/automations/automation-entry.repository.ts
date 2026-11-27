@@ -74,7 +74,11 @@ export class AutomationEntryRepository {
     const active = sql<boolean>`${automationRuns.status} in ('waiting', 'running')`;
     const [run] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ active, enteredAt: automationRuns.enteredAt })
+        .select({
+          active,
+          enteredAt: automationRuns.enteredAt,
+          triggerKey: automationRuns.triggerKey,
+        })
         .from(automationRuns)
         .where(
           and(

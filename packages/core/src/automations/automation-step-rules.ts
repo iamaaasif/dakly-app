@@ -42,6 +42,7 @@ export type RunFacts = {
   wakeAt: Date | null;
   orderId: string | null;
   commentId?: string | null;
+  enteredAt: Date;
 };
 // A Messenger or Instagram send is routed to the Page or account where the contact wrote last; its
 // buttons name the step row so a tap can be matched to it.

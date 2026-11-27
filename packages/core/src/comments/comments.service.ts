@@ -151,13 +151,6 @@ export class CommentsService {
     return decision.action === 'send' && (await this.mayReplyAutomatically(storeId, contactId));
   }
 
-  // The automation that answers a comment calls this first; the AI agent then leaves it alone.
-  // False means the comment was already answered, so the automation sends nothing.
-  async claimForAutomation(storeId: string, id: string): Promise<boolean> {
-    await this.requireChats(storeId);
-    return this.repository.claimForAutomation(storeId, id, this.clock.now());
-  }
-
   async list(storeId: string, query: CommentListQuery) {
     await this.requireChats(storeId);
     const rows = await this.repository.list(storeId, query);
@@ -218,6 +211,13 @@ export class CommentsService {
       action: 'comment.replied_privately',
     });
     return replies.some(({ actorType }) => actorType === 'system');
+  }
+
+  // The automation that answers a comment calls this first; the AI agent then leaves it alone.
+  // False means the comment was already answered, so the automation sends nothing.
+  async claimForAutomation(storeId: string, id: string): Promise<boolean> {
+    await this.requireChats(storeId);
+    return this.repository.claimForAutomation(storeId, id, this.clock.now());
   }
 
   async replyAutomatically(
