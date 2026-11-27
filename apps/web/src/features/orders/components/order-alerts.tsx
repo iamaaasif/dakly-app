@@ -5,18 +5,19 @@ import type { OrderAlerts as Alerts } from '@dakly/contracts/orders';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
+import { ordersSearch } from '../api/orders';
 import { UrlLink } from '@/components/url-link';
 
-type OrderAlertsProps = { alerts: Alerts };
+type OrderAlertsProps = { alerts: Alerts; labelOrderIds?: string[] };
 
-export function OrderAlerts({ alerts }: OrderAlertsProps) {
+export function OrderAlerts({ alerts, labelOrderIds }: OrderAlertsProps) {
   const cards = [
     {
       show: alerts.waiting > 0,
       icon: Clock,
       className: 'border-warning/20 bg-warning-soft text-warning',
       title: `${orderCount(alerts.waiting)} waiting over 12 hours`,
-      href: '/orders?alert=waiting',
+      href: `/orders?${ordersSearch({ alert: 'waiting', labelOrderIds })}`,
       detail: 'Unconfirmed orders are the ones most likely to be fake or forgotten.',
       actionLabel: 'Confirm now',
       accessibleAction: 'Confirm now, orders waiting over 12 hours',
@@ -26,7 +27,7 @@ export function OrderAlerts({ alerts }: OrderAlertsProps) {
       icon: ShieldAlert,
       className: 'border-danger/20 bg-danger-soft text-danger',
       title: `${alerts.highRisk} high-risk ${alerts.highRisk === 1 ? 'order' : 'orders'}`,
-      href: '/orders?alert=risk',
+      href: `/orders?${ordersSearch({ alert: 'risk', labelOrderIds })}`,
       detail: 'These customers returned most past parcels. Ask for a small advance first.',
       actionLabel: 'Review',
       accessibleAction: 'Review high-risk orders',
@@ -36,7 +37,7 @@ export function OrderAlerts({ alerts }: OrderAlertsProps) {
       icon: PackageCheck,
       className: 'border-info/20 bg-info-soft text-info',
       title: `${formatMoney(BigInt(alerts.codAwaitingPoisha))} COD still with couriers`,
-      href: '/orders?alert=cod',
+      href: `/orders?${ordersSearch({ alert: 'cod', labelOrderIds })}`,
       detail: `${alerts.codAwaitingOrders} delivered ${alerts.codAwaitingOrders === 1 ? 'order hasn’t' : 'orders haven’t'} been paid to you yet.`,
       actionLabel: 'Check',
       accessibleAction: 'Check COD still with couriers',

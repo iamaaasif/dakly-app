@@ -26,7 +26,7 @@ export class OrderProductChangesService {
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
       if (input.variants) {
-        await this.products.lockArchiveVariants(storeId, productId);
+        await this.products.lockArchiveVariants(storeId, productId, input.expectedVersion);
         const kept = new Set(input.variants.map((variant) => variant.id));
         const { variants: current } = await this.products.getById(storeId, productId);
         const removedIds = current.map(({ id }) => id).filter((id) => !kept.has(id));

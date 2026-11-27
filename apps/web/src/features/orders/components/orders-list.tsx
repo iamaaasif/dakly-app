@@ -1,17 +1,25 @@
-import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders';
+import { maxOrderShippingLabels } from '@dakly/contracts/order-shipping-labels';
+import type { OrderListResponse } from '@dakly/contracts/orders';
 
 import { ordersSearch } from '../api/orders';
+import type { OrdersNavigationQuery } from '../orders-url';
 import { OrderRow } from './order-row';
 import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
 
 const linkStyle = 'inline-flex min-h-10 min-w-10 items-center text-action underline';
 
-type OrdersListProps = { page: OrderListResponse; query: OrderListQuery };
+type OrdersListProps = {
+  page: OrderListResponse;
+  query: OrdersNavigationQuery;
+  onToggleLabel: (id: string) => void;
+};
 
-export function OrdersList({ page, query }: OrdersListProps) {
+export function OrdersList({ page, query, onToggleLabel }: OrdersListProps) {
   const { data } = useSessionContext();
   const canEdit = data?.currentStore?.canEditOrders;
+  const selectedIds = new Set(query.labelOrderIds);
+  const atLimit = selectedIds.size >= maxOrderShippingLabels;
   const pageHref = (cursor?: number) => `/orders?${ordersSearch({ ...query, cursor })}`;
 
   return (
@@ -29,6 +37,11 @@ export function OrdersList({ page, query }: OrdersListProps) {
             order={order}
             href={`/orders?${ordersSearch({ ...query, selected: order.id })}`}
             canEdit={canEdit ?? false}
+            selection={{
+              checked: selectedIds.has(order.id),
+              disabled: atLimit && !selectedIds.has(order.id),
+              onToggle: () => onToggleLabel(order.id),
+            }}
           />
         ))}
       </ul>

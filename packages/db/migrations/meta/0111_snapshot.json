@@ -1,6 +1,6 @@
 {
-  "id": "80e9a8a6-7d31-4e6b-9c37-8180d37d892a",
-  "prevId": "55f01b13-54a3-4e92-b59c-b7d83779772e",
+  "id": "e4325b70-b716-407c-b98b-51261fd8d4d9",
+  "prevId": "566d0a6c-73b9-4f8d-9729-6f6e8130980e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3618,7 +3618,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -7481,7 +7481,7 @@
       "checkConstraints": {
         "usage_events_unit": {
           "name": "usage_events_unit",
-          "value": "\"usage_events\".\"unit\" in ('ai_conversation', 'ai_content', 'ai_ask', 'ai_scan', 'ai_reply_draft')"
+          "value": "\"usage_events\".\"unit\" in ('ai_conversation', 'ai_content', 'ai_ask', 'ai_scan')"
         },
         "usage_events_source": {
           "name": "usage_events_source",
@@ -22140,6 +22140,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "created_at": {
           "name": "created_at",

@@ -92,13 +92,13 @@ async function smsCredits(shop: Shop, quantity: number) {
   );
   return id;
 }
-async function order(shop: Shop): Promise<string> {
+async function order(shop: Shop, number = 1001): Promise<string> {
   const id = randomUUID();
   await f.admin.pool.query(
     `insert into orders (id,store_id,number,source,created_by_type,recipient_name,
        recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha)
-     values($1,$2,1001,'manual','user','রিনা',$3,'ধানমন্ডি','Dhaka',9000,9000)`,
-    [id, shop.id, shop.owner.phone],
+     values($1,$2,$4,'manual','user','রিনা',$3,'ধানমন্ডি','Dhaka',9000,9000)`,
+    [id, shop.id, shop.owner.phone, number],
   );
   return id;
 }
@@ -452,6 +452,90 @@ fixture('GET /orders/:orderId/invoice', async () => {
     [a.membership],
   );
   expect((await f.request(a.member, 'GET', url(id))).statusCode).toBe(403);
+});
+
+fixture('GET /orders/shipping-labels', async () => {
+  const { a, b } = await pair();
+  const cod = await order(a);
+  const paid = await order(a, 1002);
+  const returned = await order(a, 1003);
+  const cancelled = await order(a, 1004);
+  const foreign = await order(b);
+  const url = (...ids: string[]) => `/orders/shipping-labels?orderIds=${ids.join(',')}`;
+  const variantId = await orderVariant(a);
+  await f.admin.pool.query(
+    "update stores set name='Mirpur Shop', phone='01701000015' where id=$1",
+    [a.id],
+  );
+  await f.admin.pool.query(
+    "update orders set payment_status='cod_collected', cod_collected_poisha=9000 where id=$1",
+    [paid],
+  );
+  await f.admin.pool.query(
+    "update orders set stage='returned', payment_status='refund_due', cod_collected_poisha=9000 where id=$1",
+    [returned],
+  );
+  await f.admin.pool.query(
+    "update orders set stage='cancelled', cancel_reason='customer_cancelled' where id=$1",
+    [cancelled],
+  );
+  await f.admin.pool.query(
+    `insert into order_items (id, store_id, order_id, variant_id, product_name, variant_title,
+       quantity, unit_price_poisha, delivered_quantity, is_stock_tracked)
+     values ($1, $2, $3, $4, 'পাঞ্জাবি', 'M', 4, 3200, 2, false),
+            ($5, $2, $6, $4, 'পাঞ্জাবি', 'M', 3, 3200, null, false)`,
+    [randomUUID(), a.id, cod, variantId, randomUUID(), paid],
+  );
+  const readOnlyRole = await success(a, 'POST', '/roles', 201, {
+    name: 'Print shipping labels',
+    permissions: { ...permissions, areas: { orders: 'view' } },
+  });
+  await f.admin.pool.query('update memberships set built_in_role=null,role_id=$2 where id=$1', [
+    a.membership,
+    readOnlyRole.json().id,
+  ]);
+  const restricted = await f.request(a.member, 'GET', url(paid, cod, returned, cancelled));
+  expect(restricted.statusCode, restricted.body).toBe(200);
+  expect(restricted.headers['cache-control']).toBe('no-store');
+  expect(restricted.json()).toMatchObject({
+    store: { name: 'Mirpur Shop', phone: '01701000015' },
+    labels: [
+      { id: paid, number: 1002, itemCount: 3, codDuePoisha: 0 },
+      {
+        id: cod,
+        number: 1001,
+        recipientName: 'রিনা',
+        recipientPhone: `${a.owner.phone.slice(0, 5)}-XXX${a.owner.phone.slice(-3)}`,
+        recipientAddress: 'ধানমন্ডি',
+        recipientDistrict: 'Dhaka',
+        itemCount: 2,
+        codDuePoisha: 9000,
+      },
+      { id: returned, number: 1003, codDuePoisha: 0 },
+      { id: cancelled, number: 1004, codDuePoisha: 0 },
+    ],
+  });
+  await f.admin.pool.query('update orders set cod_collected_poisha=3000 where id=$1', [paid]);
+  expect((await success(a, 'GET', url(paid), 200)).json().labels).toMatchObject([
+    { id: paid, codDuePoisha: 6000 },
+  ]);
+  expect((await success(a, 'GET', url(cod), 200)).json().labels[0].recipientPhone).toBe(
+    a.owner.phone,
+  );
+  expect((await success(b, 'GET', url(foreign), 200)).json().labels).toMatchObject([
+    { id: foreign },
+  ]);
+  await hidden(a, 'GET', (id) => url(cod, id), foreign);
+
+  expect((await f.request(a.owner, 'GET', url('bad-id'))).statusCode).toBe(400);
+  expect((await f.request(a.owner, 'GET', url(...Array<string>(101).fill(cod)))).statusCode).toBe(
+    400,
+  );
+  await f.admin.pool.query(
+    "update memberships set role_id=null,built_in_role='marketer' where id=$1",
+    [a.membership],
+  );
+  expect((await f.request(a.member, 'GET', url(cod))).statusCode).toBe(403);
 });
 
 fixture('POST /orders/:orderId/courier', async () => {
