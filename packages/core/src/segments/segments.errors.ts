@@ -4,6 +4,10 @@ import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const SEGMENT_ERRORS = {
   SEGMENT_NOT_FOUND: { status: 404, message: 'Segment not found' },
+  SEGMENT_ARCHIVED: {
+    status: 409,
+    message: 'This segment is archived. Restore it before using it in a campaign',
+  },
   SEGMENT_NAME_TAKEN: { status: 409, message: 'A segment with this name already exists' },
   SEGMENT_LIMIT_REACHED: {
     status: 409,

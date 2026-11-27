@@ -1,16 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt } from 'drizzle-orm';
+import { and, asc, count, eq, gt, ilike, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import type { SegmentListQuery, SegmentRules } from '@dakly/contracts/segments';
 import { segments } from '@dakly/db/schema/contacts';
 
 import { isConstraintViolation } from '../platform/database/error-code';
+import { escapeLike } from '../platform/database/escape-like';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Segment = {
   id: string;
   name: string;
   rules: SegmentRules;
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -19,6 +21,7 @@ const segmentColumns = {
   id: segments.id,
   name: segments.name,
   rules: segments.rules,
+  archivedAt: segments.archivedAt,
   createdAt: segments.createdAt,
   updatedAt: segments.updatedAt,
 };
@@ -35,6 +38,9 @@ export class SegmentsRepository {
         .where(
           and(
             eq(segments.storeId, storeId),
+            query.status === 'active' ? isNull(segments.archivedAt) : undefined,
+            query.status === 'archived' ? isNotNull(segments.archivedAt) : undefined,
+            query.search ? ilike(segments.name, `%${escapeLike(query.search)}%`) : undefined,
             query.cursor ? gt(segments.id, query.cursor) : undefined,
           ),
         )
@@ -52,6 +58,60 @@ export class SegmentsRepository {
         .limit(1),
     );
     return row;
+  }
+
+  async countByStatus(storeId: string): Promise<{ active: number; archived: number }> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          active: count(sql`1`)
+            .mapWith(Number)
+            .as('active'),
+          archived: count(segments.archivedAt),
+        })
+        .from(segments)
+        .where(eq(segments.storeId, storeId)),
+    );
+    return { active: row!.active - row!.archived, archived: row!.archived };
+  }
+
+  // Idempotent: an already archived segment keeps its first archive time.
+  async setArchived(
+    storeId: string,
+    id: string,
+    archivedAt: Date | null,
+  ): Promise<Segment | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(segments)
+        .set({ archivedAt })
+        .where(
+          and(
+            eq(segments.storeId, storeId),
+            eq(segments.id, id),
+            archivedAt ? isNull(segments.archivedAt) : isNotNull(segments.archivedAt),
+          ),
+        )
+        .returning(segmentColumns),
+    );
+    return row ?? this.find(storeId, id);
+  }
+
+  async findArchivedIds(storeId: string, ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: segments.id })
+        .from(segments)
+        .where(
+          and(
+            eq(segments.storeId, storeId),
+            inArray(segments.id, ids),
+            isNotNull(segments.archivedAt),
+          ),
+        ),
+    );
+    return rows.map((row) => row.id);
   }
 
   async countSaved(storeId: string): Promise<number> {

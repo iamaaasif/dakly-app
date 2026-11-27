@@ -7,9 +7,11 @@ import {
   MAX_SEGMENTS_PER_STORE,
   type SegmentCountResponse,
   type SegmentListQuery,
+  type SegmentListItem,
   type SegmentListResponse,
   type SegmentResponse,
   type SegmentRules,
+  type SegmentTabCountsResponse,
 } from '@dakly/contracts/segments';
 
 import { ContactsService } from '../contacts/contacts.service';
@@ -34,8 +36,38 @@ export class SegmentsService {
 
   async list(storeId: string, query: SegmentListQuery): Promise<SegmentListResponse> {
     const rows = await this.repository.list(storeId, query);
-    const items = rows.slice(0, query.limit).map(toSegmentResponse);
+    const page = rows.slice(0, query.limit);
+    const items: SegmentListItem[] = await Promise.all(
+      page.map(async (segment) => ({
+        ...toSegmentResponse(segment),
+        contactCount: await this.contacts.countMatching(storeId, segment.rules),
+      })),
+    );
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  async tabCounts(storeId: string): Promise<SegmentTabCountsResponse> {
+    const { active, archived } = await this.repository.countByStatus(storeId);
+    return { all: active + archived, active, archived };
+  }
+
+  async archive(storeId: string, segmentId: string): Promise<SegmentResponse> {
+    return this.setArchived(storeId, segmentId, this.clock.now());
+  }
+
+  async unarchive(storeId: string, segmentId: string): Promise<SegmentResponse> {
+    return this.setArchived(storeId, segmentId, null);
+  }
+
+  // A campaign draft may only pick live segments; ids that do not exist are left to the audience
+  // checks that already refuse them.
+  async assertNotArchived(
+    storeId: string,
+    audience: { includeSegmentIds?: string[]; excludeSegmentIds?: string[] },
+  ): Promise<void> {
+    const ids = [...(audience.includeSegmentIds ?? []), ...(audience.excludeSegmentIds ?? [])];
+    if ((await this.repository.findArchivedIds(storeId, ids)).length > 0)
+      throw segmentError('SEGMENT_ARCHIVED');
   }
 
   // Counted live on each call: membership is not stored (feature 03).
@@ -119,6 +151,12 @@ export class SegmentsService {
       throw segmentError('SEGMENT_NOT_FOUND');
   }
 
+  private async setArchived(storeId: string, segmentId: string, archivedAt: Date | null) {
+    const segment = await this.repository.setArchived(storeId, segmentId, archivedAt);
+    if (!segment) throw segmentError('SEGMENT_NOT_FOUND');
+    return toSegmentResponse(segment);
+  }
+
   private async find(storeId: string, segmentId: string): Promise<Segment> {
     const segment = await this.repository.find(storeId, segmentId);
     if (!segment) throw segmentError('SEGMENT_NOT_FOUND');
@@ -138,6 +176,7 @@ export class SegmentsService {
 function toSegmentResponse(segment: Segment): SegmentResponse {
   return {
     ...segment,
+    archivedAt: segment.archivedAt?.toISOString() ?? null,
     createdAt: segment.createdAt.toISOString(),
     updatedAt: segment.updatedAt.toISOString(),
   };
