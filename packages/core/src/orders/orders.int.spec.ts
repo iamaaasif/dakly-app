@@ -102,6 +102,25 @@ describe('OrdersService', () => {
     });
   });
 
+  it('lists oldest first on request, pages forward by order number, and never shows another shop', async () => {
+    await order(fixture.a, 3011, 'returned');
+    await order(fixture.a, 3012, 'returned');
+    await order(fixture.a, 3013, 'returned');
+    await order(fixture.b, 3014, 'returned');
+
+    const first = await service.list(fixture.a, { stage: 'returned', sort: 'oldest', limit: 2 });
+    expect(first.items.map(({ number }) => number)).toEqual([3011, 3012]);
+    expect(first.nextCursor).toBe(3012);
+    const second = await service.list(fixture.a, {
+      stage: 'returned',
+      sort: 'oldest',
+      limit: 2,
+      cursor: first.nextCursor!,
+    });
+    expect(second.items.map(({ number }) => number)).toEqual([3013]);
+    expect(second.nextCursor).toBeNull();
+  });
+
   it('reads the recipient snapshot separately from the buyer and hides a foreign order', async () => {
     const id = await order(fixture.a, 1005, 'on_hold');
     expect(await service.getById(fixture.a, id, access)).toMatchObject({

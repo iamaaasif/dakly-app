@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import type { SegmentListItem } from '@dakly/contracts/segments';
 import { Badge } from '@dakly/ui/badge';
+import { Checkbox } from '@dakly/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import { segmentsHref, type SegmentsView } from '../segments-view';
@@ -11,10 +12,17 @@ import { SegmentActionsMenu } from './segment-actions-menu';
 import { formatDateAtTime } from '@/lib/format-date';
 import { pluralize } from '@/lib/pluralize';
 
+type SegmentSelection = {
+  selectedIds: ReadonlySet<string>;
+  onToggle: (segmentId: string) => void;
+  onTogglePage: (selected: boolean) => void;
+};
+
 type SegmentTableProps = {
   segments: SegmentListItem[];
   view: SegmentsView;
   canEdit: boolean;
+  selection?: SegmentSelection;
 };
 
 const headClass = 'text-xs font-semibold tracking-wide text-text-muted uppercase';
@@ -34,12 +42,24 @@ export function SegmentTable(props: SegmentTableProps) {
   );
 }
 
-function DesktopTable({ segments, view, canEdit }: SegmentTableProps) {
+function DesktopTable({ segments, view, canEdit, selection }: SegmentTableProps) {
+  const allSelected = segments.every((segment) => selection?.selectedIds.has(segment.id));
   return (
     <Table bare aria-label="Segments">
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className={`${headClass} h-12 pl-4`}>Segment name</TableHead>
+          {selection ? (
+            <TableHead className="w-12 pl-4">
+              <Checkbox
+                aria-label="Select all segments on this page"
+                checked={allSelected}
+                onCheckedChange={(checked) => selection.onTogglePage(checked === true)}
+              />
+            </TableHead>
+          ) : null}
+          <TableHead className={`${headClass} h-12 ${selection ? '' : 'pl-4'}`}>
+            Segment name
+          </TableHead>
           <TableHead className={headClass}>Contacts</TableHead>
           <TableHead className={headClass}>Last edited</TableHead>
           <TableHead className={`${headClass} pr-4 text-right`}>Actions</TableHead>
@@ -47,8 +67,20 @@ function DesktopTable({ segments, view, canEdit }: SegmentTableProps) {
       </TableHeader>
       <TableBody>
         {segments.map((segment) => (
-          <TableRow key={segment.id}>
-            <TableCell className="h-14 pl-4 font-semibold">
+          <TableRow
+            key={segment.id}
+            data-state={selection?.selectedIds.has(segment.id) ? 'selected' : undefined}
+          >
+            {selection ? (
+              <TableCell className="w-12 pl-4">
+                <Checkbox
+                  aria-label={`Select ${segment.name}`}
+                  checked={selection.selectedIds.has(segment.id)}
+                  onCheckedChange={() => selection.onToggle(segment.id)}
+                />
+              </TableCell>
+            ) : null}
+            <TableCell className={`h-14 font-semibold ${selection ? '' : 'pl-4'}`}>
               <SegmentName segment={segment} view={view} />
             </TableCell>
             <TableCell className="text-text-secondary">
@@ -67,9 +99,24 @@ function DesktopTable({ segments, view, canEdit }: SegmentTableProps) {
   );
 }
 
-function MobileRow({ segment, view, canEdit }: SegmentTableProps & { segment: SegmentListItem }) {
+function MobileRow({
+  segment,
+  view,
+  canEdit,
+  selection,
+}: SegmentTableProps & { segment: SegmentListItem }) {
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
+    <li
+      className="flex items-center gap-3 px-4 py-3 transition-colors data-[state=selected]:bg-surface-muted"
+      data-state={selection?.selectedIds.has(segment.id) ? 'selected' : undefined}
+    >
+      {selection ? (
+        <Checkbox
+          aria-label={`Select ${segment.name}`}
+          checked={selection.selectedIds.has(segment.id)}
+          onCheckedChange={() => selection.onToggle(segment.id)}
+        />
+      ) : null}
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="font-semibold">
           <SegmentName segment={segment} view={view} />

@@ -36,10 +36,10 @@ test('adds a contact, lists it as a customer after an order and opens the profil
     await page.goto('/contacts');
     await page.getByRole('button', { name: 'Add contact', exact: true }).click();
     await page.getByRole('button', { name: /Add manually/ }).click();
-    await page.getByLabel('Name', { exact: true }).fill(name);
-    await page.getByLabel('Phone', { exact: true }).fill(phone);
-    await page.getByRole('button', { name: 'Add customer', exact: true }).click();
-    await expect(page.getByRole('status')).toHaveText('Customer added');
+    await page.getByLabel('Full name', { exact: true }).fill(name);
+    await page.getByLabel('Mobile number', { exact: true }).fill(phone);
+    await page.getByRole('button', { name: 'Save contact', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Contact added');
 
     // A contact is a customer once it has an order, so the list stays empty of it until then.
     await page.goto(`/customers?search=${encodeURIComponent(name)}`);

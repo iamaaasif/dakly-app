@@ -123,7 +123,11 @@ export const orderFiltersSchema = z
     { path: ['createdThrough'], message: 'End date must be on or after the start date' },
   );
 
+export const orderSorts = ['newest', 'oldest'] as const;
+
 export const orderListQuerySchema = orderFiltersSchema.safeExtend({
+  // The page cursor is an order number, so both sorts walk the numbers.
+  sort: z.enum(orderSorts).optional(),
   cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
   limit: z.coerce.number<string>().int().min(1).max(100).default(50),
 });

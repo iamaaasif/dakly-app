@@ -1,4 +1,4 @@
-import { orderSources } from '@dakly/contracts/orders';
+import { orderSorts, orderSources } from '@dakly/contracts/orders';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { ordersSearch } from '../api/orders';
@@ -19,25 +19,43 @@ export function OrdersToolbar({ query }: OrdersToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border p-3 sm:p-4">
       <OrderSearchField search={query.search} onSearch={go} />
-      <>
-        <Select
-          value={query.source ?? allSources}
-          onValueChange={(value) => go({ source: orderSources.find((source) => source === value) })}
-        >
-          <SelectTrigger aria-label="Source" className="w-auto min-w-36 bg-surface">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={allSources}>All sources</SelectItem>
-            {orderSources.map((source) => (
-              <SelectItem key={source} value={source}>
-                {orderSourceLabels[source]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <OrderFilters query={query} />
-      </>
+      {query.tab === 'inquiries' ? null : (
+        <>
+          <Select
+            value={query.source ?? allSources}
+            onValueChange={(value) =>
+              go({ source: orderSources.find((source) => source === value) })
+            }
+          >
+            <SelectTrigger aria-label="Source" className="w-auto min-w-36 bg-surface">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={allSources}>All sources</SelectItem>
+              {orderSources.map((source) => (
+                <SelectItem key={source} value={source}>
+                  {orderSourceLabels[source]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={query.sort ?? 'newest'}
+            onValueChange={(value) =>
+              go({ sort: orderSorts.find((sort) => sort === value && sort !== 'newest') })
+            }
+          >
+            <SelectTrigger aria-label="Sort orders" className="w-auto min-w-36 bg-surface">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
+            </SelectContent>
+          </Select>
+          <OrderFilters query={query} />
+        </>
+      )}
     </div>
   );
 }

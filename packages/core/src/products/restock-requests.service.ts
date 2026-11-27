@@ -93,7 +93,7 @@ export class RestockRequestsService {
     const content = `${variant.productName} (${variant.title}) আবার স্টকে এসেছে। অর্ডার করতে চাইলে এখানে জানান।`;
     const queued: string[] = [];
     for (const request of waiting) {
-      const route = await this.messaging.latestMessengerRoute(storeId, request.contactId);
+      const route = await this.messaging.latestChatRoute(storeId, request.contactId, 'messenger');
       if (!route) continue;
       await this.messaging.queueChannelMessage(storeId, {
         channel: 'messenger',

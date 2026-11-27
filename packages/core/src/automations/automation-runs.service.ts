@@ -36,6 +36,7 @@ import {
   firstSendStop,
   type GateResult,
   goOn,
+  isChatChannel,
   holdOrEnd,
   holdsClaim,
   isLateSend,
@@ -153,8 +154,8 @@ export class AutomationRunsService {
       orderId: run.triggerOrderId,
     };
     if (step.kind === 'send' && started)
-      return started.channel === 'messenger'
-        ? this.messengerSend.interrupted(now)
+      return isChatChannel(started.channel)
+        ? this.messengerSend.interrupted(now, started.channel)
         : this.resend(claim, step, facts, started);
     const exitReason = await this.conditions.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
@@ -221,10 +222,10 @@ export class AutomationRunsService {
     const preparedPhone = shouldPrepare ? (prepared?.to ?? null) : undefined;
     const planned = await this.authorizeFirstSend(claim, step, facts, preparedPhone);
     if ('stop' in planned) return planned.stop;
-    if (planned.messenger)
+    if (planned.chat)
       return this.messengerSend.deliver(
         { storeId: facts.storeId, contactId: facts.contactId, step },
-        { ...planned, messenger: planned.messenger },
+        { ...planned, chat: planned.chat },
       );
     if (prepared)
       return this.smsDelivery.deliver(
@@ -266,7 +267,7 @@ export class AutomationRunsService {
         body: started.body,
         at: started.at,
         firstTriedAt: started.firstTriedAt,
-        messenger: started.messenger,
+        chat: started.chat,
       };
     return { stop: firstSendStop(renewed, step, started, facts.wakeAt) };
   }
@@ -301,9 +302,9 @@ export class AutomationRunsService {
     if (firstTriedAt.getTime() - claim.claimedAt.getTime() >= WORKFLOW_LEASE_MS)
       return { decision: { action: 'defer', until: facts.wakeAt ?? firstTriedAt } };
     if (decision.action !== 'send') return { decision };
-    if (checked.channel === 'messenger')
+    if (checked.channel !== 'sms')
       return this.messengerSend.reserve(
-        { storeId, claim, contactId, orderId: facts.orderId, step },
+        { storeId, claim, contactId, orderId: facts.orderId, step, channel: checked.channel },
         checked.route,
         { sentAt: at, firstTriedAt },
       );
@@ -324,7 +325,7 @@ export class AutomationRunsService {
     if (step.channels.includes('sms'))
       await this.wallets.lockForReservation(storeId, 'sms_credits');
     // Entry locks the contact before the workflow, so use the same order for dispatch.
-    if (step.channels.some((channel) => channel === 'sms' || channel === 'messenger'))
+    if (step.channels.some((channel) => channel !== 'whatsapp'))
       contactExists = await this.sendPolicy.lockForDispatch(storeId, contactId);
     const held = await this.repository.moveRunIfLive(
       storeId,
