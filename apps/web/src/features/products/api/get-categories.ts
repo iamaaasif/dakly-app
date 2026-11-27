@@ -4,6 +4,7 @@ import type {
   ProductBrandListResponse,
   ProductCategoryListResponse,
   ProductCategoryResponse,
+  ProductTagListResponse,
 } from '@dakly/contracts/product-lists';
 import { CATEGORY_PATH_SEPARATOR } from '@dakly/contracts/product-lists';
 
@@ -29,6 +30,17 @@ export function useProductBrands() {
   return useQuery({
     queryKey: productsKeys.brands(contextTag),
     queryFn: ({ signal }) => request<ProductBrandListResponse>('/products/brands', { signal }),
+    enabled: Boolean(contextTag && data?.currentStore?.canViewProducts),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useProductTags() {
+  const { request, contextTag } = useStoreRequest();
+  const { data } = useSessionContext();
+  return useQuery({
+    queryKey: productsKeys.tags(contextTag),
+    queryFn: ({ signal }) => request<ProductTagListResponse>('/products/tags', { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewProducts),
     staleTime: 5 * 60 * 1000,
   });

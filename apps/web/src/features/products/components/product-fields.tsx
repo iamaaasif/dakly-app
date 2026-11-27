@@ -13,6 +13,7 @@ import { ProductInputField } from './product-input-field';
 import { ProductLinesField } from './product-lines-field';
 import { ProductBrandField, ProductCategoryField } from './product-list-fields';
 import { ProductMoneyField } from './product-money-field';
+import { ProductShortDescriptionField } from './product-short-description';
 import { ProductTrackStock } from './product-track-stock';
 
 const extraFlags = [
@@ -188,10 +189,11 @@ function WeightUnitSelect({
   );
 }
 
-export function ProductDescriptionFields({ productId }: ProductFieldsProps) {
+export function ProductDescriptionFields({ productId, onPage }: ProductFieldsProps) {
   return (
     <>
-      <ProductDescriptionField productId={productId} />
+      <ProductDescriptionField productId={productId} onPage={onPage} />
+      {onPage ? <ProductShortDescriptionField /> : null}
       {productId ? (
         <ProductLinesField name="aliases" label="Other names" hint="One name per line." />
       ) : null}
