@@ -139,7 +139,7 @@ export class ProductImportService {
     const targetProductId = variants.flatMap(({ sku }) => (sku ? (matches.get(sku) ?? []) : []))[0]
       ?.productId;
     const results: ImportedRow[] = [];
-    let updated = 0;
+    const updates: { match: SkuMatch; variant: ImportVariant }[] = [];
     for (const variant of variants) {
       const match = variant.sku ? matches.get(variant.sku) : undefined;
       const { rowNumber } = variant;
@@ -147,12 +147,26 @@ export class ProductImportService {
       if (problem) results.push({ rowNumber, outcome: 'failed', message: problem });
       else if (context.duplicateMode === 'skip') results.push({ rowNumber, outcome: 'skipped' });
       else {
-        await this.updateVariant(storeId, match!, variant, context);
-        updated += 1;
+        updates.push({ match: match!, variant });
         results.push({ rowNumber, outcome: 'updated' });
       }
     }
-    if (updated > 0) await this.updateProduct(storeId, targetProductId!, product);
+    if (updates.length > 0) {
+      const productId = targetProductId!;
+      const changesVariantPrices = updates.some(
+        ({ variant }) => variant.costPoisha !== null || variant.priceOverridePoisha !== null,
+      );
+      // Lock the product before its variants, in the same order as the editor.
+      await this.updateProduct(storeId, productId, product, changesVariantPrices);
+      for (const { match, variant } of updates)
+        await this.updateVariant(storeId, match, variant, context);
+      await this.outbox.publish({
+        type: 'product.updated',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { productId },
+      });
+    }
     return results;
   }
 
@@ -163,15 +177,16 @@ export class ProductImportService {
     context: ImportContext,
   ): Promise<void> {
     // A blank or repeated price leaves an existing price override as it is.
-    await this.repository.updateVariantPrices(
-      storeId,
-      match.id,
-      {
-        ...(priceOverridePoisha === null ? {} : { priceOverridePoisha }),
-        ...(costPoisha === null ? {} : { costPoisha }),
-      },
-      this.clock.now(),
-    );
+    if (priceOverridePoisha !== null || costPoisha !== null)
+      await this.repository.updateVariantPrices(
+        storeId,
+        match.id,
+        {
+          ...(priceOverridePoisha === null ? {} : { priceOverridePoisha }),
+          ...(costPoisha === null ? {} : { costPoisha }),
+        },
+        this.clock.now(),
+      );
     await this.setOnHand(storeId, match.id, onHand, context);
   }
 
@@ -179,6 +194,7 @@ export class ProductImportService {
     storeId: string,
     productId: string,
     { pricePoisha, category, description, status }: ImportProduct,
+    changesVariantPrices: boolean,
   ): Promise<void> {
     // A blank cell never overwrites what the shop already has.
     const changes = {
@@ -189,14 +205,8 @@ export class ProductImportService {
       ...(description === null ? {} : { description }),
       ...(status === undefined ? {} : { status }),
     };
-    if (Object.keys(changes).length > 0)
+    if (changesVariantPrices || Object.keys(changes).length > 0)
       await this.repository.update(storeId, productId, changes, this.clock.now());
-    await this.outbox.publish({
-      type: 'product.updated',
-      storeId,
-      occurredAt: this.clock.now().toISOString(),
-      payload: { productId },
-    });
   }
 
   // A blank cell leaves stock alone. A product that does not track stock ignores the count, which

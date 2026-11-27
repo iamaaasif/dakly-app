@@ -123,6 +123,7 @@ describe('product photos with Postgres', () => {
     await expect(
       service.confirmPhoto(f.a, item.id, { ...upload, fileId: issued.fileId }, actor),
     ).rejects.toMatchObject({ code: 'PRODUCT_PHOTO_ALREADY_ADDED' });
+    expect(confirmed.version).toBe(item.version);
     expect(confirmed.imageFileIds).toEqual([issued.fileId]);
     expect(confirmed.photos.map((photo) => photo.id)).toEqual([issued.fileId]);
     expect(new URL(confirmed.photos[0]!.url).searchParams.get('X-Amz-Expires')).toBe('900');
@@ -180,11 +181,12 @@ describe('product photos with Postgres', () => {
       { fileIds: [second.fileId, first.fileId] },
       actor,
     );
+    expect(changed.version).toBe(item.version);
     expect(changed.photos.map((photo) => photo.id)).toEqual([second.fileId, first.fileId]);
     await service.removePhoto(f.a, item.id, first.fileId, actor);
-    expect((await service.getById(f.a, item.id)).photos.map((photo) => photo.id)).toEqual([
-      second.fileId,
-    ]);
+    const withoutFirst = await service.getById(f.a, item.id);
+    expect(withoutFirst.photos.map((photo) => photo.id)).toEqual([second.fileId]);
+    expect(withoutFirst.version).toBe(changed.version);
     expect(new Date((await f.row('files', first.fileId)).expires_at).getTime()).toBe(
       instant.getTime(),
     );

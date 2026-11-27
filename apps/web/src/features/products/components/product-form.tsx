@@ -26,7 +26,11 @@ import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import { useDraftCategory } from '../use-draft-category';
 import { ProductFields } from './product-fields';
-import { ProductFormPageLayout, type ProductFormPage } from './product-form-layout';
+import {
+  ProductFormPageLayout,
+  ProductSaveError,
+  type ProductFormPage,
+} from './product-form-layout';
 import { ProductOptions } from './product-options';
 import { ProductStatusField } from './product-status-field';
 import { StockReasonDialog } from './stock-reason-dialog';
@@ -68,11 +72,15 @@ type ProductFormProps = {
   assistantDraft?: AssistantProductDraft;
   onSaved: (product: ProductResponse, failedStock: string[]) => void;
   page?: ProductFormPage;
+  expectedVersion?: number;
+  statusConflict?: ApiError;
+  onReload?: () => void;
 };
 
 export function ProductForm(props: ProductFormProps) {
   const { product, assistantDraft, duplicateSource, onSaved, page } = props;
   const [editingOption, setEditingOption] = useState(false);
+  const [formProduct] = useState(product);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(page ? pageFormSchema : productFormSchema),
     defaultValues: {
@@ -81,15 +89,16 @@ export function ProductForm(props: ProductFormProps) {
       negotiationEnabled: false,
       negotiationOpeningPoisha: '',
       negotiationFloorPoisha: '',
-      ...formValues(props),
+      ...formValues({ ...props, product: formProduct }),
     },
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   useDraftCategory(form, assistantDraft);
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
-    product,
+    product: formProduct,
     isDuplicate: Boolean(duplicateSource),
     dirtyFields,
+    expectedVersion: props.expectedVersion,
     onSaved,
   });
   const actions = (
@@ -102,12 +111,7 @@ export function ProductForm(props: ProductFormProps) {
       cancelHref={page?.backHref}
     />
   );
-  const serverError = errors.root?.server?.message;
-  const errorMessage = serverError ? (
-    <p role="alert" className="text-danger">
-      {serverError}
-    </p>
-  ) : null;
+  const error = errors.root?.server;
 
   return (
     <FormProvider {...form}>
@@ -116,13 +120,13 @@ export function ProductForm(props: ProductFormProps) {
           <ProductFormPageLayout
             page={page}
             actions={actions}
-            serverError={errorMessage}
+            saveError={{ error: props.statusConflict ?? error, onReload: props.onReload }}
             product={product}
             onOptionDraftChange={setEditingOption}
           />
         ) : (
           <ProductFormFields product={product}>
-            {errorMessage}
+            <ProductSaveError error={error} />
             {actions}
           </ProductFormFields>
         )}
@@ -153,12 +157,13 @@ type SubmitProductArgs = {
   product?: ProductResponse;
   isDuplicate: boolean;
   dirtyFields: FormState<ProductFormValues>['dirtyFields'];
+  expectedVersion?: number;
   onSaved: ProductFormProps['onSaved'];
 };
 
 function useSubmitProduct(
   form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>,
-  { product, isDuplicate, dirtyFields, onSaved }: SubmitProductArgs,
+  { product, isDuplicate, dirtyFields, expectedVersion, onSaved }: SubmitProductArgs,
 ) {
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
@@ -174,6 +179,7 @@ function useSubmitProduct(
     }
     const setError = (error: Error) =>
       form.setError(productErrorField(error, input.variants.length), {
+        ...(error instanceof ApiError ? { type: error.code } : {}),
         message: error.message,
       });
     const writeStock = async (saved: ProductResponse) => {
@@ -190,7 +196,9 @@ function useSubmitProduct(
       onSaved(saved, failed);
     };
     if (product) {
-      void change.mutateAsync(productChanges(input, dirtyFields)).then(writeStock, setError);
+      void change
+        .mutateAsync({ ...productChanges(input, dirtyFields), expectedVersion })
+        .then(writeStock, setError);
       return;
     }
     create.mutate(input, { onError: setError, onSuccess: writeStock });

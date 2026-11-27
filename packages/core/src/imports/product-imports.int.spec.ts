@@ -105,14 +105,25 @@ describe('ProductImportsService (Postgres and SeaweedFS)', () => {
   });
 
   it('sets the count of a known SKU in update mode and leaves it alone in skip mode', async () => {
+    async function version() {
+      const { rows } = await admin.pool.query<{ version: number }>(
+        `select p.version from products p join product_variants v
+          on v.store_id=p.store_id and v.product_id=p.id where p.store_id=$1 and v.sku=$2`,
+        [storeId, 'SHIRT-M'],
+      );
+      return rows[0]?.version;
+    }
+    expect(await version()).toBe(1);
     const file = 'Name,Price,SKU,On hand,Size\nশার্ট,500,SHIRT-M,9,M\n';
     const skipped = await runImport(file, { duplicateMode: 'skip' });
     expect(skipped.result).toMatchObject({ rowsSkipped: 1, rowsUpdated: 0 });
     expect(await onHand('SHIRT-M')).toBe(4);
+    expect(await version()).toBe(1);
 
     const updated = await runImport(file);
     expect(updated.result).toMatchObject({ rowsUpdated: 1, rowsSkipped: 0 });
     expect(await onHand('SHIRT-M')).toBe(9);
+    expect(await version()).toBe(2);
   });
 
   it('does not apply a count twice when the job runs again', async () => {
