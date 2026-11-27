@@ -1,7 +1,7 @@
 import { bdMobileSchema } from '@dakly/contracts/phone';
 
+import type { ContactFilter } from './contact-list.repository';
 import { contactError } from './contacts.errors';
-import type { ContactFilter } from './contacts.repository';
 
 export function searchFilter(
   search: string | undefined,

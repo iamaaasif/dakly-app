@@ -6,6 +6,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { ContactListRepository } from './contact-list.repository';
 import { contactError } from './contacts.errors';
 import { ContactsRepository } from './contacts.repository';
 import { OrderContactsRepository } from './order-contacts.repository';
@@ -14,6 +15,7 @@ import { OrderContactsRepository } from './order-contacts.repository';
 export class ContactMatchSuggestionsService {
   constructor(
     @Inject(ContactsRepository) private readonly contacts: ContactsRepository,
+    @Inject(ContactListRepository) private readonly contactList: ContactListRepository,
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -47,7 +49,7 @@ export class ContactMatchSuggestionsService {
     }: { phone: string; orderId?: string; conversationId?: string; now: Date },
   ): Promise<void> {
     if (await this.orderContacts.saveOrderPhone(storeId, contactId, phone, now)) return;
-    const [owner] = await this.contacts.list(storeId, { phone, limit: 1 });
+    const [owner] = await this.contactList.list(storeId, { phone, limit: 1 });
     if (owner && owner.id !== contactId)
       await this.orderContacts.suggestOrderPhoneMatch(storeId, {
         contactId,

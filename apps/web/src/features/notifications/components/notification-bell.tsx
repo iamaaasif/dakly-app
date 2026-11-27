@@ -26,7 +26,7 @@ function StoreNotificationBell() {
     <>
       <Button
         variant="secondary"
-        className="shrink-0 px-2"
+        className="relative shrink-0 px-2"
         aria-label={label}
         onClick={() => changeTab('all')}
       >
@@ -34,7 +34,7 @@ function StoreNotificationBell() {
         {count && count !== '0' ? (
           <span
             aria-hidden="true"
-            className="rounded-full bg-danger px-2 text-xs font-semibold text-on-primary tabular-nums"
+            className="absolute -top-1.5 -right-1.5 min-w-5 rounded-full bg-danger px-1 text-center text-[0.6875rem] leading-5 font-semibold text-on-primary tabular-nums"
           >
             {count}
           </span>

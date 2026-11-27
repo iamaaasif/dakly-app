@@ -84,6 +84,17 @@ export class SocialController {
     return this.social.getPost(storeId, postId, { kind: 'user', userId }, access);
   }
 
+  @Post(':postId/duplicate')
+  @RequirePermission('social.edit')
+  duplicatePost(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('postId', ParseUUIDPipe) postId: string,
+  ): Promise<PostResponse> {
+    return this.social.duplicatePost(storeId, postId, { kind: 'user', userId }, access);
+  }
+
   @Patch(':postId')
   @RequirePermission('social.edit')
   editDraft(

@@ -16,6 +16,8 @@ import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { TeamService } from '../team/team.service';
+import { ProductDuplicateService } from './product-duplicate.service';
+import { ProductListService } from './product-list.service';
 import { ProductsService } from './products.service';
 
 @Controller('products')
@@ -23,6 +25,8 @@ export class ProductsController {
   constructor(
     @Inject(ProductsService) private readonly service: ProductsService,
     @Inject(TeamService) private readonly team: TeamService,
+    @Inject(ProductDuplicateService) private readonly duplicates: ProductDuplicateService,
+    @Inject(ProductListService) private readonly lists: ProductListService,
   ) {}
 
   @Get()
@@ -32,7 +36,7 @@ export class ProductsController {
     @CurrentAccess() access: StoreAccess,
     @Query(new ZodValidationPipe(productListQuerySchema)) query: ProductListQuery,
   ): Promise<ProductListResponse> {
-    return this.service.list(storeId, query, this.team.canAccess(access, 'products', 'edit'));
+    return this.lists.list(storeId, query, this.team.canAccess(access, 'products', 'edit'));
   }
 
   @Get(':productId')
@@ -56,6 +60,21 @@ export class ProductsController {
     @CurrentUser() userId: string,
     @Body(new ZodValidationPipe(createProductSchema)) input: CreateProductInput,
   ): Promise<ProductResponse> {
-    return this.service.create(storeId, input, { kind: 'user', userId }, true);
+    return this.service.create(
+      storeId,
+      input,
+      { kind: 'user', userId },
+      { showNegotiationPrices: true },
+    );
+  }
+
+  @Post(':productId/duplicate')
+  @RequirePermission('products.edit')
+  duplicate(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ): Promise<ProductResponse> {
+    return this.duplicates.duplicate(storeId, productId, { kind: 'user', userId });
   }
 }

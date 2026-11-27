@@ -6,7 +6,8 @@ import { contacts } from '@dakly/db/schema/contacts';
 import { stores } from '@dakly/db/schema/stores';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { type ContactFilter, ContactsRepository } from './contacts.repository';
+import { type ContactFilter, ContactListRepository } from './contact-list.repository';
+import { ContactsRepository } from './contacts.repository';
 
 // Proves the RLS policies, not just the WHERE clauses: store B must never see store A's rows.
 // A staff add, as ContactsService.create saves it.
@@ -17,6 +18,7 @@ describe('ContactsRepository (Postgres)', () => {
   const app = createDatabase(requireEnv('DATABASE_URL'));
   const database = new TenantDatabase(app.db);
   const repository = new ContactsRepository(database);
+  const listing = new ContactListRepository(database);
   let storeA: string;
   let storeB: string;
 
@@ -47,6 +49,41 @@ describe('ContactsRepository (Postgres)', () => {
       kind: 'customer',
     });
     expect(await repository.findById(storeB, contact!.id)).toBeUndefined();
+  });
+
+  it('stores the Add contact form fields', async () => {
+    const saved = await repository.insert(storeA, {
+      ...manualCustomer,
+      name: 'Mim',
+      phone: '01512345678',
+      whatsappPhone: '01812345678',
+      email: 'Mim@Example.com',
+      gender: 'female',
+      birthYear: 1996,
+      address: 'House 4, Road 2',
+      district: 'Mirpur',
+      tags: ['kurti lover'],
+      notes: 'Prefers a call after 6 pm',
+    });
+
+    const [row] = await listing.list(storeA, { limit: 1, name: 'Mim' });
+    expect(row).toMatchObject({
+      id: saved!.id,
+      whatsappPhone: '01812345678',
+      email: 'Mim@Example.com',
+      district: 'Mirpur',
+      tags: ['kurti lover'],
+    });
+    const { rows } = await admin.pool.query(
+      'select gender, birth_year, address, notes from contacts where id = $1',
+      [saved!.id],
+    );
+    expect(rows[0]).toEqual({
+      gender: 'female',
+      birth_year: 1996,
+      address: 'House 4, Road 2',
+      notes: 'Prefers a call after 6 pm',
+    });
   });
 
   it('hides other stores even when a query has no store filter', async () => {
@@ -153,7 +190,7 @@ describe('ContactsRepository (Postgres)', () => {
         (gen_random_uuid(), ${storeB}, ${contact!.id}, 'sms', 'withdrawn', 'stop_keyword', '2030-01-02T00:00:00Z'),
         (gen_random_uuid(), ${storeB}, ${contact!.id}, 'email', 'not_answered', 'import', '2030-01-01T00:00:00Z')`);
 
-    const [row, second] = await repository.list(storeB, { limit: 2 });
+    const [row, second] = await listing.list(storeB, { limit: 2 });
 
     expect(row).toMatchObject({
       id: contact!.id,
@@ -186,7 +223,7 @@ describe('ContactsRepository (Postgres)', () => {
       )
       .returning({ id: contacts.id });
     const ids = async (filter: Partial<ContactFilter>) =>
-      (await repository.list(storeB, { limit: 50, ...filter })).map((row) => row.id);
+      (await listing.list(storeB, { limit: 50, ...filter })).map((row) => row.id);
 
     expect(await ids({})).toEqual([lead!.id, karim!.id, rina!.id]);
     expect(await ids({ kind: 'lead' })).toEqual([lead!.id]);
@@ -200,7 +237,7 @@ describe('ContactsRepository (Postgres)', () => {
     expect(await ids({ limit: 1 })).toEqual([lead!.id, karim!.id]);
     expect(await ids({ limit: 1, cursor: karim!.id })).toEqual([rina!.id]);
     expect(await ids({ cursor: deleted!.id })).toEqual([lead!.id, karim!.id, rina!.id]);
-    expect(await repository.list(storeA, { limit: 50, tag: 'ঈদ' })).toEqual([]);
+    expect(await listing.list(storeA, { limit: 50, tag: 'ঈদ' })).toEqual([]);
   });
 });
 

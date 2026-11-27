@@ -11,6 +11,7 @@ import { createDatabase } from '@dakly/db/client';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { ContactListService } from './contact-list.service';
 import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactsModule } from './contacts.module';
 import { ContactsService } from './contacts.service';
@@ -28,6 +29,7 @@ describe('ContactsService (Postgres)', () => {
   const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
   let app: INestApplicationContext;
   let service: ContactsService;
+  let listService: ContactListService;
   let suggestions: ContactMatchSuggestionsService;
   let transaction: StoreTransaction;
   let valkey: ValkeyClient;
@@ -41,6 +43,7 @@ describe('ContactsService (Postgres)', () => {
   beforeAll(async () => {
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ContactsService);
+    listService = app.get(ContactListService);
     suggestions = app.get(ContactMatchSuggestionsService);
     transaction = app.get(StoreTransaction);
     valkey = app.get(ValkeyClient);
@@ -75,7 +78,7 @@ describe('ContactsService (Postgres)', () => {
   const add = (number = phone()) =>
     service.create(storeId, { name: 'সুমি আক্তার', phone: number }, full, actor);
   const search = (term: string, access = masked) =>
-    service.list(storeId, { limit: 50, search: term }, access, actor);
+    listService.list(storeId, { limit: 50, search: term }, access, actor);
 
   const refusals = async (action: string) =>
     (
@@ -98,7 +101,7 @@ describe('ContactsService (Postgres)', () => {
     const number = phone();
     const { id } = await add(number);
     const find = (term: string, access = masked, store = storeId, member = limitedActor) =>
-      service.list(store, { limit: 50, search: term }, access, member);
+      listService.list(store, { limit: 50, search: term }, access, member);
 
     expect((await find(`+88${number}`)).items.map((item) => item.id)).toEqual([id]);
     const missing = phone();

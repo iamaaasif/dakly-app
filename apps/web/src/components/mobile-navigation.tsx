@@ -42,7 +42,7 @@ export function MobileNavigation({ session, blocked, onSignOut }: MobileNavigati
         onKeyDown={trapNavigationFocus}
         aria-labelledby="navigation-title"
         onClose={() => trigger.current?.focus()}
-        className="fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-62 max-w-full border-r border-border bg-surface text-text backdrop:bg-inverse/50"
+        className="fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-62 max-w-full border-r border-border bg-surface pt-14 text-text backdrop:bg-inverse/50"
       >
         <h2 id="navigation-title" className="sr-only">
           Navigation

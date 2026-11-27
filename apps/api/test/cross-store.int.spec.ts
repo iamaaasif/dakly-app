@@ -710,6 +710,17 @@ fixture('GET /contacts', async () => {
     expect(ids).not.toContain(foreign);
   }
 });
+fixture('GET /contacts/counts', async () => {
+  const { a, b } = await pair();
+  await contact(a);
+  await contact(a);
+  await contact(b);
+  for (const [shop, expected] of [
+    [a, 2],
+    [b, 1],
+  ] as const)
+    expect((await success(shop, 'GET', '/contacts/counts', 200)).json().all).toBe(expected);
+});
 fixture('GET /contacts/export', async () => {
   const { a, b } = await pair();
   const phones = { a: phone(), b: phone() };
@@ -1066,6 +1077,23 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('products', foreignId)).toEqual(before);
   });
+fixture('POST /products/:productId/duplicate', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const before = await f.row('products', foreignId);
+  const copy = (await success(b, 'POST', `/products/${own}/duplicate`, 201, {})).json();
+  expect(copy).toMatchObject({ status: 'hidden' });
+  expect(copy.id).not.toBe(own);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/duplicate`,
+    foreignId,
+    () => ({}),
+  );
+  expect(await f.row('products', foreignId)).toEqual(before);
+});
 fixture('POST /products/bulk-edits', async () => {
   const { a, b } = await pair(),
     foreignId = await product(a),
@@ -4180,6 +4208,24 @@ fixture('POST /posts/:postId/approve', async () => {
   const before = await f.row('posts', foreign);
   await hidden(b, 'POST', (id) => `/posts/${id}/approve`, foreign);
   expect(await f.row('posts', foreign)).toEqual(before);
+});
+
+fixture('POST /posts/:postId/duplicate', async () => {
+  const { a, b } = await pair();
+  const channel = await seedChannel(b);
+  const own = await postDraft(b, channel, 'ঈদ অফার');
+  const foreign = await postDraft(a, await seedChannel(a));
+  const copy = await success(b, 'POST', `/posts/${own}/duplicate`, 201);
+  expect(copy.json().id).not.toBe(own);
+  expect(copy.json()).toMatchObject({
+    caption: 'নতুন পাঞ্জাবি',
+    createdByUserId: b.owner.id,
+    targets: [{ channelConnectionId: channel, captionOverride: 'ঈদ অফার', status: 'draft' }],
+  });
+  expect(await f.row('posts', copy.json().id)).toMatchObject({ store_id: b.id });
+  const before = await f.admin.pool.query('select count(*) from posts');
+  await hidden(b, 'POST', (id) => `/posts/${id}/duplicate`, foreign);
+  expect(await f.admin.pool.query('select count(*) from posts')).toEqual(before);
 });
 
 fixture('POST /posts/:postId/schedule', async () => {

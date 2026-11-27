@@ -1,19 +1,19 @@
 @theme {
   --color-*: initial;
-  --color-background: #faf8f7;
+  --color-background: #f1f0ef;
   --color-surface: #ffffff;
   --color-surface-muted: #faf8f7;
   --color-neutral-soft: #f1efec;
-  --color-border: #efebe8;
+  --color-border: #ece8e5;
   --color-border-strong: #ddd7d2;
   --color-input-border: #e8e3df;
-  --color-text: #16110d;
-  --color-text-secondary: #4f4640;
+  --color-text: #211a16;
+  --color-text-secondary: #4a413b;
   --color-text-muted: #766c65;
   --color-text-subtle: #a79d96;
   --color-primary: #f06306;
   --color-primary-hover: #c24f04;
-  --color-primary-soft: #fff3e9;
+  --color-primary-soft: #fef0e6;
   --color-action: #c24f04;
   --color-action-hover: #a84303;
   --color-focus: #c24f04;
@@ -50,6 +50,8 @@
   --text-xl--line-height: 2.125rem;
   --text-2xl: 2.25rem;
   --text-2xl--line-height: 2.625rem;
+  --text-page: 1.25rem;
+  --text-page--line-height: 1.75rem;
   --text-title: 2rem;
   --text-title--line-height: 1.15;
   --text-display: 3.625rem;
@@ -60,11 +62,12 @@
   --radius-*: initial;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
-  --radius-control: 0.625rem;
+  --radius-control: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-full: 9999px;
   --shadow-*: initial;
   --shadow-overlay: 0 8px 24px #211a1626;
+  --shadow-card: 0 1px 2px #21181210;
 }
 
 @theme inline {
@@ -138,6 +141,18 @@
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
+@keyframes motion-tab-underline {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes motion-shimmer {
+  to {
+    background-position-x: -200%;
+  }
+}
+
 @keyframes motion-fade-in {
   from {
     opacity: 0;
@@ -189,6 +204,23 @@
 }
 
 @layer components {
+  /* Loading placeholders sweep a light band across; their shape matches the final row. */
+  .motion-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-neutral-soft) 30%,
+      var(--color-surface) 50%,
+      var(--color-neutral-soft) 70%
+    );
+    background-size: 200% 100%;
+    animation: motion-shimmer 1.4s linear infinite;
+  }
+
+  /* The active tab underline grows from the centre instead of jumping. */
+  .motion-tab[data-state='active']::after {
+    animation: motion-tab-underline 200ms var(--motion-ease);
+  }
+
   /* Radix keeps a closing overlay mounted until its exit animation ends. */
   .motion-overlay[data-state='open'] {
     animation: motion-fade-in 200ms var(--motion-ease);

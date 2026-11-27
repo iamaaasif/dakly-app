@@ -1,6 +1,6 @@
 {
-  "id": "8be48e81-6a82-426a-ae2e-e835718e94cc",
-  "prevId": "c35ed0eb-5611-49ab-ad6e-4749cf8be947",
+  "id": "89d205ce-9372-4c86-a874-068c1dadfa89",
+  "prevId": "ecfcb683-f617-4b78-b616-eee13feb353d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -22110,6 +22110,13 @@
           "notNull": true,
           "default": "'active'"
         },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
         "ask_count": {
           "name": "ask_count",
           "type": "integer",
@@ -22365,6 +22372,10 @@
         "products_status": {
           "name": "products_status",
           "value": "\"products\".\"status\" in ('active', 'hidden', 'archived')"
+        },
+        "products_source": {
+          "name": "products_source",
+          "value": "\"products\".\"source\" in ('manual', 'import', 'chat')"
         },
         "products_negotiation_price_order": {
           "name": "products_negotiation_price_order",

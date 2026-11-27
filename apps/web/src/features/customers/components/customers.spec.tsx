@@ -49,8 +49,13 @@ const rahimaInList: ContactListItemResponse = {
   district: 'Sylhet',
   source: 'messenger',
   consentedChannels: ['whatsapp', 'sms'],
+  ordersCount: 0,
+  netSpendPoisha: 0,
+  lastOrderAt: null,
+  lifecycleStage: 'none',
+  isHighValue: false,
 };
-const allCustomers: ContactListQuery = { limit: 50 };
+const allCustomers: ContactListQuery = { limit: 50, sort: 'newest' };
 
 type Reply = { status?: number; body?: unknown };
 type Sent = { path: string; method: string; body: unknown };
@@ -189,7 +194,7 @@ describe('All customers', () => {
     expect(screen.getByRole('link', { name: 'Next page' }).getAttribute('href')).toBe(
       `/customers?kind=customer&cursor=${contactId}`,
     );
-    expect(sent[0]?.path).toBe('/api/contacts?limit=50&kind=customer');
+    expect(sent[0]?.path).toBe('/api/contacts?limit=50&sort=newest&kind=customer');
   });
 
   it('shows the columns the address names and no others', async () => {
@@ -694,7 +699,7 @@ describe('Import customers', () => {
     );
     show(
       <CustomersScreen
-        query={{ limit: 50, kind: 'lead', tag: 'eid' }}
+        query={{ limit: 50, sort: 'newest', kind: 'lead', tag: 'eid' }}
         columns={defaultCustomerColumns}
       />,
       true,
