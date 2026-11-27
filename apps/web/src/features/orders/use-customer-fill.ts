@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import type { AreaSearchResult } from '@dakly/contracts/delivery';
-import type { OrderCustomerLookup } from '@dakly/contracts/order-entry';
+import type { OrderChatFill, OrderCustomerLookup } from '@dakly/contracts/order-entry';
 import type { CreateOrderValues } from '@dakly/contracts/orders';
 
 export type Customer = NonNullable<OrderCustomerLookup['customer']>;
@@ -56,6 +56,10 @@ export function useCustomerFill() {
     if (customer.area && (force || !form.getValues('recipient.areaId')))
       chooseArea(customer.area, true);
   }
+  function applyChat(chat: OrderChatFill) {
+    fillText(chat, true);
+    if (chat.area) chooseArea(chat.area, true);
+  }
   return {
     area,
     separate,
@@ -64,5 +68,6 @@ export function useCustomerFill() {
     unmark: marks.unmark,
     chooseArea,
     applyCustomer,
+    applyChat,
   };
 }
