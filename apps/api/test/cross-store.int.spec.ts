@@ -1586,6 +1586,103 @@ fixture('GET /areas', async () => {
     nameBn: 'সাভার',
   });
 });
+fixture('GET /areas/districts', async () => {
+  const { a, b } = await pair();
+  const own = (await success(a, 'GET', '/areas/districts', 200)).json();
+  expect(own.items).toContainEqual(expect.objectContaining({ id: 301, kind: 'district' }));
+  expect((await success(b, 'GET', '/areas/districts', 200)).json()).toEqual(own);
+});
+
+fixture('GET /areas/search', async () => {
+  const { a, b } = await pair();
+  const own = (await success(a, 'GET', '/areas/search?search=Savar', 200)).json();
+  expect(own.items).toContainEqual(
+    expect.objectContaining({ id: 30260072, districtName: expect.any(String) }),
+  );
+  expect((await success(b, 'GET', '/areas/search?search=Savar', 200)).json()).toEqual(own);
+});
+
+async function placeOrder(shop: Shop, variantId: string) {
+  await deliveryZone(shop);
+  await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [shop.id]);
+  const created = await f.request(
+    shop.owner,
+    'POST',
+    '/orders',
+    {
+      buyer: { name: 'Rahim' },
+      recipient: { name: 'রিনা', phone: phone(), address: 'ধানমন্ডি', areaId: 301 },
+      items: [{ variantId, quantity: 1 }],
+    },
+    { 'idempotency-key': randomUUID() },
+  );
+  expect(created.statusCode, created.body).toBe(201);
+}
+
+fixture('GET /orders/catalogue/recent', async () => {
+  const { a, b } = await pair();
+  await placeOrder(a, await orderVariant(a));
+  expect((await success(b, 'GET', '/orders/catalogue/recent', 200)).json()).toEqual([]);
+  const own = await orderVariant(b);
+  await placeOrder(b, own);
+  const recent = (await success(b, 'GET', '/orders/catalogue/recent', 200)).json();
+  expect(recent.map(({ variants }: { variants: { id: string }[] }) => variants[0]!.id)).toEqual([
+    own,
+  ]);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'GET', '/orders/catalogue/recent')).statusCode).toBe(403);
+});
+
+fixture('GET /orders/customer-lookup', async () => {
+  const { a, b } = await pair();
+  const foreignPhone = phone();
+  const ownPhone = phone();
+  const foreign = (
+    await success(a, 'POST', '/contacts', 201, { name: 'Foreign', phone: foreignPhone })
+  ).json();
+  const own = (await success(b, 'POST', '/contacts', 201, { name: 'Own', phone: ownPhone })).json();
+  const lookup = (query: string) => success(b, 'GET', `/orders/customer-lookup?${query}`, 200);
+  expect((await lookup(`phone=${foreignPhone}`)).json()).toEqual({ customer: null, openOrders: 0 });
+  expect((await lookup(`phone=${ownPhone}`)).json()).toMatchObject({
+    customer: { contactId: own.id, name: 'Own', phone: ownPhone },
+  });
+  const url = (contactId: string) => `/orders/customer-lookup?contactId=${contactId}`;
+  const denied = await f.request(b.owner, 'GET', url(foreign.id));
+  const absent = await f.request(b.owner, 'GET', url(randomUUID()));
+  expect(denied.statusCode).toBe(404);
+  expect(denied.json()).toEqual(absent.json());
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'GET', url(own.id))).statusCode).toBe(403);
+});
+
+fixture('POST /orders/fill-from-chat', async () => {
+  const { a, b } = await pair();
+  const url = '/orders/fill-from-chat';
+  const text = 'Rahim 01712345678 Road 5 Savar';
+  const driver = app.get<{ respond(request: { model: string }): Promise<object> }>(LLM_DRIVER);
+  const respond = vi.spyOn(driver, 'respond').mockResolvedValue({
+    kind: 'output',
+    output: { name: 'Rahim', phone: '01712345678', address: 'Road 5', area: 'Savar' },
+    model: 'fake',
+    responseId: randomUUID(),
+    usage: { inputTokens: 5, cachedInputTokens: 0, outputTokens: 5 },
+  });
+  for (const shop of [a, b])
+    expect((await success(shop, 'POST', url, 200, { text })).json()).toMatchObject({
+      name: 'Rahim',
+      phone: '01712345678',
+      area: { id: 30260072 },
+    });
+  respond.mockRestore();
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'POST', url, { text })).statusCode).toBe(403);
+});
 async function knowledgeItem(shop: Shop, answer: string) {
   return (await success(shop, 'POST', '/knowledge-items', 201, { kind: 'policy', answer })).json()
     .id as string;
