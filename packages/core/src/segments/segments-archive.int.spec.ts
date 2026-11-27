@@ -72,9 +72,9 @@ describe('segment archive, status filter, search and counts (Postgres)', () => {
     await service.create(storeA, { name: 'Winter all', rules: vip }, staff);
     await service.create(storeB, { name: 'Other shop', rules: vip }, staff);
 
-    const archived = await service.archive(storeA, eid.id, staff);
+    const archived = await service.archive(storeA, eid.id);
     expect(archived.archivedAt).not.toBeNull();
-    const again = await service.archive(storeA, eid.id, staff);
+    const again = await service.archive(storeA, eid.id);
     expect(again.archivedAt).toBe(archived.archivedAt);
 
     expect(await service.tabCounts(storeA)).toEqual({ all: 3, active: 2, archived: 1 });
@@ -92,7 +92,7 @@ describe('segment archive, status filter, search and counts (Postgres)', () => {
     const listed = await service.list(storeA, { status: 'all', limit: 50 });
     expect(listed.items.every((item) => item.contactCount === 2)).toBe(true);
 
-    const restored = await service.unarchive(storeA, eid.id, staff);
+    const restored = await service.unarchive(storeA, eid.id);
     expect(restored.archivedAt).toBeNull();
     expect(await service.tabCounts(storeA)).toEqual({ all: 3, active: 3, archived: 0 });
     expect(winter.archivedAt).toBeNull();
@@ -100,10 +100,10 @@ describe('segment archive, status filter, search and counts (Postgres)', () => {
 
   it('refuses another store’s segment and an unknown one', async () => {
     const other = await service.create(storeB, { name: 'Private', rules: vip }, staff);
-    await expect(service.archive(storeA, other.id, staff)).rejects.toMatchObject({
+    await expect(service.archive(storeA, other.id)).rejects.toMatchObject({
       code: 'SEGMENT_NOT_FOUND',
     });
-    await expect(service.unarchive(storeA, randomUUID(), staff)).rejects.toMatchObject({
+    await expect(service.unarchive(storeA, randomUUID())).rejects.toMatchObject({
       code: 'SEGMENT_NOT_FOUND',
     });
     expect((await service.list(storeB, { status: 'archived', limit: 50 })).items).toEqual([]);
@@ -113,7 +113,7 @@ describe('segment archive, status filter, search and counts (Postgres)', () => {
   it('refuses an archived segment for a campaign and ignores other segments', async () => {
     const old = await service.create(storeA, { name: 'Old list', rules: vip }, staff);
     const live = await service.create(storeA, { name: 'Live list', rules: vip }, staff);
-    await service.archive(storeA, old.id, staff);
+    await service.archive(storeA, old.id);
     await service.assertNotArchived(storeA, { includeSegmentIds: [live.id, randomUUID()] });
     await expect(
       service.assertNotArchived(storeA, {

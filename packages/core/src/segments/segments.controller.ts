@@ -88,10 +88,9 @@ export class SegmentsController {
   @RequirePermission('segments.edit')
   archive(
     @CurrentStore() storeId: string,
-    @CurrentUser() userId: string,
     @Param('segmentId', ParseUUIDPipe) segmentId: string,
   ): Promise<SegmentResponse> {
-    return this.segments.archive(storeId, segmentId, { kind: 'user', userId });
+    return this.segments.archive(storeId, segmentId);
   }
 
   @Post(':segmentId/unarchive')
@@ -99,10 +98,9 @@ export class SegmentsController {
   @RequirePermission('segments.edit')
   unarchive(
     @CurrentStore() storeId: string,
-    @CurrentUser() userId: string,
     @Param('segmentId', ParseUUIDPipe) segmentId: string,
   ): Promise<SegmentResponse> {
-    return this.segments.unarchive(storeId, segmentId, { kind: 'user', userId });
+    return this.segments.unarchive(storeId, segmentId);
   }
 
   @Delete(':segmentId')

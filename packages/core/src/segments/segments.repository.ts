@@ -5,6 +5,7 @@ import type { SegmentListQuery, SegmentRules } from '@dakly/contracts/segments';
 import { segments } from '@dakly/db/schema/contacts';
 
 import { isConstraintViolation } from '../platform/database/error-code';
+import { escapeLike } from '../platform/database/escape-like';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Segment = {
@@ -169,9 +170,4 @@ export class SegmentsRepository {
     );
     return rows.length > 0;
   }
-}
-
-// A search for "50%" must match the text, not act as a wildcard.
-function escapeLike(text: string): string {
-  return text.replace(/[\\%_]/g, (character) => `\\${character}`);
 }

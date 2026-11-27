@@ -37,12 +37,12 @@ export class SegmentsService {
   async list(storeId: string, query: SegmentListQuery): Promise<SegmentListResponse> {
     const rows = await this.repository.list(storeId, query);
     const page = rows.slice(0, query.limit);
-    const items: SegmentListItem[] = [];
-    for (const segment of page)
-      items.push({
+    const items: SegmentListItem[] = await Promise.all(
+      page.map(async (segment) => ({
         ...toSegmentResponse(segment),
         contactCount: await this.contacts.countMatching(storeId, segment.rules),
-      });
+      })),
+    );
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
@@ -51,11 +51,11 @@ export class SegmentsService {
     return { all: active + archived, active, archived };
   }
 
-  async archive(storeId: string, segmentId: string, _actor: Actor): Promise<SegmentResponse> {
+  async archive(storeId: string, segmentId: string): Promise<SegmentResponse> {
     return this.setArchived(storeId, segmentId, this.clock.now());
   }
 
-  async unarchive(storeId: string, segmentId: string, _actor: Actor): Promise<SegmentResponse> {
+  async unarchive(storeId: string, segmentId: string): Promise<SegmentResponse> {
     return this.setArchived(storeId, segmentId, null);
   }
 
