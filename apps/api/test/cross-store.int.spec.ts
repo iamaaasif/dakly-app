@@ -1891,6 +1891,14 @@ fixture('GET /ai-agent/settings', async () => {
     isAutoReplyOn: false,
   });
 });
+fixture('GET /ai-agent/settings/usage', async () => {
+  const { a, b } = await pair();
+  for (const shop of [a, b])
+    expect((await success(shop, 'GET', '/ai-agent/settings/usage', 200)).json()).toMatchObject({
+      allowance: expect.any(Number),
+      remaining: expect.any(Number),
+    });
+});
 fixture('GET /ai-agent/knowledge-summary', async () => {
   const { a, b } = await pair();
   await orderVariant(a);
