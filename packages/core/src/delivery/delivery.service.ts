@@ -5,6 +5,7 @@ import type {
   AreaListQuery,
   AreaListResponse,
   AreaSearchQuery,
+  AreaSearchResult,
   AreaSearchResponse,
   ChangeDeliveryZoneInput,
   CreateDeliveryZoneInput,
@@ -113,6 +114,16 @@ export class DeliveryService {
 
   async searchAreas(storeId: string, query: AreaSearchQuery): Promise<AreaSearchResponse> {
     return { items: await this.repository.searchAreas(storeId, query.search, query.limit) };
+  }
+
+  // The area with its district, for a form that shows "Mirpur, Dhaka" from a saved id.
+  async describeArea(storeId: string, id: number): Promise<AreaSearchResult | undefined> {
+    const [area, ...parents] = await this.repository.findAreaPath(storeId, id);
+    const district =
+      area?.kind === 'district' ? area : parents.find(({ kind }) => kind === 'district');
+    if (!area || area.kind === 'division' || !district) return undefined;
+    const [full] = await this.repository.findAreas(storeId, [id]);
+    return full && { ...full, districtId: district.id, districtName: district.name };
   }
 
   async listDistricts(storeId: string): Promise<AreaListResponse> {

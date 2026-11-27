@@ -34,4 +34,34 @@ describe('ToastProvider', () => {
   it('refuses to show a toast outside the provider', () => {
     expect(() => render(<SaveButton />)).toThrow('useToast needs a ToastProvider above it');
   });
+
+  it('runs the action a toast offers', async () => {
+    const user = userEvent.setup();
+    let undone = false;
+    function Undoable() {
+      const showToast = useToast();
+      return (
+        <Button
+          onClick={() =>
+            showToast('Line removed', {
+              label: 'Undo',
+              onClick: () => {
+                undone = true;
+              },
+            })
+          }
+        >
+          Remove
+        </Button>
+      );
+    }
+    render(
+      <ToastProvider>
+        <Undoable />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(undone).toBe(true);
+  });
 });

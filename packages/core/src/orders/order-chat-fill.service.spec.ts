@@ -59,8 +59,7 @@ describe('OrderChatFillService', () => {
       name: 'রহিমা',
       phone: '01712345678',
       address: 'রোড ৫',
-      areaId: null,
-      areaLabel: null,
+      area: null,
     });
   });
 
@@ -91,14 +90,14 @@ describe('OrderChatFillService', () => {
       address: null,
       area: 'মিরপুর',
     }).fill('store', chat);
-    expect(exact).toMatchObject({ areaId: 10, areaLabel: 'Mirpur, Dhaka' });
+    expect(exact).toMatchObject({ area: { id: 10, districtName: 'Dhaka' } });
     const ambiguous = await serviceReading({
       name: null,
       phone: null,
       address: null,
       area: 'Mirp',
     }).fill('store', chat);
-    expect(ambiguous).toMatchObject({ areaId: null, areaLabel: null });
+    expect(ambiguous).toMatchObject({ area: null });
   });
 
   it('tells staff to type the details when the AI cannot read the chat', async () => {

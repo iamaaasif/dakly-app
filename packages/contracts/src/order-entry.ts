@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { AreaSearchResult } from './delivery';
 import { bdMobileSchema } from './phone';
 
 // Phone entry on the new order page: either the number typed, or a contact picked from the list.
@@ -16,7 +17,7 @@ export type OrderCustomerLookup = {
     phone: string | null;
     // The last order this customer received themselves; null when they never did.
     address: string | null;
-    areaId: number | null;
+    area: AreaSearchResult | null;
   } | null;
   // Orders to this phone that are not delivered, returned or cancelled.
   openOrders: number;
@@ -35,6 +36,6 @@ export type OrderChatFill = {
   name: string | null;
   phone: string | null;
   address: string | null;
-  areaId: number | null;
-  areaLabel: string | null;
+  // Only when the place the customer wrote is exact or the only match.
+  area: AreaSearchResult | null;
 };

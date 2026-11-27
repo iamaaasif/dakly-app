@@ -92,7 +92,7 @@ describe('New order page lookups', () => {
       name: 'Rahim',
       phone: '01712458903',
       address: 'House 9, Road 2, Mirpur',
-      areaId: 301,
+      area: { id: 301, name: 'Dhaka', districtId: 301, districtName: 'Dhaka' },
     });
   });
 
@@ -108,7 +108,7 @@ describe('New order page lookups', () => {
       },
     });
     const found = await entry.lookupCustomer(f.a, { phone }, seesPhone);
-    expect(found.customer).toMatchObject({ name: 'Rahim', address: null, areaId: null });
+    expect(found.customer).toMatchObject({ name: 'Rahim', address: null, area: null });
   });
 
   it('returns no customer for an unknown number and still counts its open orders', async () => {

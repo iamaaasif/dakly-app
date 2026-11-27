@@ -5,6 +5,7 @@ import type { OrderCatalogueProduct } from '@dakly/contracts/orders';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { DeliveryService } from '../delivery/delivery.service';
 import { ProductsService } from '../products/products.service';
 import { OrderEntryRepository } from './order-entry.repository';
 
@@ -16,6 +17,7 @@ export class OrderEntryService {
     @Inject(OrderEntryRepository) private readonly repository: OrderEntryRepository,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(DeliveryService) private readonly delivery: DeliveryService,
   ) {}
 
   async lookupCustomer(
@@ -49,7 +51,9 @@ export class OrderEntryService {
         name: contact.name,
         phone,
         address: last?.address ?? null,
-        areaId: last?.areaId ?? null,
+        area: last?.areaId
+          ? ((await this.delivery.describeArea(storeId, last.areaId)) ?? null)
+          : null,
       },
       openOrders: phone ? await this.repository.countOpenOrders(storeId, phone) : 0,
     };

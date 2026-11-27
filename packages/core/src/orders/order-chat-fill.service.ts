@@ -35,8 +35,7 @@ export class OrderChatFillService {
       name: name || null,
       phone: writtenPhone(phone, text),
       address: address || null,
-      areaId: found?.id ?? null,
-      areaLabel: found ? `${found.name}, ${found.districtName}` : null,
+      area: found ?? null,
     };
   }
 
