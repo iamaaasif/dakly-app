@@ -12,6 +12,7 @@ import type {
   ContactListItemResponse,
   ContactResponse,
 } from '@dakly/contracts/contacts';
+import type { CustomerSummaryResponse } from '@dakly/contracts/customer-profile';
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ToastProvider } from '@dakly/ui/toast';
 
@@ -534,6 +535,34 @@ describe('All contacts', () => {
 });
 
 describe('Customer profile', () => {
+  const summary: CustomerSummaryResponse = {
+    id: contactId,
+    name: 'Rahima Akter',
+    kind: 'customer',
+    lifecycleStage: 'new',
+    phone: '01712-XXX678',
+    whatsappPhone: null,
+    email: 'rahima@example.com',
+    address: null,
+    district: 'Sylhet',
+    source: 'shopify',
+    tags: ['wholesale'],
+    favouriteCategory: "Men's T-shirt",
+    createdAt: '2026-11-10T08:00:00Z',
+    totalSpendPoisha: 189000,
+    ordersCount: 1,
+    averageOrderPoisha: 189000,
+    firstPurchaseAt: '2026-11-04T08:00:00Z',
+    lastPurchaseAt: '2026-11-04T08:00:00Z',
+    lifetimeValuePoisha: null,
+  };
+  // The tabs read their own routes; every other path answers as the contact detail.
+  function serveProfile(reply: (path: string, method: string) => Reply | Promise<never>) {
+    respond((path, method) => {
+      if (path.endsWith('/summary')) return { body: summary };
+      return reply(path, method);
+    });
+  }
   const detail: ContactDetailResponse = {
     ...rahima,
     identities: [
@@ -547,13 +576,75 @@ describe('Customer profile', () => {
   };
 
   it('shows the masked phone and the channel identities without edit controls for viewers', async () => {
-    respond(() => ({ body: detail }));
+    serveProfile(() => ({ body: detail }));
     show(<CustomerProfile contactId={contactId} />, false);
     expect(await screen.findByRole('heading', { name: 'Rahima Akter' })).toBeTruthy();
-    expect(screen.getByText('01712-XXX678')).toBeTruthy();
+    expect(screen.getAllByText(/01712-XXX678/).length).toBeGreaterThan(0);
     expect(screen.getByText('Messenger: Rahima A')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Edit customer' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Marketing permission' })).toBeNull();
+  });
+
+  it('shows the stats and the overview from the summary', async () => {
+    serveProfile(() => ({ body: detail }));
+    show(<CustomerProfile contactId={contactId} />);
+    expect(await screen.findByText('Total spending')).toBeTruthy();
+    expect(screen.getAllByText('৳1,890')).toHaveLength(2);
+    expect(screen.getByText('Not enough data yet')).toBeTruthy();
+    expect(screen.getByText('Nov 4, 2026')).toBeTruthy();
+    expect(screen.getByText('Shopify')).toBeTruthy();
+    expect(screen.getByText("Men's T-shirt")).toBeTruthy();
+  });
+
+  it('says there is not enough data when the customer has no orders, even if the API sent zero', async () => {
+    respond((path) =>
+      path.endsWith('/summary')
+        ? {
+            body: {
+              ...summary,
+              ordersCount: 0,
+              totalSpendPoisha: 0,
+              averageOrderPoisha: null,
+              lifetimeValuePoisha: 0,
+            },
+          }
+        : { body: detail },
+    );
+    show(<CustomerProfile contactId={contactId} />);
+    expect(await screen.findByText('Not enough data yet')).toBeTruthy();
+  });
+
+  it('opens the tab the address names and lists the orders', async () => {
+    serveProfile((path) =>
+      path.includes('/orders')
+        ? {
+            body: {
+              nextCursor: null,
+              items: [
+                {
+                  id: 'order-1',
+                  number: 4787,
+                  createdAt: '2026-11-04T08:00:00Z',
+                  source: 'shopify',
+                  stage: 'delivered',
+                  paymentStatus: 'cod_pending',
+                  totalPoisha: 160700,
+                  firstItemName: "Men's T-shirt",
+                  firstItemVariantTitle: 'black oversized',
+                  otherItemCount: 2,
+                  photoUrl: null,
+                },
+              ],
+            },
+          }
+        : { body: detail },
+    );
+    show(<CustomerProfile contactId={contactId} tab="orders" />);
+    const row = await screen.findByRole('link', { name: /black oversized/ });
+    expect(row.getAttribute('href')).toBe('/orders?selected=order-1');
+    expect(within(row).getByText('+2 more')).toBeTruthy();
+    expect(within(row).getByText('Delivered')).toBeTruthy();
+    expect(within(row).getByText('৳1,607')).toBeTruthy();
   });
 
   describe('possible same person', () => {
@@ -564,7 +655,7 @@ describe('Customer profile', () => {
       createdAt: '2026-11-18T08:00:00Z',
     };
     const serve = (suggestions: unknown[]) =>
-      respond((path, method) => {
+      serveProfile((path, method) => {
         if (path.includes('/dismiss')) return { status: 204 };
         if (path.includes('/contact-match-suggestions') && method === 'GET')
           return { body: suggestions };
@@ -574,17 +665,17 @@ describe('Customer profile', () => {
     it('lists the other contact with the phone as the API sent it, and links to them', async () => {
       serve([suggestion]);
       show(<CustomerProfile contactId={contactId} />);
-      expect(await screen.findByRole('heading', { name: 'Possible same person' })).toBeTruthy();
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       expect(screen.getByRole('link', { name: 'Karim Uddin' }).getAttribute('href')).toBe(
         '/customers/other',
       );
-      expect(screen.getByText(/01712-XXX678 · has the same phone number/)).toBeTruthy();
+      expect(screen.getByText(/01712-XXX678 · shares a phone number/)).toBeTruthy();
       expect(sent.some((call) => call.path.endsWith(`contactId=${contactId}`))).toBe(true);
     });
 
     it('dismisses a match and then hides the note', async () => {
       let open = [suggestion];
-      respond((path, method) => {
+      serveProfile((path, method) => {
         if (path.includes('/dismiss')) {
           open = [];
           return { status: 204 };
@@ -593,6 +684,7 @@ describe('Customer profile', () => {
         return { body: detail };
       });
       show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
       await waitFor(() =>
         expect(screen.queryByRole('heading', { name: 'Possible same person' })).toBeNull(),
@@ -605,7 +697,7 @@ describe('Customer profile', () => {
     it('offers no Dismiss to a viewer, and shows nothing when there are no matches', async () => {
       serve([suggestion]);
       show(<CustomerProfile contactId={contactId} />, false);
-      expect(await screen.findByRole('heading', { name: 'Possible same person' })).toBeTruthy();
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull();
       cleanup();
       serve([]);
@@ -634,13 +726,14 @@ describe('Customer profile', () => {
     };
 
     it('asks first, merges with one key, and opens the kept profile', async () => {
-      respond((path, method) => {
+      serveProfile((path, method) => {
         if (path === '/api/contact-merges' && method === 'POST') return { body: merge };
         if (path.includes('/contact-match-suggestions')) return { body: [suggestion] };
         if (path.includes('/contact-merges')) return { body: [] };
         return { body: detail };
       });
       show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Merge' }));
       expect(screen.getByRole('dialog', { name: 'Merge Karim Uddin?' })).toBeTruthy();
       expect(screen.getByText('You can undo the merge for 7 days.')).toBeTruthy();
@@ -655,7 +748,7 @@ describe('Customer profile', () => {
     });
 
     it('shows the API reason when a merge is refused', async () => {
-      respond((path, method) => {
+      serveProfile((path, method) => {
         if (path === '/api/contact-merges' && method === 'POST')
           return apiError(
             409,
@@ -667,13 +760,14 @@ describe('Customer profile', () => {
         return { body: detail };
       });
       show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Merge' }));
       await userEvent.click(screen.getByRole('button', { name: 'Merge customers' }));
       expect((await screen.findByRole('alert')).textContent).toContain('same page');
     });
 
     it('lists a merge that can be undone and returns to the restored profile', async () => {
-      respond((path, method) => {
+      serveProfile((path, method) => {
         if (path.endsWith('/undo')) return { body: { ...merge, undoneAt: '2026-11-21T08:00:00Z' } };
         if (path.includes('/contact-match-suggestions')) return { body: [] };
         if (path.includes('/contact-merges') && method === 'GET') return { body: [merge] };
@@ -687,7 +781,7 @@ describe('Customer profile', () => {
     });
 
     it('offers no Merge or Undo to a viewer', async () => {
-      respond((path) => {
+      serveProfile((path) => {
         if (path.includes('/contact-match-suggestions')) return { body: [suggestion] };
         if (path.includes('/contact-merges')) return { body: [merge] };
         return { body: detail };
@@ -708,14 +802,14 @@ describe('Customer profile', () => {
   });
 
   it('sends a typed phone and the tags, and shows a taken phone on its field', async () => {
-    respond((_path, method) =>
+    serveProfile((_path, method) =>
       method === 'PATCH'
         ? apiError(409, 'CONTACT_PHONE_TAKEN', 'A contact with this phone number already exists')
         : { body: detail },
     );
     show(<CustomerProfile contactId={contactId} />);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Edit customer' }));
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Edit Rahima Akter' }));
     expect(dialog.getByText('Leave empty to keep 01712-XXX678')).toBeTruthy();
     const tags = dialog.getByLabelText('Tags');
@@ -734,10 +828,10 @@ describe('Customer profile', () => {
   });
 
   it('keeps the phone out of the change when it is left empty', async () => {
-    respond(() => ({ body: detail }));
+    serveProfile(() => ({ body: detail }));
     show(<CustomerProfile contactId={contactId} />);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Edit customer' }));
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
     await user.click(screen.getByRole('button', { name: 'Save customer' }));
     await waitFor(() =>
       expect(sent.find((request) => request.method === 'PATCH')?.body).toEqual({
@@ -748,18 +842,20 @@ describe('Customer profile', () => {
   });
 
   it('names the customer before deleting and returns to the list', async () => {
-    respond((_path, method) => (method === 'DELETE' ? { status: 204 } : { body: detail }));
+    serveProfile((_path, method) => (method === 'DELETE' ? { status: 204 } : { body: detail }));
     show(<CustomerProfile contactId={contactId} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Delete customer' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Delete Rahima Akter?' }));
     await user.click(dialog.getByRole('button', { name: 'Delete customer' }));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/customers'));
-    expect(sent.at(-2)).toMatchObject({ path: `/api/contacts/${contactId}`, method: 'DELETE' });
+    expect(
+      sent.some((call) => call.method === 'DELETE' && call.path === `/api/contacts/${contactId}`),
+    ).toBe(true);
   });
 
   it('offers only a withdrawal on Messenger and asks how the customer answered', async () => {
-    respond(() => ({ body: detail }));
+    serveProfile(() => ({ body: detail }));
     show(<CustomerProfile contactId={contactId} />);
     const user = userEvent.setup();
     await user.selectOptions(await screen.findByLabelText('Channel'), 'messenger');
@@ -774,7 +870,7 @@ describe('Customer profile', () => {
   });
 
   it('records a WhatsApp opt-in with the note', async () => {
-    respond((_path, method) =>
+    serveProfile((_path, method) =>
       method === 'POST'
         ? {
             body: {

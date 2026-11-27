@@ -173,6 +173,15 @@ export function formatDhakaMonthDay(value: string): string {
   }).format(new Date(value));
 }
 
+export function formatDateWithYear(value: string, timeZone = 'Asia/Dhaka'): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(parseInstant(value));
+}
+
 // "Nov 26, 2026 at 5:14 AM", the way tables show when something was last edited.
 export function formatDateAtTime(value: string, timeZone = 'Asia/Dhaka'): string {
   const instant = parseInstant(value);
