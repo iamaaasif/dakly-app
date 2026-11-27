@@ -43,6 +43,7 @@ export function formValues({
       },
     ],
     tags: [],
+    collections: [],
     isStockTracked: true,
     status: 'hidden',
   };
@@ -59,6 +60,7 @@ function sourceFormValues(
     shortDescription: source.shortDescription,
     barcode: source.barcode,
     tags: source.tags,
+    collections: source.collections,
     categoryId: source.categoryId,
     brandId: source.brandId,
     weightGrams: weightText(source.weightGrams),

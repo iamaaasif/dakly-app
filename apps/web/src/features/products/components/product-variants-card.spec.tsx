@@ -278,6 +278,39 @@ describe('Variants card', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'M' })).toBeNull());
   });
 
+  it('gives a size one of the product photos with a single click', async () => {
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+    const photos = [
+      { id: '019c01ea-cf15-7d31-a7f5-d73d66007b01', url: 'https://images.example.test/one' },
+      { id: '019c01ea-cf15-7d31-a7f5-d73d66007b02', url: 'https://images.example.test/two' },
+    ];
+    show({
+      ...saved,
+      photos,
+      options: [{ name: 'Size', values: ['M'] }],
+      variants: [{ ...saved.variants[0]!, title: 'M', optionValues: { Size: 'M' } }],
+    });
+    const sheet = await editVariant('M');
+    const second = sheet.getByRole('button', { name: 'Use photo 2' });
+    expect(second.getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(second);
+    expect(second.getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(sheet.getByRole('button', { name: 'Use photo 2' }));
+    expect(sheet.getByRole('button', { name: 'Use photo 2' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+    await userEvent.click(sheet.getByRole('button', { name: 'Use photo 1' }));
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'M' })).toBeNull());
+    const thumb = await screen.findByAltText('Photo for M');
+    expect(thumb.getAttribute('src')).toBe('https://images.example.test/one');
+  });
+
   it('sets a price on the chosen rows and keeps removed rows out until asked', async () => {
     show(saved);
     await choosePresets('Size', 'S', 'M', 'L');
