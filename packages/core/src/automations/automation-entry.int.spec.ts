@@ -6,6 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import { automationTemplates } from '@dakly/contracts/automations/templates';
 import type { ChatIntent } from '@dakly/contracts/chats';
 import { createDatabase } from '@dakly/db/client';
 
@@ -17,6 +18,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DAY_MS } from '../platform/time';
 import { SegmentsModule } from '../segments/segments.module';
+import { SendingModule } from '../sending/sending.module';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 import { StartAutomationOnBirthday } from './jobs/start-automation-on-birthday.job';
@@ -41,10 +43,14 @@ const graph: AutomationGraph = {
   steps: { end: { kind: 'exit' } },
 };
 
-async function workflow(reEntry = graph.reEntry, trigger = graph.trigger) {
+async function workflow(
+  reEntry = graph.reEntry,
+  trigger = graph.trigger,
+  body: Pick<AutomationGraph, 'firstStepKey' | 'steps'> = graph,
+) {
   const id = randomUUID();
   const version = randomUUID();
-  const input = { ...graph, reEntry, trigger };
+  const input = { ...graph, ...body, reEntry, trigger };
   await admin.pool.query(
     "insert into automations(id,store_id,name,trigger_type,status,draft_graph) values($1,$2,'স্বাগতম',$4,'active',$3)",
     [id, storeId, input, trigger.key],
@@ -86,7 +92,7 @@ describe('AutomationEntryService (Postgres)', () => {
     );
     class TestModule {}
     Module({
-      imports: [DatabaseModule, ContactsModule, OrdersModule, SegmentsModule],
+      imports: [DatabaseModule, ContactsModule, OrdersModule, SegmentsModule, SendingModule],
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,
@@ -258,6 +264,71 @@ describe('AutomationEntryService (Postgres)', () => {
       ]);
     };
     const runCount = async (id: string) => (await runs(id)).length;
+
+    describe('answersMessage', () => {
+      const sendFirst = {
+        firstStepKey: 'send',
+        steps: { send: automationTemplates.cod_order_confirmation.graph.steps.remind! },
+      };
+      const burst = (text: string, intent: ChatIntent | null, newestMessageId = randomUUID()) => {
+        spoken = text;
+        return entries.answersMessage(storeId, conversationId, {
+          contactId,
+          channel: 'messenger',
+          intent,
+          messageIds: [newestMessageId],
+        });
+      };
+      const priceFilters: AutomationGraph['trigger']['filters'] = [
+        { field: 'keywords', keywords: ['দাম', 'dam', 'price'] },
+      ];
+
+      it('claims a price question in Bangla or Banglish and leaves other messages to the AI', async () => {
+        await workflow(
+          { rule: 'every_time' },
+          { key: 'message_received', filters: priceFilters },
+          sendFirst,
+        );
+        now = new Date(firstDay.getTime() + 70 * DAY_MS);
+        expect(await burst('এই শার্টের দাম কত?', 'price')).toBe(true);
+        expect(await burst('dam koto bhai', 'price')).toBe(true);
+        expect(await burst('delivery koto din?', 'delivery')).toBe(false);
+      });
+
+      it('leaves the reply to the AI when the first step does not send', async () => {
+        await workflow({ rule: 'every_time' }, { key: 'message_received', filters: [] });
+        now = new Date(firstDay.getTime() + 71 * DAY_MS);
+        expect(await burst('hi', 'greeting')).toBe(false);
+      });
+
+      it('leaves the reply to the AI when the first send is marketing to a contact without consent', async () => {
+        const marketing = {
+          firstStepKey: 'send',
+          steps: {
+            send: { ...sendFirst.steps.send, category: 'marketing', channels: ['messenger'] },
+          },
+        } as typeof sendFirst;
+        await workflow({ rule: 'every_time' }, { key: 'message_received', filters: [] }, marketing);
+        now = new Date(firstDay.getTime() + 71.5 * DAY_MS);
+        expect(await burst('size 12 ache?', 'size_or_stock')).toBe(false);
+      });
+
+      it('keeps claiming a burst after its run started, and releases the next one while that run is active', async () => {
+        const id = await workflow(
+          { rule: 'once' },
+          { key: 'message_received', filters: [] },
+          sendFirst,
+        );
+        now = new Date(firstDay.getTime() + 72 * DAY_MS);
+        const newest = randomUUID();
+        expect(await burst('size 12 ache?', 'size_or_stock', newest)).toBe(true);
+        await receive('size 12 ache?', 'size_or_stock', 'messenger', newest);
+        expect(await burst('size 12 ache?', 'size_or_stock', newest)).toBe(true);
+        expect(await runCount(id)).toBe(1);
+        // A run for this contact has finished and the workflow runs once, so a new burst is not claimed.
+        expect(await burst('size 12 ache?', 'size_or_stock')).toBe(false);
+      });
+    });
 
     it('starts on a price question in Bangla, Banglish or mixed text and skips the rest', async () => {
       const id = await messageGraph([

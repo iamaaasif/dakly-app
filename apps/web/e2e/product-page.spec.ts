@@ -59,10 +59,10 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     await expect(page.getByRole('heading', { name: 'New product', exact: true })).toBeVisible();
     await expect(page.getByLabel('Add photos')).toBeAttached();
     await expect(page.getByRole('combobox', { name: 'Status' })).toHaveText('Hidden');
-    await page.getByLabel('Product name', { exact: true }).fill(name);
-    await page.getByLabel('Regular price ৳', { exact: true }).fill('600');
-    await page.getByLabel('Sell price ৳', { exact: true }).fill('400');
-    await page.getByLabel('Product cost ৳', { exact: true }).fill('260');
+    await page.getByLabel('Title', { exact: true }).fill(name);
+    await page.getByLabel('Regular price', { exact: true }).fill('600');
+    await page.getByLabel('Sell price', { exact: true }).fill('400');
+    await page.getByLabel('Product cost', { exact: true }).fill('260');
     await expect(page.getByText('35%')).toBeVisible();
     await capture('new');
 
@@ -111,12 +111,12 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
 });
 
 async function saveNegotiationPrices(page: Page) {
-  const priceCard = page.getByRole('heading', { name: 'Price', exact: true }).locator('..');
-  const toggle = priceCard.getByRole('switch', { name: 'Let the AI negotiate' });
+  const priceCard = page.getByRole('group', { name: 'Price negotiation' });
+  const toggle = priceCard.getByRole('checkbox', { name: 'Eligible AI negotiation' });
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
   await toggle.click();
-  await priceCard.getByLabel('Opening offer ৳').fill('340');
-  await priceCard.getByLabel('Lowest price ৳').fill('240');
+  await priceCard.getByLabel('Opening offer price').fill('340');
+  await priceCard.getByLabel('Min price').fill('240');
   await expect(priceCard.getByText('The lowest price is below the product cost.')).toBeVisible();
 
   const directories = [
