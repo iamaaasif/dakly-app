@@ -1,4 +1,5 @@
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import { cn } from '@dakly/ui/cn';
 
 import type { CanvasLayout } from '../workflow-canvas-layout';
 import { EdgeAddButtons } from './workflow-add-step';
@@ -23,13 +24,33 @@ function EdgeLines({ layout }: { layout: CanvasLayout }) {
             <span
               key={edge.id}
               aria-hidden="true"
-              className="absolute max-w-48 -translate-x-1/2 -translate-y-1/2 truncate rounded-full border border-border bg-surface px-2 text-xs text-text-muted"
+              className={cn(
+                'absolute max-w-48 -translate-x-1/2 -translate-y-1/2 truncate rounded-full px-2 text-xs font-semibold',
+                edge.label === 'Yes'
+                  ? 'bg-success-soft text-success'
+                  : 'bg-background text-text-secondary',
+                edge.label !== 'Yes' &&
+                  edge.label !== 'No' &&
+                  'border border-border bg-surface font-normal text-text-muted',
+              )}
               style={{ left: edge.labelX, top: edge.labelY }}
             >
               {edge.label}
             </span>
           ),
       )}
+      {layout.merges
+        .filter((merge) => merge.pill)
+        .map((merge) => (
+          <span
+            key={merge.id}
+            aria-hidden="true"
+            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-surface px-2.5 text-xs font-medium text-text-secondary shadow-card"
+            style={{ left: merge.x, top: merge.y }}
+          >
+            Paths merge
+          </span>
+        ))}
     </>
   );
 }
