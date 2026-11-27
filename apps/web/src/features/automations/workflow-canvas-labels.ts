@@ -1,5 +1,8 @@
-import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
-import type { CampaignChannel } from '@dakly/contracts/campaigns';
+import type {
+  AutomationChannel,
+  AutomationGraph,
+  AutomationStep,
+} from '@dakly/contracts/automations/graph';
 import { formatMoney } from '@dakly/contracts/money';
 
 import { channelLabels } from './automation-labels';
@@ -131,15 +134,15 @@ function frequencyLabel(reEntry: AutomationGraph['reEntry']) {
 
 // Marketing sends need consent; order updates go out without it (CAMP-R2).
 function channelConsentLabels(steps: AutomationGraph['steps']) {
-  const subscribed = new Set<CampaignChannel>();
-  const orderUpdates = new Set<CampaignChannel>();
+  const subscribed = new Set<AutomationChannel>();
+  const orderUpdates = new Set<AutomationChannel>();
   for (const step of Object.values(steps)) {
     if (step.kind !== 'send') continue;
     for (const channel of step.channels)
       (step.category === 'marketing' ? subscribed : orderUpdates).add(channel);
   }
   for (const channel of subscribed) orderUpdates.delete(channel);
-  const groups: [string, Set<CampaignChannel>][] = [
+  const groups: [string, Set<AutomationChannel>][] = [
     ['subscribed', subscribed],
     ['order updates', orderUpdates],
   ];

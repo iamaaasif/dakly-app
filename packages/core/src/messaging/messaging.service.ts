@@ -317,9 +317,9 @@ export class MessagingService {
     );
   }
 
-  // A workflow is not tied to a Page: it answers where the contact wrote last.
-  async latestMessengerRoute(storeId: string, contactId: string) {
-    const latest = await this.inbound.findLatestInbound(storeId, contactId);
+  // A workflow is not tied to a Page or Instagram account: it answers where the contact wrote last.
+  async latestChatRoute(storeId: string, contactId: string, channel: 'messenger' | 'instagram') {
+    const latest = await this.inbound.findLatestInbound(storeId, contactId, channel);
     if (!latest?.connectionId || !latest.lastInboundAt) return undefined;
     const [identity] = await this.identities.findOnConnection(storeId, latest.connectionId, [
       contactId,

@@ -1,6 +1,10 @@
-import { type campaignChannels } from '../campaigns';
 import { type AutomationPrerequisite } from './catalogue';
-import { type AutomationGraph, type AutomationStep, type sendCategories } from './graph';
+import {
+  type AutomationChannel,
+  type AutomationGraph,
+  type AutomationStep,
+  type sendCategories,
+} from './graph';
 
 // Library types in feature 09. AUTO-R2 ranks transactional, then abandoned, then welcome.
 export const templateCategories = [
@@ -37,7 +41,7 @@ const end: AutomationStep = { kind: 'exit' };
 
 function send(
   category: (typeof sendCategories)[number],
-  channels: readonly (typeof campaignChannels)[number][],
+  channels: readonly AutomationChannel[],
   text: string,
   next: string,
 ): Extract<AutomationStep, { kind: 'send' }> {

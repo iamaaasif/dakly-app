@@ -42,10 +42,19 @@ export type RunFacts = {
   wakeAt: Date | null;
   orderId: string | null;
 };
-// A Messenger send is routed to the Page where the contact wrote last; its buttons name the step
-// row so a tap can be matched to it.
-export type MessengerSend = { connectionId: string; identityId: string; stepId: string };
-// Meta's window is 24 hours from the contact's last message; the hour is the margin for the gap
+// A Messenger or Instagram send is routed to the Page or account where the contact wrote last; its
+// buttons name the step row so a tap can be matched to it.
+export type ChatChannel = 'messenger' | 'instagram';
+export type ChatSend = {
+  channel: ChatChannel;
+  connectionId: string;
+  identityId: string;
+  stepId: string;
+};
+export function isChatChannel(channel: string | null): channel is ChatChannel {
+  return channel === 'messenger' || channel === 'instagram';
+}
+// Meta's window (Messenger and Instagram) is 24 hours from the contact's last message; the hour is the margin for the gap
 // before Meta accepts the send (D24), the same as for campaigns.
 export const MESSENGER_WINDOW_MS = 23 * 60 * 60 * 1000;
 export type Delivery = {
@@ -73,7 +82,7 @@ export type GateResult =
       destination: string | null;
       at: Date;
       firstTriedAt: Date;
-      messenger?: MessengerSend;
+      chat?: ChatSend;
     };
 export function holdOwnedClaim(run: ClaimedRun | undefined, claim: RunClaim, now: Date) {
   return run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
