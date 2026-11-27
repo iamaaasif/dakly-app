@@ -33,10 +33,11 @@ export function OrdersResults({ query, orders, counts, selected }: OrdersResults
   return (
     <div className="space-y-3">
       <OrderLabelSelection orderIds={selectedIds} onClear={() => changeLabelSelection([])} />
-      {/* A new stage or filter starts its own page trail, so the card is keyed by them. */}
-      <TableCard key={cardKey(query)}>
+      {/* A new stage or filter starts its own page trail, so the list is keyed by them. */}
+      <TableCard>
         <OrdersToolbar query={query} />
         <OrdersList
+          key={cardKey(query)}
           orders={orders}
           query={query}
           total={query.stage ? counts?.[query.stage] : undefined}

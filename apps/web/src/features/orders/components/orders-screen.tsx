@@ -34,6 +34,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
   const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
   const navigationQuery = { ...query, labelOrderIds };
+  const pendingListRefresh = orders.fetchStatus !== 'idle';
 
   return (
     <StorePage permission="canViewOrders">
@@ -59,7 +60,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
             key={selected}
             id={selected}
             restoreFocusTo={() =>
-              orderRowFocus(heading.current, orders.fetchStatus !== 'idle' ? undefined : selected)
+              orderRowFocus(heading.current, pendingListRefresh ? undefined : selected)
             }
             onClose={() => router.replace(`/orders?${ordersSearch(navigationQuery)}`)}
           />
