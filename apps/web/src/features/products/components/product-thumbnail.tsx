@@ -1,6 +1,9 @@
 import Image from 'next/image';
 
 import type { ProductResponse } from '@dakly/contracts/products';
+import { cn } from '@dakly/ui/cn';
+
+import { productTileTone } from '../product-tile-tone';
 
 type ProductThumbnailProps = {
   product: Pick<ProductResponse, 'name' | 'photos'>;
@@ -12,19 +15,23 @@ export function ProductThumbnail({ product }: ProductThumbnailProps) {
       <Image
         src={product.photos[0].url}
         alt={product.name}
-        width={48}
-        height={48}
+        width={44}
+        height={44}
         unoptimized
-        className="size-12 shrink-0 rounded-lg object-cover"
+        loading="lazy"
+        className="size-11 shrink-0 rounded-lg object-cover"
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="grid size-12 shrink-0 place-items-center rounded-lg bg-surface-muted text-md font-semibold text-text-muted"
+      className={cn(
+        'grid size-11 shrink-0 place-items-center rounded-lg text-md font-semibold',
+        productTileTone(product.name),
+      )}
     >
-      {product.name.slice(0, 1)}
+      {product.name.slice(0, 1).toUpperCase()}
     </span>
   );
 }

@@ -36,10 +36,7 @@ export function DueBookScreen({ filter }: { filter: DueListFilter }) {
           </p>
         </div>
         {canEdit && (
-          <Button
-            onClick={() => setAction({ kind: 'add' })}
-            className="bg-primary hover:bg-primary-hover"
-          >
+          <Button onClick={() => setAction({ kind: 'add' })}>
             <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add baki
           </Button>
         )}

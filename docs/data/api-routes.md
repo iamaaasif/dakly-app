@@ -117,6 +117,8 @@ atomically and retain business data when an extension is disabled.
 | `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                         | `customers`                                                      |
 | `GET /contact-match-suggestions?contactId=`, `POST /contact-match-suggestions/:suggestionId/dismiss`                            | `customers`                                                      |
 | `POST /contacts/:contactId/consents`                                                                                            | `customers`                                                      |
+| `GET /contacts/:contactId/summary`, `/orders`, `/activity`, `/campaigns`, `/notes`, `/marketing-preferences`                    | `customers`                                                      |
+| `POST /contacts/:contactId/notes`, `PUT /contacts/:contactId/marketing-preferences/:channel` (WhatsApp, SMS)                    | `customers` (edit)                                               |
 | `POST /imports`, `POST /imports/:importId/start`, `POST /imports/:importId/undo` (within 7 days, 202), `GET /imports/:importId` | `customers`                                                      |
 | `POST /contacts/exports`                                                                                                        | `customers` + "Download customer lists"                          |
 | `GET /segments`, `POST /segments/preview` (count only)                                                                          | `segments.view`                                                  |

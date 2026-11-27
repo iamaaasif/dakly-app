@@ -20,6 +20,7 @@ import {
   sendProductCardTool,
 } from '@dakly/contracts/ai-agent-tools';
 import { formatMoney } from '@dakly/contracts/money';
+import { isInStock } from '@dakly/contracts/product-editor-fields';
 
 import { KnowledgeSearchService } from '../ai/knowledge-search.service';
 import { ContactMatchSuggestionsService } from '../contacts/contact-match-suggestions.service';
@@ -424,10 +425,10 @@ function cardPhotoId(
 type ChatVariant = ChatProduct['variants'][number];
 
 export const isOutOfStock = (product: ChatProduct, variant: ChatVariant) =>
-  product.isStockTracked && variant.available <= 0;
+  !isInStock(product, variant.available);
 
 export const isProductSoldOut = (product: ChatProduct) =>
-  product.isStockTracked && product.variants.every((variant) => isOutOfStock(product, variant));
+  product.variants.every((variant) => isOutOfStock(product, variant));
 
 export function productCardText(product: ChatProduct, only?: ChatVariant) {
   const lines = (only ? [only] : product.variants).map(

@@ -21,6 +21,7 @@ import {
   type ProductBrandListResponse,
   type ProductBrandResponse,
   type ProductCategoryListResponse,
+  type ProductTagListResponse,
   type ProductCategoryResponse,
 } from '@dakly/contracts/product-lists';
 
@@ -29,12 +30,14 @@ import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductTagsService } from './product-tags.service';
 
 @Controller('products')
 export class ProductListsController {
   constructor(
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
     @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
+    @Inject(ProductTagsService) private readonly tags: ProductTagsService,
   ) {}
 
   @Get('categories')
@@ -105,5 +108,11 @@ export class ProductListsController {
     @Param('brandId', ParseUUIDPipe) brandId: string,
   ): Promise<void> {
     return this.brands.remove(storeId, brandId);
+  }
+
+  @Get('tags')
+  @RequirePermission('products.view')
+  listTags(@CurrentStore() storeId: string): Promise<ProductTagListResponse> {
+    return this.tags.list(storeId);
   }
 }
