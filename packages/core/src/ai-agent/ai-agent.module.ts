@@ -23,12 +23,15 @@ import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { AiAgentService } from './ai-agent.service';
 import { CardTapRepliesService } from './card-tap-replies.service';
 import { CommentAutoReplyService } from './comment-auto-reply.service';
+import { ChatClassifierService } from './chat-classifier.service';
 import { AnswerCardTap } from './jobs/answer-card-tap.job';
+import { DraftSuggestedReply } from './jobs/draft-suggested-reply.job';
 import { ReplyToCustomerJob } from './jobs/reply-to-customer.job';
 import { ReplyToFacebookCommentJob } from './jobs/reply-to-facebook-comment.job';
 import { RestartReturnOnStaffReply } from './jobs/restart-return-on-staff-reply.job';
 import { ScheduleAiReplyOnMessage } from './jobs/schedule-ai-reply-on-message.job';
 import { SalesAgentModule } from './sales-agent.module';
+import { SuggestedReplyService } from './suggested-reply.service';
 
 @Module({
   imports: [
@@ -57,11 +60,14 @@ import { SalesAgentModule } from './sales-agent.module';
     AiAgentService,
     CardTapRepliesService,
     CommentAutoReplyService,
+    ChatClassifierService,
     AnswerCardTap,
+    DraftSuggestedReply,
     ReplyToCustomerJob,
     ReplyToFacebookCommentJob,
     RestartReturnOnStaffReply,
     ScheduleAiReplyOnMessage,
+    SuggestedReplyService,
   ],
 })
 export class AiAgentModule {}

@@ -8,6 +8,7 @@ import {
 import { useRef } from 'react';
 
 import type { ConversationMessageResponse, ConversationResponse } from '@dakly/contracts/chats';
+import type { ConfirmProductPhotoInput } from '@dakly/contracts/products';
 import { ApiError } from '@dakly/ui/api-client';
 
 import { chatsKeys } from './chats-keys';
@@ -53,27 +54,30 @@ export function useMarkConversationRead() {
 }
 
 // The reply shows in the thread the moment it is sent, as a queued message the thread read replaces.
+export type ReplyDraft = { body: string; photo?: ConfirmProductPhotoInput };
+
 export function useSendReply(id: string) {
   const { request, contextTag } = useStoreRequest();
   const client = useQueryClient();
   const messagesKey = chatsKeys.messages(contextTag, id);
   // One key per attempt: a retry after a lost answer reuses it, so the customer gets one message.
-  const key = useRef<string | undefined>(undefined);
+  const attempt = useRef<{ draft: string; key: string } | undefined>(undefined);
   return useMutation({
-    mutationFn: (body: string) => {
-      key.current ??= crypto.randomUUID();
+    mutationFn: (reply: ReplyDraft) => {
+      const draft = JSON.stringify(reply);
+      if (attempt.current?.draft !== draft) attempt.current = { draft, key: crypto.randomUUID() };
       return request<{ messageId: string }>(`/conversations/${id}/replies`, {
         method: 'POST',
-        body: { body, operationKey: key.current },
+        body: { ...reply, operationKey: attempt.current.key },
       });
     },
-    onMutate: async (body) => {
+    onMutate: async ({ body, photo }) => {
       await client.cancelQueries({ queryKey: messagesKey });
       const before = client.getQueryData<InfiniteData<MessagePage>>(messagesKey);
       const now = new Date().toISOString();
       const pending: ConversationMessageResponse = {
-        id: `pending-${key.current ?? crypto.randomUUID()}`,
-        kind: 'text',
+        id: `pending-${attempt.current?.key ?? crypto.randomUUID()}`,
+        kind: photo && !body ? 'image' : 'text',
         direction: 'out',
         body,
         authorType: 'user',
@@ -82,6 +86,7 @@ export function useSendReply(id: string) {
         sourceType: 'chat',
         createdAt: now,
         sentAt: null,
+        failureReason: null,
       };
       // The list is newest first, so the new message goes at the front of the first page.
       if (before?.pages[0])
@@ -95,12 +100,12 @@ export function useSendReply(id: string) {
       return { before };
     },
     onSuccess: () => {
-      key.current = undefined;
+      attempt.current = undefined;
     },
     onError: (error, _body, context) => {
       if (context?.before) client.setQueryData(messagesKey, context.before);
       if (error instanceof ApiError && error.status !== undefined && error.status < 500)
-        key.current = undefined;
+        attempt.current = undefined;
     },
     onSettled: () => client.invalidateQueries({ queryKey: messagesKey }),
   });

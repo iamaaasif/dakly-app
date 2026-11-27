@@ -85,7 +85,11 @@ test('reads the comments on a post and says so when a comment cannot be hidden',
         })
       ).status(),
     ).toBe(204);
-    await page.goto('/chats?channel=comments');
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto('/chats?channel=comments&post=missing-post');
+    await page.getByRole('link', { name: 'All posts' }).click();
+    await expect(page).toHaveURL(/channel=comments$/);
+
     await expect(page.getByRole('link', { name: /Women’s Kurti/ })).toBeVisible();
     await capture(page, 'posts');
     await page.setViewportSize({ width: 1280, height: 900 });

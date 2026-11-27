@@ -176,10 +176,10 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
     await expect(
       page.getByRole('navigation', { name: 'Order stages' }).getByRole('link'),
-    ).toHaveCount(5);
-    await expect(page.getByRole('link', { name: 'To confirm 3' })).toBeVisible();
-    await expect(page.getByText('On hold', { exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Confirm order #1054' })).toBeVisible();
+    ).toHaveCount(6);
+    await expect(page.getByRole('link', { name: 'To confirm 2' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'On hold 1' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Confirm order #1054' })).toHaveCount(0);
     await expect(page.getByText('3 hours ago', { exact: true })).toHaveAttribute(
       'title',
       /Asia\/Dhaka/,
@@ -188,7 +188,6 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByText('1 high-risk order')).toBeVisible();
     await expect(page.getByText('৳5,780 COD still with couriers')).toBeVisible();
     await expect(page.getByText('Cotton Panjabi (L) × 2')).toBeVisible();
-    await expect(page.getByText('Search orders', { exact: true })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Search orders' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveAttribute(
       'aria-expanded',
@@ -197,6 +196,11 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByLabel('From date')).toBeHidden();
     await expect(page.getByText('Return risk is based on your past orders.')).toBeVisible();
     await capture('pipeline');
+
+    await page.getByRole('link', { name: 'On hold 1' }).click();
+    await expect(page.getByText('Imran Khan', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Confirm order #1054' })).toBeVisible();
+    await page.getByRole('link', { name: 'To confirm 2' }).click();
 
     await page.getByRole('link', { name: 'Review high-risk orders' }).click();
     await expect(page).toHaveURL(/alert=risk/);
@@ -224,6 +228,8 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await page.keyboard.press('Tab');
     await expect(content).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(detail.getByRole('link', { name: 'Print invoice' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(detail.getByRole('button', { name: 'Cancel order' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(detail.getByRole('button', { name: 'More' })).toBeFocused();
@@ -239,7 +245,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await page.getByRole('link', { name: /^To pack/ }).click();
     await expect(page).toHaveURL(/stage=to_pack/);
     await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
-    await page.getByRole('link', { name: 'Clear search' }).click();
+    await page.getByRole('button', { name: 'Clear search' }).click();
     await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
     await page.getByRole('link', { name: /^Delivered/ }).click();
     await expect(page).toHaveURL(/stage=delivered/);
@@ -247,8 +253,10 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByRole('link', { name: 'Delivered 2' })).toBeVisible();
     await expect(page.getByText('Partly delivered', { exact: true })).toBeVisible();
     await expect(page.getByText('৳2,560', { exact: true })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Source' }).click();
+    await page.getByRole('option', { name: 'WhatsApp' }).click();
+    await expect(page).toHaveURL(/source=whatsapp/);
     await page.getByRole('button', { name: 'Filters', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Source' }).selectOption({ label: 'WhatsApp' });
     await page.getByRole('combobox', { name: 'Courier' }).selectOption({ label: 'Pathao' });
     await page.getByLabel('From date').fill('2026-11-17');
     await page.getByLabel('Through date').fill('2026-11-17');
@@ -274,8 +282,9 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(filters).toHaveAttribute('aria-expanded', 'false');
     await page.goBack();
     await expect(page).toHaveURL(/stage=cancelled/);
-    await expect(filters).toHaveAttribute('aria-expanded', 'true');
+    await filters.click();
     await expect(page.getByLabel('Cancelled orders')).toBeChecked();
+    await page.keyboard.press('Escape');
     await page.goForward();
     await expect(page).toHaveURL(/stage=to_confirm/);
     await expect(filters).toHaveAttribute('aria-expanded', 'false');

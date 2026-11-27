@@ -1,5 +1,6 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { FormProvider, useForm, type UseFormReturn } from 'react-hook-form';
@@ -62,7 +63,7 @@ export function MakeOrderForm({ conversation, contactPhone }: MakeOrderFormProps
     <FormProvider {...form}>
       <form
         aria-label="Make an order"
-        className="space-y-3 border-t border-border p-3"
+        className="space-y-3 border-t border-border p-4"
         onSubmit={(event) => {
           if (!create.mustRetry) return void form.handleSubmit(save)(event);
           event.preventDefault();
@@ -111,8 +112,9 @@ function MakeOrderFooter({ placed, create, busy, onConfirm }: MakeOrderFooterPro
             : create.error.message}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" loading={create.isPending}>
+      <div className="flex flex-col gap-2">
+        <Button type="submit" loading={create.isPending} className="w-full">
+          <ShoppingBag aria-hidden="true" size={16} />
           {create.mustRetry ? 'Retry save' : 'Create order'}
         </Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={onConfirm}>

@@ -67,7 +67,7 @@ export class PasswordService {
         ...this.identity(subject),
         passwordState: this.credentials.proof(subject.userId!, passwordHash).passwordState,
       },
-      request,
+      { ...request, selectFirstStore: true },
     );
   }
 

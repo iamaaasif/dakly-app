@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, getTableName, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import type {
   CreateProductInput,
   ProductListQuery,
   ProductOption,
+  ProductSource,
   ConfirmProductPhotoInput,
 } from '@dakly/contracts/products';
 import { files } from '@dakly/db/schema/platform';
@@ -12,24 +13,29 @@ import { products, productVariants } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { listFilters } from './product-list-filters.repository';
 import { brandNameSql, categoryPathSql } from './product-list-names.repository';
+import { productListRank } from './product-list-rank.repository';
 import {
   photoSnapshot,
   type CatalogueVariant,
   type PhotoRef,
+  tagColumns,
+  type Product,
   type Variant,
   variantSnapshot,
 } from './product-snapshots.repository';
-import { stockReadinessFilter } from './product-stock-readiness-filter.repository';
 import { type SkuMatch, skuMatchColumns } from './sku-match.repository';
-
-// Drizzle strips qualifiers in SELECT expressions; this must refer to the outer product.
-const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
 
 const productColumns = {
   id: products.id,
+  version: products.version,
+  source: sql<ProductSource>`${products.source}`,
   name: products.name,
   description: products.description,
+  shortDescription: products.shortDescription,
+  barcode: products.barcode,
+  ...tagColumns,
   categoryId: products.categoryId,
   category: categoryPathSql,
   brandId: products.brandId,
@@ -41,11 +47,17 @@ const productColumns = {
   options: sql<ProductOption[]>`${products.options}`,
   imageFileIds: products.imageFileIds,
   isStockTracked: products.isStockTracked,
+  stockStatus: products.stockStatus,
   isVisibleInChats: products.isVisibleInChats,
   isVisibleInOrderLink: products.isVisibleInOrderLink,
   status: sql<'active' | 'hidden'>`${products.status}`,
   createdAt: products.createdAt,
   updatedAt: products.updatedAt,
+};
+const negotiationColumns = {
+  negotiationEnabled: products.negotiationEnabled,
+  negotiationOpeningPoisha: products.negotiationOpeningPoisha,
+  negotiationFloorPoisha: products.negotiationFloorPoisha,
 };
 const variantColumns = {
   id: productVariants.id,
@@ -60,26 +72,20 @@ const variantColumns = {
   reserved: productVariants.reserved,
   isDefault: productVariants.isDefault,
 };
-export type CatalogueProduct = Product & {
+export type CatalogueProduct = Omit<Product, keyof typeof negotiationColumns> & {
   variants: CatalogueVariant[];
   photos: PhotoRef[];
 };
+export type EditableCatalogueProduct = CatalogueProduct &
+  Pick<Product, keyof typeof negotiationColumns>;
 type PhotoWrite = ConfirmProductPhotoInput & {
   objectKey: string;
   uploadedByUserId: string | null;
   createdAt: Date;
 };
 
-type ProductDetails = Omit<CreateProductInput, 'variants'>;
-export type Product = ProductDetails & {
-  id: string;
-  category: string | null;
-  brand: string | null;
-  imageFileIds: string[];
-  createdAt: Date;
-  updatedAt: Date;
-};
-export type { CatalogueVariant, Variant };
+type ProductDetails = Omit<CreateProductInput, 'variants' | 'tags'>;
+export type { CatalogueVariant, Product, Variant };
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
   position: number;
@@ -89,11 +95,12 @@ type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & 
 export class ProductsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async findById(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
+  async findById(storeId: string, id: string): Promise<EditableCatalogueProduct | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
           ...productColumns,
+          ...negotiationColumns,
           variants: variantSnapshot(storeId),
           photos: photoSnapshot(storeId),
         })
@@ -109,40 +116,35 @@ export class ProductsRepository {
     storeId: string,
     query: ProductListQuery,
     lowStockThreshold: number,
-  ): Promise<CatalogueProduct[]> {
-    return this.database.forStore(storeId, (tx) =>
-      tx
+    sales?: { variantId: string; units: number }[],
+  ) {
+    const rank = productListRank(storeId, query.cursor, sales);
+    return this.database.forStore(storeId, (tx) => {
+      const list = tx
         .select({
           ...productColumns,
+          ...negotiationColumns,
           variants: variantSnapshot(storeId),
           photos: photoSnapshot(storeId),
+          unitsSold: rank.unitsSold,
+          rankCreatedAt: rank.rankCreatedAt,
         })
+        .from(products);
+      return (rank.join ? list.leftJoin(rank.join, sql`sales.product_id = ${products.id}`) : list)
+        .where(and(...listFilters(storeId, query, lowStockThreshold), rank.after))
+        .orderBy(...rank.order)
+        .limit(query.limit + 1);
+    });
+  }
+
+  async count(storeId: string, query: ProductListQuery, lowStockThreshold: number) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ total: sql<number>`count(*)`.mapWith(Number) })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            ne(products.status, 'archived'),
-            query.search
-              ? sql`${products.name} ilike ${`%${query.search.replace(/[\\%_]/g, '\\$&')}%`}`
-              : undefined,
-            query.readiness === 'hidden' ? eq(products.status, 'hidden') : undefined,
-            query.readiness === 'needs_photo'
-              ? sql`cardinality(${products.imageFileIds}) = 0`
-              : undefined,
-            query.readiness === 'needs_price'
-              ? sql`exists (select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived' and coalesce(v.price_override_poisha, ${products.pricePoisha}) = 0)`
-              : undefined,
-            stockReadinessFilter(storeId, query.readiness, lowStockThreshold),
-            query.categoryId
-              ? sql`(${products.categoryId} = ${query.categoryId} or ${products.categoryId} in (select id from product_categories where store_id = ${storeId} and parent_id = ${query.categoryId}))`
-              : undefined,
-            query.brandId ? eq(products.brandId, query.brandId) : undefined,
-            query.cursor ? lt(products.id, query.cursor) : undefined,
-          ),
-        )
-        .orderBy(desc(products.id))
-        .limit(query.limit + 1),
+        .where(and(...listFilters(storeId, query, lowStockThreshold))),
     );
+    return row?.total ?? 0;
   }
 
   // The AI agent may only offer active products the shop shows in chats.
@@ -229,12 +231,17 @@ export class ProductsRepository {
     );
   }
 
-  async insert(storeId: string, input: ProductDetails, now: Date): Promise<Product> {
+  async insert(
+    storeId: string,
+    input: ProductDetails,
+    source: ProductSource,
+    now: Date,
+  ): Promise<Product> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .insert(products)
-        .values({ storeId, ...input, createdAt: now, updatedAt: now })
-        .returning(productColumns),
+        .values({ storeId, ...input, source, createdAt: now, updatedAt: now })
+        .returning({ ...productColumns, ...negotiationColumns }),
     );
     return rows[0]!;
   }
@@ -248,11 +255,11 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ ...input, updatedAt: now })
+        .set({ ...input, updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )
-        .returning(productColumns),
+        .returning({ ...productColumns, ...negotiationColumns }),
     );
     return rows[0];
   }
@@ -354,7 +361,7 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ status: 'archived', updatedAt: now })
+        .set({ status: 'archived', updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )

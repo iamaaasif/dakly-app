@@ -15,6 +15,8 @@ import {
 import type { FastifyReply } from 'fastify';
 
 import {
+  type ContactCountsQuery,
+  type ContactCountsResponse,
   type ContactDetailResponse,
   type ContactExportQuery,
   type ContactListQuery,
@@ -22,6 +24,7 @@ import {
   type ContactResponse,
   type CreateContactInput,
   type UpdateContactInput,
+  contactCountsQuerySchema,
   contactExportQuerySchema,
   contactListQuerySchema,
   createContactSchema,
@@ -36,12 +39,14 @@ import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { ContactErasureService } from './contact-erasure.service';
 import { ContactExportService } from './contact-export.service';
+import { ContactListService } from './contact-list.service';
 import { ContactsService } from './contacts.service';
 
 @Controller('contacts')
 export class ContactsController {
   constructor(
     @Inject(ContactsService) private readonly contactsService: ContactsService,
+    @Inject(ContactListService) private readonly listService: ContactListService,
     @Inject(ContactExportService) private readonly exports: ContactExportService,
     @Inject(ContactErasureService) private readonly erasureService: ContactErasureService,
   ) {}
@@ -65,10 +70,19 @@ export class ContactsController {
     @CurrentAccess() access: StoreAccess,
     @Query(new ZodValidationPipe(contactListQuerySchema)) query: ContactListQuery,
   ): Promise<ContactListResponse> {
-    return this.contactsService.list(storeId, query, access, { kind: 'user', userId });
+    return this.listService.list(storeId, query, access, { kind: 'user', userId });
   }
 
-  // Declared before `:contactId`, which would otherwise take "export" for an id.
+  // Declared before `:contactId`, which would otherwise take "counts" or "export" for an id.
+  @Get('counts')
+  @RequirePermission('customers.view')
+  counts(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(contactCountsQuerySchema)) query: ContactCountsQuery,
+  ): Promise<ContactCountsResponse> {
+    return this.listService.counts(storeId, query.hasOrdered);
+  }
+
   @Get('export')
   @RequirePermission('customers.view')
   async export(

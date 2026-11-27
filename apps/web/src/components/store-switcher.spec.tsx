@@ -18,6 +18,8 @@ const selected = {
   canEditProducts: false,
   canViewOrders: false,
   canEditOrders: false,
+  canExportOrders: false,
+  canPrintShippingLabels: false,
   canViewDueBook: false,
   canEditDueBook: false,
   canViewCampaigns: false,

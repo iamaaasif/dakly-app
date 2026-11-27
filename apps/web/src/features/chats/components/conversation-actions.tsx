@@ -1,5 +1,5 @@
 'use client';
-import { Bell, Check, RotateCcw } from 'lucide-react';
+import { Bell, Check, RotateCcw, UserPlus } from 'lucide-react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
@@ -17,35 +17,38 @@ export function ConversationActions({ conversation }: { conversation: Conversati
   const { status } = conversation;
   const done = status === 'done';
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
       <AssigneePicker conversation={conversation} />
       <LabelMenu conversation={conversation} />
       {status === 'later' || done ? (
         <Button
           variant="secondary"
+          size="sm"
           loading={update.isPending}
           onClick={() => update.mutate({ status: 'open' })}
         >
           <RotateCcw aria-hidden="true" size={16} strokeWidth={1.75} />
-          Reopen
+          <span className="sr-only @xl:not-sr-only">Reopen</span>
         </Button>
       ) : (
         <Button
           variant="secondary"
+          size="sm"
           loading={update.isPending}
           onClick={() => update.mutate({ status: 'later' })}
         >
-          <Bell aria-hidden="true" size={16} strokeWidth={1.75} />
-          Remind me
+          <Bell aria-hidden="true" size={16} />
+          <span className="sr-only @xl:not-sr-only">Remind me</span>
         </Button>
       )}
       {done ? null : (
         <Button
           variant="secondary"
+          size="sm"
           loading={update.isPending}
           onClick={() => update.mutate({ status: 'done' })}
         >
-          <Check aria-hidden="true" size={16} strokeWidth={1.75} />
+          <Check aria-hidden="true" size={16} />
           Done
         </Button>
       )}
@@ -65,11 +68,16 @@ function AssigneePicker({ conversation }: { conversation: ConversationResponse }
   const me = session?.user.id;
   return (
     <Select
-      value={conversation.assigneeUserId ?? nobody}
+      value={conversation.assigneeUserId ?? ''}
       onValueChange={(value) => update.mutate({ assigneeUserId: value === nobody ? null : value })}
     >
-      <SelectTrigger aria-label="Assigned to" className="w-36">
-        <SelectValue />
+      {/* Looks like the buttons beside it: the design has no picker arrow here. */}
+      <SelectTrigger
+        aria-label="Assigned to"
+        className="min-h-9 w-auto max-w-28 px-2.5 py-1 text-sm data-[placeholder]:text-text sm:max-w-40 [&>svg:last-child]:hidden"
+      >
+        <UserPlus aria-hidden="true" size={16} />
+        <SelectValue placeholder="Assign" />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={nobody}>Nobody</SelectItem>

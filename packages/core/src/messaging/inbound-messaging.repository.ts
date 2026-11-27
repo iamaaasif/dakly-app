@@ -158,6 +158,8 @@ export class InboundMessagingRepository {
           windowExpiresAt: sql`greatest(${conversations.windowExpiresAt}, ${expiry.toISOString()}::timestamptz)`,
           lastMessagePreview: sql`case when ${conversations.lastMessageAt} > ${sentAt}::timestamptz then ${conversations.lastMessagePreview} else ${preview} end`,
           unreadCount: sql`${conversations.unreadCount} + 1`,
+          // A draft written before this message no longer answers the customer.
+          suggestedReply: null,
           ...(referral && newerReferral(referral, sentAt)),
           updatedAt: now,
         })
@@ -185,7 +187,7 @@ export class InboundMessagingRepository {
   }
 
   // The Page where the contact wrote last, for a message that is not tied to one Page.
-  async findLatestInbound(storeId: string, contactId: string) {
+  async findLatestInbound(storeId: string, contactId: string, channel: 'messenger' | 'instagram') {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -197,7 +199,7 @@ export class InboundMessagingRepository {
           and(
             eq(conversations.storeId, storeId),
             eq(conversations.contactId, contactId),
-            eq(conversations.channel, 'messenger'),
+            eq(conversations.channel, channel),
             isNotNull(conversations.lastInboundAt),
           ),
         )

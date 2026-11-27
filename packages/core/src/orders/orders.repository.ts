@@ -20,6 +20,7 @@ import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { itemPreview } from './order-item-preview.repository';
 
 const summaryColumns = {
   id: orders.id,
@@ -47,6 +48,7 @@ const summaryColumns = {
 
 const detailColumns = {
   ...summaryColumns,
+  createdByType: orders.createdByType,
   updatedAt: orders.updatedAt,
   buyerContactId: orders.buyerContactId,
   isRecipientBuyer: orders.isRecipientBuyer,
@@ -63,6 +65,8 @@ const detailColumns = {
   deliveredAt: orders.deliveredAt,
   codCollectedAt: orders.codCollectedAt,
   possibleDuplicateOfOrderId: orders.possibleDuplicateOfOrderId,
+  note: orders.note,
+  teamNote: orders.teamNote,
 };
 
 export type OrderWrite = Omit<typeof orders.$inferInsert, 'storeId'>;
@@ -94,32 +98,34 @@ export type StageWrite = Partial<
   >
 >;
 
-type OrderFilters = Omit<OrderListQuery, 'stage'> & {
+export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
   stages?: OrderStage[];
+  // To confirm leaves out orders waiting for an advance; they show in Pending.
+  withoutAdvanceRequest?: boolean;
   timeZone: string | null;
+  phone?: string;
+  overdueBefore: Date;
 };
+
+type OrderPage = Pick<OrderListQuery, 'cursor' | 'limit'>;
 
 @Injectable()
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(storeId: string, query: OrderFilters, overdueBefore: Date, phone?: string) {
+  list(storeId: string, filter: OrderMatch, { cursor, limit }: OrderPage) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ ...summaryColumns, itemPreview })
         .from(orders)
         .where(
           and(
-            eq(orders.storeId, storeId),
-            query.stages ? inArray(orders.stage, query.stages) : undefined,
-            query.cursor ? lt(orders.number, query.cursor) : undefined,
-            orderSearch(query.search, phone),
-            orderFilters(query),
-            query.alert ? orderAlertFilter(tx, storeId, query.alert, overdueBefore) : undefined,
+            orderMatchingConditions(tx, storeId, filter),
+            cursor ? lt(orders.number, cursor) : undefined,
           ),
         )
         .orderBy(desc(orders.number))
-        .limit(query.limit + 1),
+        .limit(limit + 1),
     );
   }
 
@@ -128,7 +134,7 @@ export class OrdersRepository {
       tx
         .select({ stage: orders.stage, count: count() })
         .from(orders)
-        .where(eq(orders.storeId, storeId))
+        .where(and(eq(orders.storeId, storeId), notAwaitingAdvanceInToConfirm))
         .groupBy(orders.stage),
     );
   }
@@ -350,30 +356,34 @@ export class OrdersRepository {
   }
 }
 
-const itemPreview = sql<string | null>`(
-  select string_agg(label, ', ' order by id)
-  from (
-    select item.id, item.product_name || case when item.variant_title = 'Default' then ''
-      else ' (' || item.variant_title || ')' end || ' × ' || item.quantity::text as label
-    from ${orderItems} item
-    where item.store_id = "orders"."store_id" and item.order_id = "orders"."id"
-    order by item.id limit 2
-  ) lines
-)`;
+export function orderMatchingConditions(tx: Transaction, storeId: string, filter: OrderMatch) {
+  return and(
+    eq(orders.storeId, storeId),
+    filter.stages ? inArray(orders.stage, filter.stages) : undefined,
+    filter.withoutAdvanceRequest ? ne(orders.paymentStatus, 'advance_requested') : undefined,
+    orderSearch(filter.search, filter.phone),
+    orderFilters(filter),
+    filter.alert ? orderAlertFilter(tx, storeId, filter.alert, filter.overdueBefore) : undefined,
+  );
+}
+
+const notAwaitingAdvanceInToConfirm = sql`not (${orders.stage} = 'to_confirm' and ${orders.paymentStatus} = 'advance_requested')`;
 
 const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
 
 function orderFilters({
   source,
+  paymentStatus,
   courier,
   buyerContactId,
   createdFrom,
   createdThrough,
   timeZone,
-}: OrderFilters) {
+}: OrderMatch) {
   return and(
     buyerContactId ? eq(orders.buyerContactId, buyerContactId) : undefined,
     source ? eq(orders.source, source) : undefined,
+    paymentStatus ? eq(orders.paymentStatus, paymentStatus) : undefined,
     courier ? eq(orders.courier, courier) : undefined,
     createdFrom
       ? sql`${orders.createdAt} >= ${createdFrom}::date::timestamp at time zone ${timeZone}`

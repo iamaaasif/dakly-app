@@ -1,11 +1,12 @@
 'use client';
-import { ChevronDown } from 'lucide-react';
-import { useState, type ClipboardEvent, type ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useRef, useState, type ClipboardEvent } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { ProductFormValues, ProductResponse } from '@dakly/contracts/products';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
+import { Label } from '@dakly/ui/label';
 
 import {
   addMissingCombinations,
@@ -15,19 +16,21 @@ import {
   parsePastedCells,
   pasteColumns,
   rowKey,
-  rowStock,
   type EditableField,
+  type GridOption,
   type GridVariant,
-  type VariantGroup,
 } from '../product-variant-grid';
 import { useGridOptions } from './product-option-editor';
 import { ProductVariantBulkBar } from './product-variant-bulk-bar';
-import { VariantRow, variantGridColumns } from './product-variant-row';
+import { VariantGroupRows, variantTableColumns } from './product-variant-row';
+import { ProductVariantSheet } from './product-variant-sheet';
+import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
 const dirty = { shouldDirty: true } as const;
 
 function typedValue(field: EditableField, value: string): string | number {
-  return field === 'initialStock' ? Number(value.replace(/\D/g, '')) || 0 : value;
+  if (field === 'initialStock') return Number(value.replace(/\D/g, '')) || 0;
+  return field === 'lowStockThreshold' ? value.replace(/\D/g, '') : value;
 }
 
 function useKeySet() {
@@ -44,177 +47,232 @@ function useKeySet() {
 
 function useVariantEdits() {
   const form = useFormContext<ProductFormValues>();
+  const [regularPrice, sellPrice] = form.watch(['pricePoisha', 'compareAtPricePoisha']);
   const { options, variants } = useGridOptions();
   const setVariants = (next: GridVariant[]) => form.setValue('variants', next, dirty);
-  const setWhere = (
-    matches: (variant: GridVariant, index: number) => boolean,
-    field: EditableField,
-    value: string,
-  ) =>
+  const setWhere = (indexes: number[], field: EditableField, value: string) => {
+    const targets = new Set(indexes);
     setVariants(
-      variants.map((variant, index) =>
-        matches(variant, index) ? { ...variant, [field]: typedValue(field, value) } : variant,
+      variants.map((row, index) =>
+        targets.has(index) ? { ...row, [field]: typedValue(field, value) } : row,
       ),
     );
-  // A paste of one value is an ordinary paste; tabs and line breaks fill the cells below and beside.
-  const paste = (event: ClipboardEvent<HTMLElement>) => {
-    const { gridRow, gridField } = (event.target as HTMLElement).dataset;
-    const cells = parsePastedCells(event.clipboardData.getData('text'));
-    if (!cells || gridRow === undefined || !gridField) return;
-    event.preventDefault();
-    const start = pasteColumns.indexOf(gridField as EditableField);
-    const next = variants.map((variant) => ({ ...variant }));
-    cells.forEach((line, offset) => {
-      const target = next[Number(gridRow) + offset];
-      line.forEach((cell, column) => {
-        const field = pasteColumns[start + column];
-        if (target && field)
-          Object.assign(target, {
-            [field]: typedValue(field, field === 'sku' ? cell : cleanPastedNumber(cell)),
-          });
-      });
-    });
-    setVariants(next);
   };
   return {
     options,
     variants,
     setVariants,
     setWhere,
-    paste,
     showStock: form.watch('isStockTracked') !== false,
-    productPrice: String(form.watch('pricePoisha') ?? ''),
+    productPrice: String(sellPrice || regularPrice || ''),
   };
 }
 
-type ProductVariantTableProps = { product?: ProductResponse };
+function pasteVariants(
+  event: ClipboardEvent<HTMLElement>,
+  variants: GridVariant[],
+  { visible, showStock }: { visible: number[]; showStock: boolean },
+): GridVariant[] | undefined {
+  const { gridRow, gridField } = (event.target as HTMLElement).dataset;
+  const cells = parsePastedCells(event.clipboardData.getData('text'));
+  if (!cells || gridRow === undefined || !gridField) return;
+  const rowStart = visible.indexOf(Number(gridRow));
+  const columnStart = pasteColumns.indexOf(gridField as EditableField);
+  if (rowStart < 0 || columnStart < 0) return;
+  event.preventDefault();
+  const next = variants.map((variant) => ({ ...variant }));
+  cells.forEach((line, offset) => {
+    const row = next[visible[rowStart + offset]!];
+    line.forEach((cell, column) => {
+      const field = pasteColumns[columnStart + column];
+      if (row && field && (showStock || field !== 'initialStock'))
+        Object.assign(row, {
+          [field]: typedValue(field, field === 'sku' ? cell : cleanPastedNumber(cell)),
+        });
+    });
+  });
+  return next;
+}
 
-export function ProductVariantTable({ product }: ProductVariantTableProps) {
-  const edits = useVariantEdits();
-  const { options, variants, showStock, setVariants, setWhere } = edits;
+function useVariantGrouping(options: GridOption[]) {
+  const router = useUrlRouter();
+  const address = useSearchParams();
+  const requested = useUrlQuery(address?.get('groupBy') ?? '', (raw) => raw.groupBy ?? '');
+  const requestedPosition = options.findIndex(({ name }) => name === requested);
+  const position = Math.max(0, requestedPosition);
+  return {
+    position,
+    select: (name: string) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('groupBy', name);
+      router.push(url.pathname + url.search + url.hash);
+    },
+  };
+}
+
+function useTableRows(options: GridOption[], variants: GridVariant[], position: number) {
   const selected = useKeySet();
   const collapsed = useKeySet();
-  const open = useKeySet();
-  const isSelected = (variant: GridVariant) => selected.keys.has(rowKey(variant));
-  const chosen = variants.filter(isSelected);
+  const groups = groupVariants(options, variants, position);
+  const key = (label: string) => JSON.stringify([options[position]?.name, label]);
+  const isCollapsed = (label: string) => collapsed.keys.has(key(label));
+  const chosen = variants.flatMap((row, index) => (selected.keys.has(rowKey(row)) ? [index] : []));
+  const visible = groups.flatMap(({ label, rows }) =>
+    isCollapsed(label) ? [] : rows.map(({ index }) => index),
+  );
+  return {
+    groups,
+    chosen,
+    visible,
+    selected: selected.keys,
+    isCollapsed,
+    onToggle: (label: string) => collapsed.set(key(label), !isCollapsed(label)),
+    onSelect: selected.set,
+    onSelectAll: (checked: boolean) => selected.replace(checked ? variants.map(rowKey) : []),
+  };
+}
+
+type ProductVariantTableProps = { product?: ProductResponse; readOnly?: boolean };
+
+export function ProductVariantTable({ product, readOnly }: ProductVariantTableProps) {
+  const edits = useVariantEdits();
+  const { options, variants, showStock, productPrice, setVariants, setWhere } = edits;
+  const grouping = useVariantGrouping(options);
+  const rows = useTableRows(options, variants, grouping.position);
+  const [editing, setEditing] = useState<string | null>(null);
+  const openButton = useRef<HTMLButtonElement>(null);
+  const editIndex = variants.findIndex((row) => rowKey(row) === editing);
+  const variant = variants[editIndex];
+  const savedById = new Map(product?.variants.map((item) => [item.id, item]));
+  const paste = (event: ClipboardEvent<HTMLElement>) => {
+    if (readOnly) return;
+    const next = pasteVariants(event, variants, { visible: rows.visible, showStock });
+    if (next) setVariants(next);
+  };
   return (
-    <div className="space-y-3">
-      <ProductVariantBulkBar
-        selectedCount={chosen.length}
-        showStock={showStock}
-        missingCount={missingCombinations(options, variants)}
-        removeBlocked={chosen.length >= variants.length}
-        onSet={(field, value) => setWhere(isSelected, field, value)}
-        onRemove={() => {
-          setVariants(variants.filter((variant) => !isSelected(variant)));
-          selected.replace([]);
+    <div className="space-y-3" onPaste={paste}>
+      <GroupingControl options={options} {...grouping} />
+      <VariantTableGroups
+        {...{ edits, rows, savedById, readOnly }}
+        onEdit={(key, button) => {
+          openButton.current = button;
+          setEditing(key);
         }}
-        onAddMissing={() => setVariants(addMissingCombinations(options, variants))}
       />
-      <div className="overflow-hidden rounded-lg border border-border" onPaste={edits.paste}>
-        <TableHeader
-          allSelected={chosen.length === variants.length && variants.length > 0}
-          showStock={showStock}
-          onSelectAll={(on) => selected.replace(on ? variants.map(rowKey) : [])}
+      {variant && (
+        <ProductVariantSheet
+          {...{ options, variant, product, productPrice, showStock, readOnly }}
+          index={editIndex}
+          saved={savedById.get(variant.id ?? '')}
+          onClose={() => setEditing(null)}
+          restoreFocusTo={() => openButton.current}
+          onChange={(field, value) => setWhere([editIndex], field, value)}
         />
-        {groupVariants(options, variants).map((group) => (
-          <GroupSection
-            key={group.label}
-            group={group}
-            showStock={showStock}
-            collapsed={collapsed.keys.has(group.label)}
-            onToggle={() => collapsed.set(group.label, !collapsed.keys.has(group.label))}
-          >
-            {group.rows.map(({ variant, index }) => (
-              <VariantRow
-                key={rowKey(variant)}
-                index={index}
-                variant={variant}
-                options={options}
-                productPrice={edits.productPrice}
-                productId={product?.id}
-                saved={product?.variants.find(({ id }) => id === variant.id)}
-                showStock={showStock}
-                selected={selected.keys.has(rowKey(variant))}
-                open={open.keys.has(rowKey(variant))}
-                onSelect={(on) => selected.set(rowKey(variant), on)}
-                onToggle={() => open.set(rowKey(variant), !open.keys.has(rowKey(variant)))}
-                onChange={(field, value) => setWhere((_, at) => at === index, field, value)}
-              />
-            ))}
-          </GroupSection>
-        ))}
-      </div>
-      <Footnote />
+      )}
+      {!readOnly && (
+        <p className="text-xs text-text-muted">
+          A blank price uses the product price. Paste price, cost, stock and code from a
+          spreadsheet. Saving stock changes asks for a reason.
+        </p>
+      )}
     </div>
+  );
+}
+
+function GroupingControl(props: ReturnType<typeof useVariantGrouping> & { options: GridOption[] }) {
+  const { options, position, select } = props;
+  return (
+    <Label className="flex items-center justify-between gap-2">
+      Show by
+      <select
+        className="min-h-10 max-w-40 rounded-md border border-input-border bg-surface px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        value={options[position]?.name ?? ''}
+        onChange={(event) => select(event.target.value)}
+      >
+        {options.map(({ name }) => (
+          <option key={name}>{name}</option>
+        ))}
+      </select>
+    </Label>
+  );
+}
+
+type VariantTableGroupsProps = {
+  edits: ReturnType<typeof useVariantEdits>;
+  rows: ReturnType<typeof useTableRows>;
+  savedById: Map<string, ProductResponse['variants'][number]>;
+  readOnly?: boolean;
+  onEdit: (key: string, button: HTMLButtonElement) => void;
+};
+
+function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: VariantTableGroupsProps) {
+  const { options, variants, showStock, productPrice, setWhere, setVariants } = edits;
+  const { chosen, selected } = rows;
+  const shared = { options, savedById, productPrice, showStock, readOnly, selected, onEdit };
+  const allSelected = chosen.length === variants.length && variants.length > 0;
+  return (
+    <>
+      {!readOnly && (
+        <ProductVariantBulkBar
+          selectedCount={chosen.length}
+          showStock={showStock}
+          missingCount={missingCombinations(options, variants)}
+          removeBlocked={allSelected}
+          onSet={(field, value) => setWhere(chosen, field, value)}
+          onRemove={() => {
+            setVariants(variants.filter((_, index) => !chosen.includes(index)));
+            rows.onSelectAll(false);
+          }}
+          onAddMissing={() => setVariants(addMissingCombinations(options, variants))}
+        />
+      )}
+      <div className="@container rounded-lg border border-border">
+        <TableHeader {...{ allSelected, readOnly, showStock }} onSelectAll={rows.onSelectAll} />
+        {rows.groups.map((group) => (
+          <VariantGroupRows
+            key={group.label}
+            {...shared}
+            group={group}
+            collapsed={rows.isCollapsed(group.label)}
+            onToggle={() => rows.onToggle(group.label)}
+            onSelect={rows.onSelect}
+            onChange={setWhere}
+          />
+        ))}
+        {!rows.groups.length && <p className="p-3 text-sm text-text-muted">No variants yet.</p>}
+      </div>
+    </>
   );
 }
 
 type TableHeaderProps = {
   allSelected: boolean;
+  readOnly?: boolean;
   showStock: boolean;
   onSelectAll: (on: boolean) => void;
 };
 
-function TableHeader({ allSelected, showStock, onSelectAll }: TableHeaderProps) {
+function TableHeader({ allSelected, readOnly, showStock, onSelectAll }: TableHeaderProps) {
   return (
     <div
       className={cn(
-        'hidden bg-surface-muted py-2 text-xs font-medium text-text-muted md:grid md:items-center',
-        variantGridColumns,
+        'hidden items-center rounded-t-lg bg-surface-muted px-2 py-2 text-xs font-medium text-text-muted @lg:grid',
+        variantTableColumns,
       )}
     >
-      <Checkbox
-        aria-label="Select all variants"
-        checked={allSelected}
-        onCheckedChange={(value) => onSelectAll(value === true)}
-      />
-      <span>Image</span>
-      <span>Variant</span>
+      {readOnly ? (
+        <span />
+      ) : (
+        <Checkbox
+          aria-label="Select all variants"
+          checked={allSelected}
+          onCheckedChange={(value) => onSelectAll(value === true)}
+        />
+      )}
+      <span className="col-span-2">Variant</span>
       <span>Price</span>
       <span>Cost</span>
-      <span>Profit</span>
-      <span>{showStock ? 'Stock' : ''}</span>
-      <span>Code</span>
+      <span>{showStock ? 'Available' : 'Stock'}</span>
     </div>
-  );
-}
-
-type GroupSectionProps = {
-  group: VariantGroup;
-  showStock: boolean;
-  collapsed: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-};
-
-function GroupSection({ group, showStock, collapsed, onToggle, children }: GroupSectionProps) {
-  const pieces = group.rows.reduce((total, { variant }) => total + rowStock(variant), 0);
-  return (
-    <section aria-label={`${group.label} variants`}>
-      <button
-        type="button"
-        aria-expanded={!collapsed}
-        className="flex w-full items-center gap-2 border-t border-border bg-surface-muted px-3 py-2 text-left text-sm"
-        onClick={onToggle}
-      >
-        <ChevronDown aria-hidden="true" className={cn('size-4', collapsed && '-rotate-90')} />
-        <span className="font-semibold text-text">{group.label}</span>
-        <span className="text-text-muted">
-          {group.rows.length} {group.rows.length === 1 ? 'variant' : 'variants'}
-          {showStock ? ` · ${pieces} pcs` : ''}
-        </span>
-      </button>
-      {collapsed ? null : <ul>{children}</ul>}
-    </section>
-  );
-}
-
-function Footnote() {
-  return (
-    <p className="text-xs text-text-muted">
-      A blank price uses the product price. Stock edits go to the stock history with one reason
-      asked on save.
-    </p>
   );
 }

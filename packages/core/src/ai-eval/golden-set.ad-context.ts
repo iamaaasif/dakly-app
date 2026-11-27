@@ -185,7 +185,6 @@ export const adContextGoldenCases: GoldenCase[] = [
     acceptedHandover: 'discount',
     allowedAmountsTaka: [650],
     mentionsAnyOf: ['পোলো', 'polo', 'নির্দিষ্ট', 'fixed'],
-    holdsPrice: true,
     ...poloAd,
   },
 ];

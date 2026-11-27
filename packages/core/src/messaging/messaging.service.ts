@@ -163,6 +163,12 @@ export class MessagingService {
           contactId: identity.contactId,
           channel,
           postback: input.payload,
+          ...(input.payload.startsWith('workflow:') && {
+            identityId: identity.id,
+            tapKey: hashToken(
+              JSON.stringify([connection.id, identity.id, input.sentAt, input.payload]),
+            ).toString('hex'),
+          }),
         },
       });
       return 'stored';
@@ -311,9 +317,9 @@ export class MessagingService {
     );
   }
 
-  // A workflow is not tied to a Page: it answers where the contact wrote last.
-  async latestMessengerRoute(storeId: string, contactId: string) {
-    const latest = await this.inbound.findLatestInbound(storeId, contactId);
+  // A workflow is not tied to a Page or Instagram account: it answers where the contact wrote last.
+  async latestChatRoute(storeId: string, contactId: string, channel: 'messenger' | 'instagram') {
+    const latest = await this.inbound.findLatestInbound(storeId, contactId, channel);
     if (!latest?.connectionId || !latest.lastInboundAt) return undefined;
     const [identity] = await this.identities.findOnConnection(storeId, latest.connectionId, [
       contactId,
@@ -365,6 +371,9 @@ export class MessagingService {
         now,
       );
       if (!message) throw messagingError('MESSAGE_OPERATION_CONFLICT');
+      // A person or the AI answered, so the hand-over draft is spent. An automatic line is not an answer.
+      if (created && input.actor.kind !== 'system')
+        await this.outbound.clearSuggestedReply(storeId, conversation.id);
       if (created && requestSend)
         await this.outbox.publish({
           type: 'message.send_requested',

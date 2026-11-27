@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_intent_tag" CHECK ("conversations"."intent_tag" in ('greeting', 'price', 'size_or_stock', 'delivery', 'payment', 'order', 'confirm', 'order_status', 'exchange', 'complaint', 'photo', 'special_request', 'other'));

@@ -117,3 +117,49 @@ it('does not reply in a chat of another shop', async () => {
     }),
   ).rejects.toMatchObject({ code: 'CONVERSATION_NOT_FOUND' });
 });
+
+it('sends an uploaded photo on its own, and refuses one that does not match what was stored', async () => {
+  const { storeId, conversationId } = await chatWithCustomer();
+  const userId = randomUUID();
+  await admin.pool.query("insert into users (id, name, email) values ($1, 'Staff', $2)", [
+    userId,
+    `${userId}@example.test`,
+  ]);
+  users.push(userId);
+  const replies = app.get(ConversationReplyService);
+  const bytes = new Uint8Array(1200).fill(7);
+  const photo = { contentType: 'image/jpeg' as const, sizeBytes: bytes.byteLength };
+  const { fileId, uploadUrl } = await replies.requestPhotoUpload(storeId, conversationId, photo);
+  const put = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: bytes,
+    headers: { 'content-type': photo.contentType },
+  });
+  expect(put.ok).toBe(true);
+  await expect(
+    replies.reply(storeId, conversationId, userId, {
+      body: '',
+      operationKey: randomUUID(),
+      photo: { ...photo, fileId, sizeBytes: 999 },
+    }),
+  ).rejects.toMatchObject({ code: 'CONVERSATION_PHOTO_INVALID' });
+
+  await replies.reply(storeId, conversationId, userId, {
+    body: '',
+    operationKey: randomUUID(),
+    photo: { ...photo, fileId },
+  });
+  const { rows } = await admin.pool.query(
+    "select kind, body, attachments from messages where store_id = $1 and direction = 'out'",
+    [storeId],
+  );
+  expect(rows).toMatchObject([
+    {
+      kind: 'image',
+      body: '',
+      attachments: [
+        { kind: 'image', status: 'stored', objectKey: `stores/${storeId}/chat_photos/${fileId}` },
+      ],
+    },
+  ]);
+});

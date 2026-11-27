@@ -5,6 +5,7 @@ import { AdminModule } from '@dakly/core/admin/admin.module';
 import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
 import { AiAgentSettingsModule } from '@dakly/core/ai-agent/ai-agent-settings.module';
 import { AiPracticeModule } from '@dakly/core/ai-agent/ai-practice.module';
+import { ReplyToolsModule } from '@dakly/core/ai-agent/reply-tools.module';
 import { AnalyticsOverviewModule } from '@dakly/core/analytics/analytics-overview.module';
 import { AssistantModule } from '@dakly/core/assistant/assistant.module';
 import { AuditLogModule } from '@dakly/core/audit/audit-log.module';
@@ -18,6 +19,7 @@ import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactMergeModule } from '@dakly/core/contacts/contact-merge.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { ContentModule } from '@dakly/core/content/content.module';
+import { CustomerProfileModule } from '@dakly/core/customer-profile/customer-profile.module';
 import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { DueBookModule } from '@dakly/core/due-book/due-book.module';
@@ -52,6 +54,7 @@ import { HealthController } from './health.controller';
     AuthModule,
     SessionsModule,
     ContactsModule,
+    CustomerProfileModule,
     ContactMergeModule,
     ContentModule,
     AnalyticsOverviewModule,
@@ -73,6 +76,7 @@ import { HealthController } from './health.controller';
     KhataScansModule,
     AiAgentSettingsModule,
     AiPracticeModule,
+    ReplyToolsModule,
     KnowledgeModule,
     LinksModule,
     CommentsModule,

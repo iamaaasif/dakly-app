@@ -1,4 +1,5 @@
 'use client';
+import { ListChecks } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
@@ -6,40 +7,43 @@ import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
-import { useConversationCounts, useConversations } from '../api/conversations';
+import { useConversations } from '../api/conversations';
 import { conversationFilters, type ChatScreenQuery } from '../chat-filters';
 import { ChatBulkBar } from './chat-bulk-bar';
-import { ChatChannelFilter } from './chat-channel-filter';
 import { ChatRow } from './chat-row';
 import { ChatSearchBar } from './chat-search-bar';
-import { ChatTabs } from './chat-tabs';
 import { useSessionContext } from '@/lib/session-context';
 
 export function ChatList({ query }: { query: ChatScreenQuery }) {
-  const counts = useConversationCounts();
   const canEdit = Boolean(useSessionContext().data?.currentStore?.canEditChats);
   // Picking chats is screen state: it is not worth a link and it ends when the person leaves.
   const [selected, setSelected] = useState<string[] | null>(null);
   return (
     <section
       aria-label="Chat list"
-      className={cn('min-h-0 min-w-0 flex-col', query.chat ? 'hidden lg:flex' : 'flex')}
+      className={cn(
+        'col-start-1 row-start-2 min-h-0 min-w-0 flex-col',
+        query.chat ? 'hidden lg:flex' : 'flex',
+      )}
     >
-      <ChatTabs query={query} counts={counts.data} />
-      <ChatSearchBar query={query} />
-      {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border p-3">
-        <div className="min-w-0 flex-1">
-          <ChatChannelFilter query={query} />
-        </div>
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3.5 py-3">
+        <ChatSearchBar query={query} />
         {canEdit && !selected ? (
-          <Button variant="secondary" onClick={() => setSelected([])}>
-            Select
+          // Touch screens have no hover to show the tick box on the avatar.
+          <Button
+            variant="secondary"
+            aria-label="Select chats"
+            title="Select chats"
+            className="hidden shrink-0 p-0 pointer-coarse:inline-flex"
+            onClick={() => setSelected([])}
+          >
+            <ListChecks aria-hidden="true" size={16} />
           </Button>
         ) : null}
       </div>
+      {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ChatRows query={query} selected={selected} onSelect={setSelected} />
+        <ChatRows query={query} selected={selected} canSelect={canEdit} onSelect={setSelected} />
       </div>
     </section>
   );
@@ -48,10 +52,11 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
 type ChatRowsProps = {
   query: ChatScreenQuery;
   selected: string[] | null;
+  canSelect: boolean;
   onSelect: (selected: string[]) => void;
 };
 
-function ChatRows({ query, selected, onSelect }: ChatRowsProps) {
+function ChatRows({ query, selected, canSelect, onSelect }: ChatRowsProps) {
   const conversations = useConversations(conversationFilters(query));
   if (conversations.error)
     return (
@@ -88,6 +93,7 @@ function ChatRows({ query, selected, onSelect }: ChatRowsProps) {
             conversation={conversation}
             query={query}
             selection={selectionFor(conversation.id, selected, onSelect)}
+            onStartSelection={canSelect ? () => onSelect([conversation.id]) : undefined}
           />
         ))}
       </ul>

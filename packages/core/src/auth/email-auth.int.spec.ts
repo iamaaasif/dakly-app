@@ -17,6 +17,7 @@ import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-drive
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
+import { resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
@@ -85,6 +86,8 @@ describe('Email authentication over Fastify', () => {
     return { email, code: codeFor(email) };
   }
   beforeAll(async () => {
+    vi.stubEnv('SIGNUP_CODE_CHANNEL', 'email');
+    resetEnvForTests();
     vi.spyOn(SmtpEmailDriver.prototype, 'send').mockImplementation(async (message) => {
       messages.push(message);
     });
@@ -103,6 +106,7 @@ describe('Email authentication over Fastify', () => {
         'resend',
         'send-target',
         'fail-target',
+        'code:sign_up',
         'code:sign_in',
         'code:add_email',
         'code:email_change_proof',
@@ -113,7 +117,7 @@ describe('Email authentication over Fastify', () => {
       if (!code) continue;
       for (const target of targets)
         keys.push(
-          ...['sign_in', 'add_email', 'email_change_proof'].map((purpose) =>
+          ...['sign_up', 'sign_in', 'add_email', 'email_change_proof'].map((purpose) =>
             authKey('consumed', JSON.stringify([target, purpose, code])),
           ),
         );
@@ -131,6 +135,39 @@ describe('Email authentication over Fastify', () => {
     await admin.pool.end();
     await app.close();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resetEnvForTests();
+  });
+  it('creates an account with only the email verified after an emailed signup code', async () => {
+    const email = address();
+    const phone = `017${randomInt(10000000, 99999999)}`;
+    targets.add(phone);
+    const registration = {
+      purpose: 'sign_up',
+      name: 'রিনা',
+      email: email.toUpperCase(),
+      termsVersion: '2026-11',
+    };
+    expect((await post('/auth/code', registration)).statusCode).toBe(204);
+    expect(sms.messages.some((message) => message.to === phone)).toBe(false);
+    const result = await post('/auth/code/verify', {
+      purpose: 'sign_up',
+      email,
+      phone,
+      code: codeFor(email),
+      password: 'initialpass1',
+    });
+    expect(result.statusCode).toBe(204);
+    const [user] = await admin.db.select().from(users).where(eq(users.email, email));
+    ids.push(user!.id);
+    expect(user).toMatchObject({
+      phone: null,
+      phoneVerifiedAt: null,
+      emailVerifiedAt: expect.any(Date),
+    });
+    expect(
+      (await post('/auth/password', { identifier: email, password: 'initialpass1' })).statusCode,
+    ).toBe(204);
   });
   it('preserves a concurrently provisioned identity through a normal email change without deadlock', async () => {
     const user = await account();

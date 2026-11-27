@@ -743,6 +743,90 @@
       "when": 1795486520631,
       "tag": "0105_ai_reply_debounce",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1795658389036,
+      "tag": "0106_handover_summary",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1795679113279,
+      "tag": "0107_product_negotiation",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1795680617070,
+      "tag": "0108_price_offers",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1795712678249,
+      "tag": "0109_product_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1795753919422,
+      "tag": "0110_conversation_intent_tag",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1795753968057,
+      "tag": "0111_conversation_suggested_reply",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1795753999842,
+      "tag": "0112_reply_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1795782669003,
+      "tag": "0113_product_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1795786956831,
+      "tag": "0114_order_team_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1795788088850,
+      "tag": "0115_product_editor_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1795792164940,
+      "tag": "0116_contact_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1795793982346,
+      "tag": "0117_segment_archived_at",
+      "breakpoints": true
     }
   ]
 }

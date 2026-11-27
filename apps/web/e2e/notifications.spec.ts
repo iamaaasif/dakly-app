@@ -5,15 +5,25 @@ import { test, expect } from '@playwright/test';
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { createDatabase } from '@dakly/db/client';
 
+test.beforeEach(async ({ context, baseURL }) => {
+  const { notificationToken } = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    notificationToken: string;
+  };
+  await context.addCookies([
+    {
+      name: 'dakly_session',
+      value: notificationToken,
+      url: baseURL!,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ]);
+});
+
 test('shows a stored notification in the bell and list and marks it done', async ({
   page,
   context,
-  baseURL,
 }) => {
-  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string };
-  await context.addCookies([
-    { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
-  ]);
   const session = (await (await context.request.get('/api/me/context')).json()) as SessionContext;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const notificationId = randomUUID();
@@ -54,12 +64,7 @@ test('shows a stored notification in the bell and list and marks it done', async
 test('a notification created through the API appears in the open page without a reload', async ({
   page,
   context,
-  baseURL,
 }) => {
-  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string };
-  await context.addCookies([
-    { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
-  ]);
   const session = (await (await context.request.get('/api/me/context')).json()) as SessionContext;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const notificationId = randomUUID();

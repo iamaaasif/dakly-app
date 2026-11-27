@@ -20,6 +20,8 @@ const storeColumns = {
   extensions: stores.extensions,
 };
 const setupColumns = {
+  businessType: stores.businessType,
+  district: stores.district,
   howYouSell: stores.howYouSell,
   extensions: stores.extensions,
   guideHidden: sql<boolean>`coalesce((${stores.settings}->>'setupGuideHidden')::boolean, false)`,
@@ -105,6 +107,16 @@ export class StoresRepository {
   async settings(storeId: string): Promise<StoreSettingsRow | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(settingsColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
+    );
+    return row;
+  }
+
+  async contactDetails(storeId: string) {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ name: stores.name, phone: stores.phone, timeZone: stores.timeZone })
+        .from(stores)
+        .where(eq(stores.id, storeId)),
     );
     return row;
   }
@@ -225,28 +237,6 @@ export class StoresRepository {
   async setupProfile(storeId: string): Promise<SetupProfile | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(setupColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
-    );
-    return row as SetupProfile | undefined;
-  }
-
-  // New answers mean new steps, so the guide comes back if it was hidden.
-  async changeHowYouSell(
-    storeId: string,
-    howYouSell: SetupProfile['howYouSell'],
-    extensions: string[],
-    updatedAt: Date,
-  ): Promise<SetupProfile | undefined> {
-    const [row] = await this.tenant.forStore(storeId, (tx) =>
-      tx
-        .update(stores)
-        .set({
-          howYouSell,
-          extensions,
-          updatedAt,
-          settings: sql`${stores.settings} - 'setupGuideHidden'`,
-        })
-        .where(eq(stores.id, storeId))
-        .returning(setupColumns),
     );
     return row as SetupProfile | undefined;
   }

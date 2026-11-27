@@ -24,6 +24,9 @@ const variant = (title: string, available: number): ProductVariantResponse => ({
 });
 
 const product = (overrides: Partial<ProductResponse>): ProductResponse => ({
+  source: 'manual',
+  code: null,
+  version: 1,
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
   name: 'Cotton Panjabi',
   description: null,
@@ -35,8 +38,13 @@ const product = (overrides: Partial<ProductResponse>): ProductResponse => ({
   aliases: [],
   pricePoisha: 245000,
   compareAtPricePoisha: null,
+  negotiationEnabled: false,
   options: [],
   isStockTracked: true,
+  stockStatus: 'in_stock',
+  shortDescription: null,
+  barcode: null,
+  tags: [],
   isVisibleInChats: true,
   isVisibleInOrderLink: true,
   status: 'active',

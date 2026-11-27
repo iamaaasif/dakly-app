@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { isInStock } from './product-editor-fields';
 import {
   changeProductSchema,
   createProductSchema,
   productFormSchema,
+  productNegotiationIssue,
   productListQuerySchema,
   stockAdjustmentSchema,
 } from './products';
@@ -12,6 +14,47 @@ const option = { name: 'Size', values: ['M', 'L'] };
 const variant = { optionValues: { Size: 'M' }, priceOverridePoisha: 60000 };
 
 describe('product contracts', () => {
+  it('defaults negotiation off and its prices to null on create', () => {
+    expect(createProductSchema.parse({ name: 'Panjabi' })).toMatchObject({
+      negotiationEnabled: false,
+      negotiationOpeningPoisha: null,
+      negotiationFloorPoisha: null,
+    });
+  });
+
+  it('parses negotiation prices as poisha and preserves omitted settings on PATCH', () => {
+    expect(changeProductSchema.parse({ negotiationFloorPoisha: 105050 })).toEqual({
+      negotiationFloorPoisha: 105050,
+    });
+    expect(changeProductSchema.safeParse({ negotiationOpeningPoisha: 1250.5 }).success).toBe(false);
+    expect(
+      productFormSchema.parse({ name: 'Panjabi', negotiationOpeningPoisha: '1250.50' }),
+    ).toMatchObject({ negotiationOpeningPoisha: 125050 });
+  });
+
+  it.each([
+    [{ negotiationOpeningPoisha: null }, 'PRODUCT_NEGOTIATION_OPENING_PRICE'],
+    [{ negotiationFloorPoisha: null }, 'PRODUCT_NEGOTIATION_FLOOR_PRICE'],
+    [{ negotiationFloorPoisha: 185000 }, 'PRODUCT_NEGOTIATION_FLOOR_PRICE'],
+    [{ negotiationFloorPoisha: 180000 }, undefined],
+    [{ variants: [{ priceOverridePoisha: 190000 }] }, 'PRODUCT_NEGOTIATION_VARIANT_PRICE'],
+    [{ negotiationEnabled: false, negotiationOpeningPoisha: null }, undefined],
+  ])(
+    'checks negotiation settings against the current selling price and variants: %j',
+    (change, code) => {
+      const input = createProductSchema.parse({
+        name: 'Panjabi',
+        pricePoisha: 200000,
+        negotiationEnabled: true,
+        negotiationOpeningPoisha: 180000,
+        negotiationFloorPoisha: 160000,
+        variants: [{ costPoisha: 190000 }],
+        ...change,
+      });
+      expect(productNegotiationIssue(input)).toBe(code);
+    },
+  );
+
   it('accepts no options and integer poisha, with a positive override', () => {
     expect(createProductSchema.parse({ name: ' পাঞ্জাবি ', pricePoisha: 125050 })).toMatchObject({
       name: 'পাঞ্জাবি',
@@ -99,5 +142,33 @@ describe('product contracts', () => {
     expect(productListQuerySchema.parse({})).toEqual({ limit: 50 });
     expect(productListQuerySchema.safeParse({ limit: 101 }).success).toBe(false);
     expect(productListQuerySchema.safeParse({ readiness: 'popular' }).success).toBe(false);
+  });
+
+  it('keeps editor fields when a PATCH leaves them out', () => {
+    expect(changeProductSchema.parse({ barcode: '8901234567890' })).toEqual({
+      barcode: '8901234567890',
+    });
+    expect(createProductSchema.parse({ name: 'Scarf' })).toMatchObject({
+      stockStatus: 'in_stock',
+    });
+  });
+
+  it('accepts a swatch colour only for a listed value', () => {
+    const colours = (colors: Record<string, string>) =>
+      createProductSchema.safeParse({
+        name: 'Scarf',
+        options: [{ name: 'Colour', values: ['Red', 'Blue'], colors }],
+        variants: [{ optionValues: { Colour: 'Red' } }, { optionValues: { Colour: 'Blue' } }],
+      }).success;
+    expect(colours({ Red: '#D32F2F' })).toBe(true);
+    expect(colours({ Green: '#00FF00' })).toBe(false);
+    expect(colours({ Red: 'red' })).toBe(false);
+  });
+
+  it('offers a product to customers by its count when tracked and by its status when not', () => {
+    expect(isInStock({ isStockTracked: true, stockStatus: 'in_stock' }, 0)).toBe(false);
+    expect(isInStock({ isStockTracked: true, stockStatus: 'out_of_stock' }, 2)).toBe(true);
+    expect(isInStock({ isStockTracked: false, stockStatus: 'out_of_stock' }, 9)).toBe(false);
+    expect(isInStock({ isStockTracked: false, stockStatus: 'in_stock' }, 0)).toBe(true);
   });
 });

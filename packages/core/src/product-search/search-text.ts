@@ -1,7 +1,7 @@
+import { toAsciiDigits } from '@dakly/contracts/digits';
+
 // Shoppers write the same word in Bangla script, in Latin letters, or misspelled. Every word is
 // reduced to a short consonant key so "kurti", "kurtii" and "কুর্তি" all land on the same key.
-
-const banglaDigits = '০১২৩৪৫৬৭৮৯';
 
 const banglaConsonants: Record<string, string> = {
   ক: 'k',
@@ -55,10 +55,6 @@ const latinDigraphs: [string, string][] = [
   ['ng', 'n'],
 ];
 const latinSingles: Record<string, string> = { z: 'j', f: 'p', v: 'b', q: 'k', c: 'k', x: 'ks' };
-
-export function toAsciiDigits(text: string): string {
-  return text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
-}
 
 // Splits into words in any script, keeping digits and dropping marks that carry no meaning.
 export function searchWords(text: string): string[] {

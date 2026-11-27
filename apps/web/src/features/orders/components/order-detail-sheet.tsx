@@ -1,8 +1,8 @@
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Printer } from 'lucide-react';
 import { useContext, useRef, useState, type RefObject } from 'react';
 
 import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,8 +50,7 @@ export function OrderDetailSheet({ id, onClose, restoreFocusTo }: OrderDetailShe
       onClose={onClose}
       restoreFocusTo={restoreFocusTo}
       footer={
-        order &&
-        (canConfirm || actions.length > 0 || editable) && (
+        order && (
           <OrderStageFooter {...{ order, transition, stage, canConfirm, actions, editable }} />
         )
       }
@@ -205,6 +204,20 @@ function ConfirmOrderButton({ disabled, onClick }: ConfirmOrderButtonProps) {
   );
 }
 
+function PrintInvoiceLink({ orderId }: { orderId: string }) {
+  return (
+    <a
+      href={`/orders/${orderId}/print#print`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={buttonVariants({ variant: 'secondary' })}
+    >
+      <Printer size={16} aria-hidden="true" />
+      Print invoice
+    </a>
+  );
+}
+
 type OrderStageFooterProps = {
   order: OrderDetail;
   transition: ReturnType<typeof useOrderStage>;
@@ -234,14 +247,17 @@ function OrderStageFooter(props: OrderStageFooterProps) {
   return (
     <div className="flex w-full flex-col gap-2">
       <OrderTransitionError error={transition.error} />
-      <div className="flex items-center justify-between gap-2">
-        {cancel && (
-          <CancelOrderButton
-            disabled={transition.isPending}
-            onClick={() => setActiveDialog(cancel)}
-          />
-        )}
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <PrintInvoiceLink orderId={order.id} />
+          {cancel && (
+            <CancelOrderButton
+              disabled={transition.isPending}
+              onClick={() => setActiveDialog(cancel)}
+            />
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <SecondaryActionsMenu
             actions={secondary}
             disabled={transition.isPending}

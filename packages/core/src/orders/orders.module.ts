@@ -6,6 +6,7 @@ import { DeliveryModule } from '../delivery/delivery.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
+import { PriceOffersModule } from '../price-offers/price-offers.module';
 import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
 import { BuyerOrdersRepository } from './buyer-orders.repository';
@@ -21,15 +22,24 @@ import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderConfirmationController } from './order-confirmation.controller';
 import { OrderConfirmationRepository } from './order-confirmation.repository';
 import { OrderConfirmationService } from './order-confirmation.service';
+import { OrderExportController } from './order-export.controller';
+import { OrderExportRepository } from './order-export.repository';
+import { OrderExportService } from './order-export.service';
+import { OrderInvoiceController } from './order-invoice.controller';
+import { OrderInvoiceRepository } from './order-invoice.repository';
+import { OrderInvoiceService } from './order-invoice.service';
 import { BOT_CHECK_DRIVER, createBotCheckDriver } from './order-link-provider';
+import { OrderLinkUrlController } from './order-link-url.controller';
 import { OrderLinkController } from './order-link.controller';
 import { OrderLinkService } from './order-link.service';
 import { OrderProductArchiveController } from './order-product-archive.controller';
 import { OrderProductChangesService } from './order-product-changes.service';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
-import { OrderSetupRepository } from './order-setup.repository';
-import { OrderSetupService } from './order-setup.service';
+import { OrderShippingLabelsController } from './order-shipping-labels.controller';
+import { OrderShippingLabelsRepository } from './order-shipping-labels.repository';
+import { OrderShippingLabelsService } from './order-shipping-labels.service';
+import { OrderStageCountsRepository } from './order-stage-counts.repository';
 import { OrderStageCountsService } from './order-stage-counts.service';
 import { OrdersController } from './orders.controller';
 import { OrdersRepository } from './orders.repository';
@@ -43,15 +53,20 @@ import { OrdersService } from './orders.service';
     ContactsModule,
     DeliveryModule,
     OutboxModule,
+    PriceOffersModule,
     ProductsModule,
     StoresModule,
   ],
   controllers: [
+    OrderExportController,
     OrdersController,
     OrderProductArchiveController,
     OrderCatalogueController,
+    OrderInvoiceController,
+    OrderShippingLabelsController,
     OrderConfirmationController,
     OrderLinkController,
+    OrderLinkUrlController,
   ],
   providers: [
     BuyerOrdersRepository,
@@ -61,11 +76,16 @@ import { OrdersService } from './orders.service';
     KhataSalesRepository,
     KhataSalesService,
     OrdersRepository,
+    OrderExportRepository,
+    OrderExportService,
+    OrderStageCountsRepository,
     OrderStageCountsService,
     OrdersService,
+    OrderInvoiceRepository,
+    OrderInvoiceService,
+    OrderShippingLabelsRepository,
+    OrderShippingLabelsService,
     OrderAdvancesService,
-    OrderSetupRepository,
-    OrderSetupService,
     OrderReportingRepository,
     OrderReportingService,
     OrderAttributionRepository,
@@ -83,7 +103,6 @@ import { OrdersService } from './orders.service';
     KhataSalesService,
     OrderStageCountsService,
     OrdersService,
-    OrderSetupService,
     OrderReportingService,
     OrderAttributionService,
     OrderConfirmationService,

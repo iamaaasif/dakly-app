@@ -167,29 +167,54 @@ function WaitFields({ step, onChange }: { step: WaitStep; onChange: Props['onCha
   );
 }
 
-function stepFields({ step, onChange }: Pick<Props, 'step' | 'onChange'>) {
-  if (step.kind === 'send') {
-    const { text } = step.message;
-    return (
-      <>
-        <p className="text-sm text-text-muted">
-          Sends on {step.channels.map((channel) => channelLabels[channel]).join(', ')}.
-        </p>
-        <Field label="Message" error={text.trim() ? undefined : 'Write the message.'}>
+function SendFields({
+  step,
+  onChange,
+}: {
+  step: Extract<AutomationStep, { kind: 'send' }>;
+  onChange: Props['onChange'];
+}) {
+  const { text, messengerText } = step.message;
+  const label = messengerText === undefined ? 'Message' : 'Fallback message';
+  return (
+    <>
+      <p className="text-sm text-text-muted">
+        Sends on {step.channels.map((channel) => channelLabels[channel]).join(', ')}.
+      </p>
+      {messengerText === undefined ? null : (
+        <Field
+          label="Messenger message"
+          error={messengerText.trim() ? undefined : 'Write the Messenger message.'}
+        >
           <Textarea
-            aria-label="Message"
-            value={text}
-            maxLength={1024}
-            aria-invalid={!text.trim()}
+            aria-label="Messenger message"
+            value={messengerText}
+            maxLength={640}
+            aria-invalid={!messengerText.trim()}
             onChange={(event) =>
-              onChange({ ...step, message: { ...step.message, text: event.target.value } })
+              onChange({ ...step, message: { ...step.message, messengerText: event.target.value } })
             }
           />
         </Field>
-        <ChannelOrder step={step} onChange={onChange} />
-      </>
-    );
-  }
+      )}
+      <Field label={label} error={text.trim() ? undefined : 'Write the message.'}>
+        <Textarea
+          aria-label={label}
+          value={text}
+          maxLength={1024}
+          aria-invalid={!text.trim()}
+          onChange={(event) =>
+            onChange({ ...step, message: { ...step.message, text: event.target.value } })
+          }
+        />
+      </Field>
+      <ChannelOrder step={step} onChange={onChange} />
+    </>
+  );
+}
+
+function stepFields({ step, onChange }: Pick<Props, 'step' | 'onChange'>) {
+  if (step.kind === 'send') return <SendFields step={step} onChange={onChange} />;
   if (step.kind === 'wait') return <WaitFields step={step} onChange={onChange} />;
   if (
     step.kind === 'action' &&

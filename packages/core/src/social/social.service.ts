@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 
 import type {
@@ -23,7 +25,7 @@ import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
 import { validateInstagramPhotos, validateInstagramPost } from './post-content';
-import { photosOf, response } from './post-response';
+import { copyOf, photosOf, response } from './post-response';
 import { PublishedPostsRepository } from './published-posts.repository';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
@@ -161,6 +163,17 @@ export class SocialService {
     )
       throw socialError('POST_NOT_FOUND');
     return this.respond(storeId, post, targets);
+  }
+
+  // A copy is always a new private draft of the caller, even when the source is scheduled or published.
+  async duplicatePost(
+    storeId: string,
+    postId: string,
+    actor: UserActor,
+    access: StoreAccess,
+  ): Promise<PostResponse> {
+    const source = await this.getPost(storeId, postId, actor, access);
+    return this.createDraft(storeId, copyOf(source), randomUUID(), actor);
   }
 
   editDraft(

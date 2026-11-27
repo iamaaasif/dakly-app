@@ -103,7 +103,7 @@ type PreviewColumnProps = {
 
 function PreviewColumn({ preview, whenLabel }: PreviewColumnProps) {
   return (
-    <div className="bg-surface-muted p-4 md:p-6 lg:min-h-[calc(100vh-4.25rem)]">
+    <div className="bg-surface-muted p-4 md:p-6 lg:min-h-[calc(100vh-3.5625rem)]">
       <div className="lg:sticky lg:top-24">
         <PostPreview {...preview} whenLabel={whenLabel} />
       </div>

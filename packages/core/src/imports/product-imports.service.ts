@@ -37,6 +37,7 @@ const FIELD_LABELS = {
   name: 'Name',
   price: 'Price',
   category: 'Category',
+  brand: 'Brand',
   description: 'Description',
   status: 'Status',
   sku: 'SKU',

@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { browserFixture } from './browser-fixture.mjs';
@@ -55,7 +55,12 @@ async function run(command, args, name, env, cwd) {
       ),
     ),
   ]);
-  if (code !== 0) throw new Error(`${name} failed; inspect apps/web/e2e-artifacts/${name}.log`);
+  if (code !== 0) {
+    // CI keeps the full log only as an artifact; the tail in the job output names the failing test.
+    const log = await readFile(`${artifacts}/${name}.log`, 'utf8').catch(() => '');
+    console.error(log.split('\n').slice(-120).join('\n'));
+    throw new Error(`${name} failed; inspect apps/web/e2e-artifacts/${name}.log`);
+  }
 }
 
 function apiEnvironment(environment, publicKey) {
@@ -128,6 +133,7 @@ async function main() {
     WEB_PRIVACY_URL: 'https://legal.browser.test/privacy',
     WEB_TERMS_VERSION: 'browser-fixture-v1',
     WEB_GOOGLE_CLIENT_ID: undefined,
+    SIGNUP_CODE_CHANNEL: 'sms',
   };
   let fixture;
   try {

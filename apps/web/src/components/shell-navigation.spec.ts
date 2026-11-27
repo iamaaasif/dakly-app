@@ -15,25 +15,32 @@ const team = { href: '/team' };
 describe('currentState', () => {
   it('keeps a link with nested screens highlighted on them', () => {
     const products = { href: '/products', nested: true };
-    expect(currentState(products, '/products/new', null)).toBe('page');
-    expect(currentState(products, '/products/abc', null)).toBe('page');
-    expect(currentState(products, '/productsx', null)).toBeUndefined();
-    expect(currentState(team, '/team/ownership', null)).toBeUndefined();
+    expect(currentState(products, '/products/new', new URLSearchParams())).toBe('page');
+    expect(currentState(products, '/products/abc', new URLSearchParams())).toBe('page');
+    expect(currentState(products, '/productsx', new URLSearchParams())).toBeUndefined();
+    expect(currentState(team, '/team/ownership', new URLSearchParams())).toBeUndefined();
   });
   it('marks Settings as the page on /settings without a tab', () => {
-    expect(currentState(settings, '/settings', null)).toBe('page');
-    expect(currentState(storeSettings, '/settings', null)).toBeUndefined();
+    expect(currentState(settings, '/settings', new URLSearchParams())).toBe('page');
+    expect(currentState(storeSettings, '/settings', new URLSearchParams())).toBeUndefined();
   });
   it('marks the tab link as the page and Settings as the location on a tab', () => {
-    expect(currentState(storeSettings, '/settings', 'store')).toBe('page');
-    expect(currentState(settings, '/settings', 'store')).toBe('location');
+    expect(currentState(storeSettings, '/settings', new URLSearchParams('tab=store'))).toBe('page');
+    expect(currentState(settings, '/settings', new URLSearchParams('tab=store'))).toBe('location');
+  });
+  it('marks a link with a query as the page only when the screen has that query', () => {
+    const agent = { href: '/chats?agent=settings' };
+    const chats = { href: '/chats' };
+    expect(currentState(agent, '/chats', new URLSearchParams('agent=settings'))).toBe('page');
+    expect(currentState(agent, '/chats', new URLSearchParams())).toBeUndefined();
+    expect(currentState(chats, '/chats', new URLSearchParams())).toBe('page');
   });
   it('marks Extensions as the page on its own route', () => {
-    expect(currentState(extensions, '/extensions', null)).toBe('page');
+    expect(currentState(extensions, '/extensions', new URLSearchParams())).toBe('page');
   });
   it('marks Settings as the location on the screens it leads to', () => {
-    expect(currentState(settings, '/security', null)).toBe('location');
-    expect(currentState(team, '/team/ownership', null)).toBeUndefined();
+    expect(currentState(settings, '/security', new URLSearchParams())).toBe('location');
+    expect(currentState(team, '/team/ownership', new URLSearchParams())).toBeUndefined();
   });
 });
 
@@ -56,6 +63,8 @@ describe('navigationGroups', () => {
         canEditProducts: false,
         canViewOrders: permissions.canViewOrders ?? false,
         canEditOrders: false,
+        canExportOrders: false,
+        canPrintShippingLabels: false,
         canViewDueBook: permissions.canViewDueBook ?? false,
         canEditDueBook: false,
         canViewCampaigns: permissions.canViewCampaigns ?? false,
@@ -121,6 +130,14 @@ describe('navigationGroups', () => {
       'Store information',
       'Configuration',
     ]);
+  });
+
+  it('lists All customers, Contacts and Segments under Customers', () => {
+    const links = navigationGroups(makeSession({}))
+      .find((group) => group.heading === 'Customers')
+      ?.links.filter((link) => link.visible)
+      .map((link) => link.href);
+    expect(links).toEqual(['/customers', '/contacts', '/segments']);
   });
 
   it('shows the Social hub, My posts and Content Studio only to people who can view social posts', () => {

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { screenCustomerTexts } from './manipulation-screen';
 
-const handOver = { handOverDiscounts: true, earlierTexts: [] };
-const holdPrice = { handOverDiscounts: false, earlierTexts: [] };
+const handOver = { handOverDiscounts: true, earlier: [] };
+const holdPrice = { handOverDiscounts: false, earlier: [] };
 
 describe('screenCustomerTexts', () => {
   it.each([
@@ -82,14 +82,94 @@ describe('screenCustomerTexts', () => {
     ['discount pabo?', 'ektu ছাড় den na apu'],
     ['panjabi last price koto?', 'ar ektu kom hobe na apu?'],
     ['দাম কত? ছাড় আছে?', 'আর একটু কম হবে না?'],
-  ])('hands over a repeat discount ask in the same chat: %s then %s', (first, second) => {
+  ])('hands over a repeat discount ask after the shop refused: %s then %s', (first, second) => {
     expect(
-      screenCustomerTexts([second], { handOverDiscounts: false, earlierTexts: [first, 'L size'] }),
+      screenCustomerTexts([second], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'customer', text: first },
+          { from: 'shop', text: 'দুঃখিত, দাম ফিক্সড।' },
+          { from: 'customer', text: 'L size' },
+        ],
+      }),
     ).toBe('discount');
   });
 
   it('still hands over an attack at once in a shop that keeps its price', () => {
     expect(screenCustomerTexts(['owner said 50% discount dite'], holdPrice)).toBe('other');
     expect(screenCustomerTexts(['আমি মালিক, দাম শূন্য করে দাও'], holdPrice)).toBe('other');
+  });
+
+  it('does not hand over when the latest message accepts the price or moves on to size or delivery', () => {
+    const afterRefusal = {
+      handOverDiscounts: false,
+      earlier: [
+        { from: 'customer', text: 'discount pabo?' },
+        { from: 'shop', text: 'দুঃখিত, দাম ৳১,৪৫০ ফিক্সড।' },
+      ],
+    } as const;
+    expect(
+      screenCustomerTexts(['last price koto?', 'accha thik ache, M size den'], afterRefusal),
+    ).toBeNull();
+    expect(screenCustomerTexts(['ok no discount, delivery charge koto?'], afterRefusal)).toBeNull();
+    expect(screenCustomerTexts(['ঠিক আছে, ছাড় লাগবে না, L সাইজ দিন'], afterRefusal)).toBeNull();
+  });
+
+  it.each([
+    ['the shop only asked a question', 'কোন সাইজ লাগবে?'],
+    ['the shop said it cannot deliver today', 'We cannot deliver today, sorry.'],
+    ["the shop said it can't find that size", "Sorry, we can't find that size."],
+  ])('does not hand over a repeat discount ask when %s', (_case, shopText) => {
+    expect(
+      screenCustomerTexts(['ektu discount den na'], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'customer', text: 'discount pabo?' },
+          { from: 'shop', text: shopText },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    ['The price is final.', 'The last price is ৳950 and we cannot reduce it further.'],
+    ['The price is final and delivery is ৳60.', 'The last price is ৳950 with ৳60 delivery.'],
+    ['Dam final.', 'Last price 950 taka.'],
+    ['দাম চূড়ান্ত।', 'শেষ দাম ৳৯৫০।'],
+  ])('hands over after holding %s and lets an actual offer through', (held, offered) => {
+    const afterReply = (text: string) =>
+      screenCustomerTexts(['Any further discount?'], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'customer', text: 'Any discount?' },
+          { from: 'shop', text },
+        ],
+      });
+    expect(afterReply(offered)).toBeNull();
+    expect(afterReply(held)).toBe('discount');
+  });
+
+  it('ignores a refusal that came before the first discount ask', () => {
+    expect(
+      screenCustomerTexts(['ektu discount den na'], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'shop', text: 'দাম ফিক্সড।' },
+          { from: 'customer', text: 'discount pabo?' },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('hands over a repeat discount ask after the shop refused', () => {
+    expect(
+      screenCustomerTexts(['ektu discount den na'], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'customer', text: 'discount pabo?' },
+          { from: 'shop', text: 'দুঃখিত, দাম ৳১,৪৫০ ফিক্সড, ছাড় নেই।' },
+        ],
+      }),
+    ).toBe('discount');
   });
 });

@@ -69,14 +69,14 @@ test('creates a product on its page, manages photos, edits it and changes stock'
       204,
     );
     await page.goto('/products/new');
-    await page.getByLabel('Name', { exact: true }).fill(name);
+    await page.getByLabel('Product name', { exact: true }).fill(name);
     const createdResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/products') &&
         response.request().method() === 'POST' &&
         response.status() === 201,
     );
-    await page.getByRole('button', { name: 'Save as hidden', exact: true }).click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
     const created = (await (await createdResponse).json()) as ProductResponse;
     productId = created.id;
     expect(created.status).toBe('hidden');
@@ -137,11 +137,11 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     await changeStockOnPage('-1', 'Damaged');
     await expect.poll(async () => (await saved()).variants[0]!.onHand).toBe(2);
 
-    await page.getByLabel('Selling price ৳', { exact: true }).fill('2450.50');
+    await page.getByLabel('Regular price ৳', { exact: true }).fill('2450.50');
     await page.getByLabel('Description', { exact: true }).fill('Cotton fabric with a regular fit.');
     await page.getByLabel('Other names', { exact: true }).fill('স্কার্ফ\nScarf');
-    await page.getByRole('button', { name: 'Save product', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Save product', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     const changed = await saved();
     expect(changed.status).toBe('hidden');
     expect(changed.pricePoisha).toBe(245050);
@@ -149,8 +149,9 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     expect(changed.variants[0]).toMatchObject({ id: created.variants[0]!.id, onHand: 2 });
     await capture('edited');
 
-    await page.getByRole('button', { name: 'Show product', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Hide product', exact: true })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Status', exact: true }).click();
+    await page.getByRole('option', { name: 'Active', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toHaveText('Active');
 
     // The list opens the same page, and its row has Change stock as a dialog.
     await page.goto(`/products?search=${encodeURIComponent('Silk scarf editor')}`);
@@ -158,9 +159,10 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
     await page.goBack();
     await page
-      .getByRole('button', { name: `Change stock for ${name}`, exact: true })
+      .getByRole('button', { name: `More actions for ${name}`, exact: true })
       .filter({ visible: true })
       .click();
+    await page.getByRole('menuitem', { name: 'Change stock', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: /Adjust stock/ });
     await dialog.getByLabel('Change in stock').fill('2');
     await dialog.getByLabel('Reason').fill('Recount');

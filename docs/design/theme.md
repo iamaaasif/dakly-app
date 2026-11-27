@@ -1,40 +1,43 @@
 # Theme
 
-The tokens Dakly's web app is built from. Values were measured from the design prototype and rounded to a small set. Components use the token names, never the raw values. The tokens are defined once as CSS variables in `packages/ui/src/theme.css` and exposed to Tailwind through `@theme` (task WEB-1 in [tasks.md](../tasks.md)).
+The tokens Dakly's web app is built from. Values were measured from the design prototype and rounded to a small set; on 26 November 2026 the greys, borders, soft fills, text and warning colours moved to the Figma "Dakly" design (sampled from its Inbox frame), at Asif's choice. Components use the token names, never the raw values. The tokens are defined once as CSS variables in `packages/ui/src/theme.css` and exposed to Tailwind through `@theme` (task WEB-1 in [tasks.md](../tasks.md)).
 
 ## Colour
 
 | Token                    | Light     | Use                                                                                    |
 | ------------------------ | --------- | -------------------------------------------------------------------------------------- |
-| `--color-background`     | `#FAF9F5` | Page background                                                                        |
+| `--color-background`     | `#FAF8F7` | Page background                                                                        |
 | `--color-surface`        | `#FFFFFF` | Cards, panels, inputs                                                                  |
-| `--color-surface-muted`  | `#F3EFEB` | Table headers, selected rows, quiet fills                                              |
-| `--color-border`         | `#EEE8E3` | Decorative card borders                                                                |
+| `--color-surface-muted`  | `#FAF8F7` | Table headers, selected rows, quiet fills                                              |
+| `--color-neutral-soft`   | `#F1EFEC` | Neutral badges (Waiting for them)                                                      |
+| `--color-border`         | `#EFEBE8` | Decorative card borders                                                                |
 | `--color-border-strong`  | `#DDD7D2` | Decorative dividers only                                                               |
-| `--color-text`           | `#211A16` | Body text, headings                                                                    |
+| `--color-text`           | `#16110D` | Body text, headings                                                                    |
+| `--color-text-secondary` | `#4F4640` | Inbox folder names and other quiet labels                                              |
 | `--color-text-muted`     | `#766C65` | Secondary text, labels, captions                                                       |
 | `--color-text-subtle`    | `#A79D96` | Disabled or decorative text only                                                       |
 | `--color-primary`        | `#F06306` | Decorative brand accent                                                                |
 | `--color-primary-hover`  | `#C24F04` | Brand text on white only                                                               |
-| `--color-primary-soft`   | `#FEF0E6` | Active nav background, highlighted cards                                               |
+| `--color-primary-soft`   | `#FFF3E9` | Active nav background, highlighted cards                                               |
 | `--color-action`         | `#C24F04` | Interactive fills and link text on white or page background                            |
 | `--color-action-hover`   | `#A84303` | Primary button hover                                                                   |
 | `--color-focus`          | `#C24F04` | Focus outline on white or page background                                              |
-| `--color-input-border`   | `#8F8178` | Essential input and secondary button boundaries                                        |
+| `--color-input-border`   | `#E8E3DF` | Input and secondary button boundaries (light, as in the Figma design)                  |
 | `--color-danger-hover`   | `#961D15` | Destructive button hover                                                               |
 | `--color-on-primary`     | `#FFFFFF` | Text on primary                                                                        |
 | `--color-inverse`        | `#211A16` | Dark buttons (Ask Dakly AI, AI agent), toasts                                          |
 | `--color-success`        | `#14663D` | Positive change, "AI is handling", delivered                                           |
-| `--color-success-soft`   | `#E6F4EC` | Success badges and banners                                                             |
-| `--color-warning`        | `#8A5A00` | Needs attention, running low                                                           |
-| `--color-warning-soft`   | `#FDF3DC` | Warning badges                                                                         |
+| `--color-success-soft`   | `#E4F3EA` | Success badges and banners                                                             |
+| `--color-warning`        | `#6B4300` | Needs attention, running low                                                           |
+| `--color-warning-soft`   | `#FFF7E5` | Warning badges                                                                         |
 | `--color-danger`         | `#B4231A` | Errors, destructive actions, failed                                                    |
-| `--color-danger-soft`    | `#FDECEA` | Error banners                                                                          |
+| `--color-danger-soft`    | `#FDECE6` | Error banners                                                                          |
 | `--color-info`           | `#1F4FA3` | Neutral information, links in tables                                                   |
 | `--color-info-soft`      | `#E4ECFA` | Info badges                                                                            |
 | `--color-facebook`       | `#1665D8` | The Continue with Facebook button (white text, 5.4:1)                                  |
 | `--color-facebook-hover` | `#1255B3` | Hover fill of the Facebook button                                                      |
 | `--color-instagram`      | `#B82D7C` | Instagram channel icon (white icon, 5.7:1; the single pink stands in for the gradient) |
+| `--color-whatsapp`       | `#25D366` | WhatsApp channel logo only                                                             |
 | `--color-ai`             | `#7A2B8A` | The AI badge and AI-written labels                                                     |
 | `--color-ai-soft`        | `#F1E3F6` | AI badge background                                                                    |
 
@@ -44,9 +47,9 @@ Dark mode is not in release 1. Keep every colour behind a token so it can be add
 
 Normal text needs at least 4.5:1 contrast. The 3:1 large-text exception starts at 18 pt (24 CSS px), or 14 pt (about 18.67 CSS px) bold; 14 px semibold does not qualify. See [W3C contrast minimum](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum).
 
-The brand orange on white measures 3.235:1 and is decorative. White text uses the action fill (4.758:1), its hover fill, or danger fills. Muted text on white is 5.118:1; use muted for placeholders on white inputs. Muted on surface-muted is only 4.474:1, so neutral badges use the main text token. Subtle text on white is 2.656:1 and is restricted to disabled or decorative content. The strong decorative border on white is 1.426:1; essential boundaries use input-border instead. Focus uses a 2 px outline with a 2 px offset so it sits against the surrounding white or page background.
+The brand orange on white measures 3.235:1 and is decorative. White text uses the action fill (4.758:1), its hover fill, or danger fills. Muted text on white is 5.118:1; use muted for placeholders on white inputs. Muted on surface-muted is 4.83:1. Neutral badges use the main text token on neutral-soft (16.3:1); muted on neutral-soft is only 4.46:1. Subtle text on white is 2.656:1 and is restricted to disabled or decorative content. The strong decorative border on white is 1.426:1. Focus uses a 2 px outline with a 2 px offset so it sits against the surrounding white or page background.
 
-Status badges pair each status text token with its matching soft fill (all exceed 5.3:1). Essential input boundaries exceed 3.5:1 against white and the page background. Do not use action text on primary-soft: that pair falls below 4.5:1. Use action-hover text there instead.
+Status badges pair each status text token with its matching soft fill (all exceed 5.3:1). The input border follows the design and is 1.27:1 on white, below the WCAG 3:1 non-text minimum; inputs on white keep a visible label and the focus outline, and the search box adds the surface-muted fill. Do not use action text on primary-soft: that pair falls below 4.5:1. Use action-hover text there instead.
 
 ## Type
 
@@ -72,10 +75,10 @@ Weights: 400, 500, 600, 700 only. Numbers in tables and KPI cards use `tabular-n
 
 ## Layout
 
-- Sidebar 248 px on desktop, icons only at 64 px when collapsed, a sheet on phone.
+- Sidebar 248 px on desktop, icons only at 64 px when collapsed, a sheet on phone. The top bar is 56 px.
 - Content max width 1280 px; forms max 640 px.
 - Breakpoints: Tailwind defaults. Design phone first (360 px), then `md` (768) and `lg` (1024).
 
 ## Icons
 
-`lucide-react`, 16 px in buttons and tables, 20 px in nav, stroke width 1.75. No emoji in the UI.
+`lucide-react`, 16 px in buttons and tables, 20 px in nav and 16 px in the collapsed icon rail, stroke width 1.75. No emoji in the UI.

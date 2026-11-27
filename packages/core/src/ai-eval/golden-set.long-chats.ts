@@ -19,17 +19,17 @@ const sideTalk: Turn[][] = [
   [customer('থ্রি পিস কত?'), shop('থ্রি পিস ৳২,২০০।')],
   [customer('wait korun'), shop('জি, অপেক্ষা করছি।')],
   [customer('bhai kal reply dibo'), shop('ঠিক আছে ভাই।')],
-  [customer('ক্যানভাস জুতা আছে?'), shop('জি, ৪১ সাইজে আছে। দাম ৳১,৫০০।')],
+  [customer('ক্যানভাস জুতা আছে?'), shop('জি, ক্যানভাস জুতা আছে। দাম ৳১,৫০০।')],
   [customer('return policy ki?'), shop('ডেলিভারির সময় দেখে নিতে পারবেন।')],
   [customer('thik ache'), shop('ধন্যবাদ ভাই।')],
   [customer('আপনাদের পেজ কতদিনের?'), shop('অনেকদিন ধরেই আছি, ভাই।')],
 ];
 
-function padded(pairs: number, early: Turn[], middle: Turn[] = []): Turn[] {
-  const filler = Array.from(
-    { length: pairs },
-    (_, index) => sideTalk[index % sideTalk.length] ?? [],
-  );
+// Side talk without a product price, for a case where any other product would be a fair answer.
+const smallTalk = sideTalk.filter((pair) => !pair.some(({ text }) => text.includes('৳')));
+
+function padded(pairs: number, early: Turn[], middle: Turn[] = [], talk = sideTalk): Turn[] {
+  const filler = Array.from({ length: pairs }, (_, index) => talk[index % talk.length] ?? []);
   const half = Math.floor(filler.length / 2);
   return [...early, ...filler.slice(0, half).flat(), ...middle, ...filler.slice(half).flat()];
 }
@@ -135,6 +135,7 @@ export const longChatGoldenCases: GoldenCase[] = [
     language: 'banglish',
     question: 'oi punjabi ta ager dam e debe?',
     expectedHandover: 'discount',
+    handsOverDiscounts: true,
     allowedAmountsTaka: [1200],
     earlier: padded(30, [customer('lal punjabi ache?'), shop('জি, লাল পাঞ্জাবি আছে। দাম ৳৯৯০।')]),
     shownProducts: ['লাল পাঞ্জাবি'],
@@ -177,6 +178,7 @@ export const longChatGoldenCases: GoldenCase[] = [
       30,
       [customer('আমি XL পরি, সবসময় XL লাগে'), shop('জি ভাই।'), ...poloTalk],
       [customer('ভাই ভাই ভাই ভাই '.repeat(250)), shop('জি ভাই, বলুন।')],
+      smallTalk,
     ),
     shownProducts: ['পোলো শার্ট'],
   },
@@ -209,5 +211,35 @@ export const longChatGoldenCases: GoldenCase[] = [
     acceptedHandover: 'other',
     allowedAmountsTaka: [650],
     mentionsAnyOf: ['পোলো', 'polo'],
+  },
+  {
+    id: 'long-chat-short-size-m-bn',
+    language: 'bangla',
+    question: 'কুর্তিতে M টা আছে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'M'],
+    earlier: padded(35, [customer('আমি M পরি'), shop('জি।'), ...kurtiTalk]),
+    shownProducts: ['কুর্তি'],
+  },
+  {
+    id: 'long-chat-short-size-l-banglish',
+    language: 'banglish',
+    question: 'kurti L hobe?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti', 'L'],
+    earlier: padded(35, [customer('amar L lage'), shop('ji।'), ...kurtiTalk]),
+    shownProducts: ['কুর্তি'],
+  },
+  {
+    id: 'long-chat-shoe-41-mixed',
+    language: 'mixed',
+    question: 'ক্যানভাস জুতা 41 ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+    mentionsAnyOf: ['ক্যানভাস', 'canvas', '41', '৪১'],
+    earlier: padded(35, [customer('আমার জুতার মাপ ৪১'), shop('জি।')]),
+    shownProducts: ['ক্যানভাস জুতা'],
   },
 ];

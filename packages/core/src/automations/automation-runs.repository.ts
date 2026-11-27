@@ -28,6 +28,7 @@ export type DueRun = RunClaim & { storeId: string };
 
 export type ClaimedRun = {
   automationId: string;
+  templateKey: string | null;
   contactId: string;
   triggerOrderId: string | null;
   status: AutomationRunStatus;
@@ -58,7 +59,7 @@ export type NewRunStep = {
   stepKey: string;
   kind: AutomationStepKind;
   outcome: string;
-  channel?: 'sms' | 'messenger';
+  channel?: 'sms' | 'messenger' | 'instagram';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
   optOutUrl?: string | null;
   renderedText?: string | null;
@@ -140,6 +141,7 @@ export class AutomationRunsRepository {
       tx
         .select({
           automationId: automationRuns.automationId,
+          templateKey: automations.templateKey,
           contactId: automationRuns.contactId,
           triggerOrderId: automationRuns.triggerOrderId,
           status: automationRuns.status,
@@ -172,6 +174,64 @@ export class AutomationRunsRepository {
         .limit(1),
     );
     return row;
+  }
+
+  async lockConfirmationSend(storeId: string, stepId: string, contactId: string) {
+    const [step] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          orderId: automationRuns.triggerOrderId,
+          runId: automationRuns.id,
+          stepKey: automationRunSteps.stepKey,
+          graph: automationVersions.graph,
+          tappedAt: automationRunSteps.tappedAt,
+        })
+        .from(automationRunSteps)
+        .innerJoin(
+          automationRuns,
+          and(eq(automationRuns.storeId, storeId), eq(automationRuns.id, automationRunSteps.runId)),
+        )
+        .innerJoin(
+          automationVersions,
+          and(
+            eq(automationVersions.storeId, storeId),
+            eq(automationVersions.id, automationRuns.versionId),
+          ),
+        )
+        .innerJoin(
+          automations,
+          and(eq(automations.storeId, storeId), eq(automations.id, automationRuns.automationId)),
+        )
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRunSteps.id, stepId),
+            eq(automationRunSteps.contactId, contactId),
+            eq(automationRuns.contactId, contactId),
+            eq(automations.templateKey, 'cod_order_confirmation'),
+            eq(automationRunSteps.kind, 'send'),
+            eq(automationRunSteps.channel, 'messenger'),
+            inArray(automationRunSteps.outcome, [
+              'sending',
+              'sent',
+              'delivered',
+              'read',
+              'unconfirmed',
+            ]),
+          ),
+        )
+        .for('update', { of: automationRunSteps }),
+    );
+    return step;
+  }
+
+  async recordConfirmationTap(storeId: string, stepId: string, tappedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automationRunSteps)
+        .set({ tappedAt })
+        .where(and(eq(automationRunSteps.storeId, storeId), eq(automationRunSteps.id, stepId))),
+    );
   }
 
   async listTappedStepKeys(storeId: string, runId: string): Promise<string[]> {

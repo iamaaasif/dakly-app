@@ -90,7 +90,9 @@ function SheetHeader({
     <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6 pb-4">
       {icon}
       <div className="min-w-0 flex-1">
-        <DialogPrimitive.Title className="text-lg font-semibold">{title}</DialogPrimitive.Title>
+        <DialogPrimitive.Title className="text-lg font-semibold wrap-anywhere">
+          {title}
+        </DialogPrimitive.Title>
         {description && (
           <DialogPrimitive.Description className="text-sm text-text-muted">
             {description}

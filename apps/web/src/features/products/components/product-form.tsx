@@ -6,15 +6,17 @@ import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react
 
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import {
+  createProductSchema,
   productFormSchema,
+  productNegotiationIssue,
+  productNegotiationIssues,
   type ChangeProductInput,
   type ProductFormInput,
   type ProductFormValues,
   type ProductResponse,
 } from '@dakly/contracts/products';
 import { ApiError } from '@dakly/ui/api-client';
-import { Button } from '@dakly/ui/button';
-import { Card } from '@dakly/ui/card';
+import { Button, buttonVariants } from '@dakly/ui/button';
 
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
@@ -23,72 +25,93 @@ import { assistantDraftValues } from '../product-assistant-draft';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import { useDraftCategory } from '../use-draft-category';
+import { ProductFields } from './product-fields';
 import {
-  ProductDeliveryFields,
-  ProductDescriptionFields,
-  ProductFields,
-  ProductNameFields,
-  ProductPriceFields,
-  ProductStockFields,
-} from './product-fields';
+  ProductFormPageLayout,
+  ProductSaveError,
+  type ProductFormPage,
+} from './product-form-layout';
 import { ProductOptions } from './product-options';
-import { ProductVariantsCard } from './product-variants-card';
+import { ProductStatusField } from './product-status-field';
 import { StockReasonDialog } from './stock-reason-dialog';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
-// The full page keeps Save in a top bar that stays in view and puts photos and status beside the fields.
-type ProductFormPage = {
-  title: string;
-  backHref: string;
-  photos: ReactNode;
-  status: ReactNode;
-  notice?: ReactNode;
-};
+// The page enters regular and sell prices in this order. The API stores the price paid first.
+const pageFormSchema = productFormSchema
+  .superRefine(({ pricePoisha, compareAtPricePoisha }, context) => {
+    if (compareAtPricePoisha !== null && compareAtPricePoisha >= pricePoisha)
+      context.addIssue({
+        code: 'custom',
+        path: ['compareAtPricePoisha'],
+        message: 'Enter a sell price below the regular price.',
+      });
+  })
+  .transform((input) =>
+    input.compareAtPricePoisha === null
+      ? input
+      : {
+          ...input,
+          pricePoisha: input.compareAtPricePoisha,
+          compareAtPricePoisha: input.pricePoisha,
+        },
+  )
+  .superRefine((input, context) => {
+    const code = productNegotiationIssue(input);
+    if (code) {
+      const { field, message } = productNegotiationIssues[code];
+      context.addIssue({ code: 'custom', path: [field], message });
+    }
+  });
 
 type ProductFormProps = {
   product?: ProductResponse;
   // Values typed in the quick add, used only for a new product.
   initial?: QuickAddHandoff;
+  duplicateSource?: ProductResponse;
   // Details Ask Dakly AI filled in from the owner's prompt; nothing is saved until Save.
   assistantDraft?: AssistantProductDraft;
   onSaved: (product: ProductResponse, failedStock: string[]) => void;
-  onCancel?: () => void;
   page?: ProductFormPage;
+  expectedVersion?: number;
+  statusConflict?: ApiError;
+  onReload?: () => void;
 };
 
-export function ProductForm({
-  product,
-  initial,
-  assistantDraft,
-  onSaved,
-  onCancel,
-  page,
-}: ProductFormProps) {
+export function ProductForm(props: ProductFormProps) {
+  const { product, assistantDraft, duplicateSource, onSaved, page } = props;
+  const [editingOption, setEditingOption] = useState(false);
+  const [formProduct] = useState(product);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
-    resolver: zodResolver(productFormSchema),
-    defaultValues: formValues(product, initial, assistantDraft),
+    resolver: zodResolver(page ? pageFormSchema : productFormSchema),
+    defaultValues: {
+      isVisibleInChats: true,
+      isVisibleInOrderLink: true,
+      negotiationEnabled: false,
+      negotiationOpeningPoisha: '',
+      negotiationFloorPoisha: '',
+      ...formValues({ ...props, product: formProduct }),
+    },
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   useDraftCategory(form, assistantDraft);
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
-    product,
+    product: formProduct,
+    isDuplicate: Boolean(duplicateSource),
     dirtyFields,
+    expectedVersion: props.expectedVersion,
     onSaved,
   });
   const actions = (
     <ProductFormActions
       isPending={isPending}
-      canSave={!product || isDirty}
+      editingOption={editingOption}
+      isDirty={isDirty}
+      invalidWeight={Boolean(errors.weightGrams)}
       product={product}
-      onCancel={onCancel}
-      onSetStatus={(status) => form.setValue('status', status)}
+      cancelHref={page?.backHref}
     />
   );
-  const serverError = errors.root?.server?.message ? (
-    <p role="alert" className="text-danger">
-      {errors.root.server.message}
-    </p>
-  ) : null;
+  const error = errors.root?.server;
 
   return (
     <FormProvider {...form}>
@@ -96,18 +119,16 @@ export function ProductForm({
         {page ? (
           <ProductFormPageLayout
             page={page}
-            productId={product?.id}
             actions={actions}
-            serverError={serverError}
+            saveError={{ error: props.statusConflict ?? error, onReload: props.onReload }}
             product={product}
+            onOptionDraftChange={setEditingOption}
           />
         ) : (
-          <>
-            <ProductFields productId={product?.id} />
-            <ProductOptions mode={product ? 'edit' : 'create'} />
-            {serverError}
+          <ProductFormFields product={product}>
+            <ProductSaveError error={error} />
             {actions}
-          </>
+          </ProductFormFields>
         )}
       </form>
       {dialog}
@@ -115,15 +136,34 @@ export function ProductForm({
   );
 }
 
+function ProductFormFields({
+  product,
+  children,
+}: {
+  product?: ProductResponse;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <ProductFields productId={product?.id} />
+      {product ? null : <ProductStatusField />}
+      <ProductOptions mode={product ? 'edit' : 'create'} />
+      {children}
+    </>
+  );
+}
+
 type SubmitProductArgs = {
   product?: ProductResponse;
+  isDuplicate: boolean;
   dirtyFields: FormState<ProductFormValues>['dirtyFields'];
+  expectedVersion?: number;
   onSaved: ProductFormProps['onSaved'];
 };
 
 function useSubmitProduct(
   form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>,
-  { product, dirtyFields, onSaved }: SubmitProductArgs,
+  { product, isDuplicate, dirtyFields, expectedVersion, onSaved }: SubmitProductArgs,
 ) {
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
@@ -131,18 +171,20 @@ function useSubmitProduct(
   const [askReason, setAskReason] = useState(false);
   const reason = useRef<string | null>(null);
   const onSubmit = form.handleSubmit((parsed) => {
-    const input = product ? parsed : shareCostAcrossSizes(parsed);
-    if (product && reason.current === null && hasStockEdits(form.getValues(), product)) {
+    const input = product || isDuplicate ? parsed : shareCostAcrossSizes(parsed);
+    const values = form.getValues();
+    if (product && reason.current === null && hasStockEdits(values, product)) {
       setAskReason(true);
       return;
     }
     const setError = (error: Error) =>
       form.setError(productErrorField(error, input.variants.length), {
+        ...(error instanceof ApiError ? { type: error.code } : {}),
         message: error.message,
       });
     const writeStock = async (saved: ProductResponse) => {
       const failed = await writeStockChanges(
-        stockChanges(saved, form.getValues(), product),
+        stockChanges(saved, values, product),
         reason.current ?? 'Initial stock',
         adjustStock.mutateAsync,
       );
@@ -154,10 +196,9 @@ function useSubmitProduct(
       onSaved(saved, failed);
     };
     if (product) {
-      change.mutate(productChanges(input, dirtyFields), {
-        onSuccess: writeStock,
-        onError: setError,
-      });
+      void change
+        .mutateAsync({ ...productChanges(input, dirtyFields), expectedVersion })
+        .then(writeStock, setError);
       return;
     }
     create.mutate(input, { onError: setError, onSuccess: writeStock });
@@ -175,70 +216,6 @@ function useSubmitProduct(
   return { onSubmit, dialog, isPending: (product ? change : create).isPending };
 }
 
-function FieldCard({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Card className="space-y-3.5">
-      <h2 className="text-base font-semibold text-text">{title}</h2>
-      {children}
-    </Card>
-  );
-}
-
-type ProductFormPageLayoutProps = {
-  page: ProductFormPage;
-  product?: ProductResponse;
-  productId?: string;
-  actions: ReactNode;
-  serverError: ReactNode;
-};
-
-function ProductFormPageLayout({
-  page,
-  product,
-  productId,
-  actions,
-  serverError,
-}: ProductFormPageLayoutProps) {
-  return (
-    <>
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-border bg-background px-4 py-3 md:px-8">
-        <Link href={page.backHref} aria-label="Back to products" className="text-text-muted">
-          ←
-        </Link>
-        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-text">{page.title}</h1>
-        {/* On a phone the save buttons sit in a bar at the bottom so the title keeps its room. */}
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-4 py-3 md:static md:z-auto md:border-0 md:bg-transparent md:p-0">
-          {actions}
-        </div>
-      </div>
-      <div className="grid gap-6 px-4 pt-6 pb-24 md:px-8 md:pb-6 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-4">
-          {page.notice}
-          <Card>{page.photos}</Card>
-          <FieldCard title="Basics">
-            <ProductNameFields productId={productId} showCode={false} />
-            <ProductDescriptionFields productId={productId} />
-          </FieldCard>
-          <FieldCard title="Price">
-            <ProductPriceFields productId={productId} />
-          </FieldCard>
-          <FieldCard title="Delivery">
-            <ProductDeliveryFields />
-          </FieldCard>
-          <Card>
-            <ProductVariantsCard product={product} />
-          </Card>
-          <FieldCard title="Stock settings">
-            <ProductStockFields productId={productId} withWarnAt />
-          </FieldCard>
-          {serverError}
-        </div>
-        <div className="space-y-4">{page.status}</div>
-      </div>
-    </>
-  );
-}
-
 // On a new product the cost field edits the first variant only, so sizes left without a cost use it.
 function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
   const cost = input.variants[0]?.costPoisha ?? null;
@@ -254,99 +231,133 @@ function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
 
 type ProductFormActionsProps = {
   isPending: boolean;
-  canSave: boolean;
+  editingOption: boolean;
+  isDirty: boolean;
+  invalidWeight: boolean;
   product?: ProductResponse;
-  onCancel?: () => void;
-  onSetStatus: (status: 'active' | 'hidden') => void;
+  cancelHref?: string;
 };
 
 function ProductFormActions({
   isPending,
-  canSave,
+  editingOption,
+  isDirty,
+  invalidWeight,
   product,
-  onCancel,
-  onSetStatus,
+  cancelHref,
 }: ProductFormActionsProps) {
-  const actions = product
-    ? [{ label: 'Save product', variant: 'primary' as const }]
-    : [
-        { status: 'hidden' as const, label: 'Save as hidden', variant: 'secondary' as const },
-        { status: 'active' as const, label: 'Save and show', variant: 'primary' as const },
-      ];
-
   return (
-    <div className="flex flex-wrap justify-end gap-2 pt-2">
-      {onCancel ? (
-        <Button type="button" variant="secondary" onClick={onCancel}>
+    <div className="flex flex-wrap justify-end gap-2">
+      {cancelHref ? (
+        <Link href={cancelHref} className={buttonVariants({ variant: 'secondary' })}>
           Cancel
-        </Button>
+        </Link>
       ) : null}
-      {actions.map((action) => (
-        <Button
-          key={action.label}
-          type="submit"
-          variant={action.variant}
-          loading={isPending}
-          disabled={!canSave}
-          onClick={() => 'status' in action && onSetStatus(action.status)}
-        >
-          {action.label}
-        </Button>
-      ))}
+      <Button
+        type="submit"
+        loading={isPending}
+        disabled={editingOption || invalidWeight || (Boolean(product) && !isDirty)}
+      >
+        {product ? 'Save' : 'Create'}
+      </Button>
     </div>
   );
 }
 
-function formValues(
-  product?: ProductResponse,
-  initial?: QuickAddHandoff,
-  assistantDraft?: AssistantProductDraft,
-): ProductFormValues {
-  if (!product && assistantDraft) return assistantDraftValues(assistantDraft);
-  if (!product)
-    return {
-      name: initial?.name ?? '',
-      options: [],
-      pricePoisha: initial?.price ?? '',
-      variants: [
-        {
-          optionValues: {},
-          sku: null,
-          priceOverridePoisha: '',
-          costPoisha: '',
-          lowStockThreshold: '',
-          initialStock: Number(initial?.stock || 0),
-        },
-      ],
-      isStockTracked: true,
-      status: 'hidden',
-    };
+function formValues({
+  product,
+  initial,
+  assistantDraft,
+  duplicateSource,
+  page,
+}: Pick<
+  ProductFormProps,
+  'product' | 'initial' | 'assistantDraft' | 'duplicateSource' | 'page'
+>): ProductFormValues {
+  if (product) return sourceFormValues(product, Boolean(page), false);
+  if (duplicateSource) return sourceFormValues(duplicateSource, Boolean(page), true);
+  if (assistantDraft) return assistantDraftValues(assistantDraft);
   return {
-    name: product.name,
-    description: product.description,
-    categoryId: product.categoryId,
-    brandId: product.brandId,
-    weightGrams: weightText(product.weightGrams),
-    aliases: product.aliases,
-    options: product.options,
-    pricePoisha: takaInputFromPoisha(product.pricePoisha),
-    compareAtPricePoisha: takaInputFromPoisha(product.compareAtPricePoisha),
-    variants: product.variants.map(
+    name: initial?.name ?? '',
+    options: [],
+    pricePoisha: initial?.price ?? '',
+    variants: [
+      {
+        optionValues: {},
+        sku: null,
+        priceOverridePoisha: '',
+        costPoisha: '',
+        lowStockThreshold: '',
+        initialStock: Number(initial?.stock || 0),
+      },
+    ],
+    isStockTracked: true,
+    status: 'hidden',
+  };
+}
+
+function sourceFormValues(
+  source: ProductResponse,
+  onPage: boolean,
+  isDuplicate: boolean,
+): ProductFormValues {
+  return {
+    name: isDuplicate ? copyName(source.name) : source.name,
+    description: source.description,
+    categoryId: source.categoryId,
+    brandId: source.brandId,
+    weightGrams: weightText(source.weightGrams),
+    aliases: source.aliases,
+    options: source.options,
+    ...priceFields(source, onPage),
+    ...(isDuplicate ? {} : negotiationFields(source)),
+    variants: source.variants.map(
       ({ id, optionValues, sku, priceOverridePoisha, costPoisha, lowStockThreshold, onHand }) => ({
-        id,
+        id: isDuplicate ? undefined : id,
         optionValues: Object.fromEntries(
-          product.options.map(({ name }, index) => [index, optionValues[name]!]),
+          source.options.map(({ name }, index) => [index, optionValues[name]!]),
         ),
-        sku,
+        // Each product code is unique within the shop.
+        sku: isDuplicate ? null : sku,
         priceOverridePoisha: takaInputFromPoisha(priceOverridePoisha),
         costPoisha: takaInputFromPoisha(costPoisha),
         lowStockThreshold: lowStockThreshold === null ? '' : String(lowStockThreshold),
-        initialStock: onHand,
+        initialStock: isDuplicate ? 0 : onHand,
       }),
     ),
-    isStockTracked: product.isStockTracked,
-    isVisibleInChats: product.isVisibleInChats,
-    isVisibleInOrderLink: product.isVisibleInOrderLink,
+    isStockTracked: source.isStockTracked,
+    isVisibleInChats: source.isVisibleInChats,
+    isVisibleInOrderLink: source.isVisibleInOrderLink,
+    status: isDuplicate ? 'hidden' : undefined,
+  };
+}
+
+function copyName(name: string) {
+  const suffix = ' copy';
+  const limit = createProductSchema.shape.name.maxLength;
+  const stem = limit === null ? name : name.slice(0, limit - suffix.length).trimEnd();
+  return `${stem}${suffix}`;
+}
+
+function priceFields(product: ProductResponse, onPage: boolean) {
+  const price = product.pricePoisha;
+  const oldPrice = product.compareAtPricePoisha;
+  if (onPage && oldPrice !== null && oldPrice > price)
+    return {
+      pricePoisha: takaInputFromPoisha(oldPrice),
+      compareAtPricePoisha: takaInputFromPoisha(price),
+    };
+  return {
+    pricePoisha: takaInputFromPoisha(price),
+    compareAtPricePoisha: takaInputFromPoisha(onPage ? null : oldPrice),
+  };
+}
+
+function negotiationFields(product: ProductResponse) {
+  return {
+    negotiationEnabled: product.negotiationEnabled,
+    negotiationOpeningPoisha: takaInputFromPoisha(product.negotiationOpeningPoisha ?? null),
+    negotiationFloorPoisha: takaInputFromPoisha(product.negotiationFloorPoisha ?? null),
   };
 }
 
@@ -361,15 +372,20 @@ function productChanges(
   const changes = Object.fromEntries(
     Object.entries(fields).filter(([name]) => dirty[name as keyof typeof fields]),
   );
-  return dirty.options || dirty.variants ? { ...changes, options, variants } : changes;
+  const prices =
+    dirty.pricePoisha || dirty.compareAtPricePoisha
+      ? { pricePoisha: fields.pricePoisha, compareAtPricePoisha: fields.compareAtPricePoisha }
+      : {};
+  return dirty.options || dirty.variants
+    ? { ...changes, ...prices, options, variants }
+    : { ...changes, ...prices };
 }
 
-function productErrorField(
-  error: Error,
-  variantCount: number,
-): 'root.server' | 'variants' | 'variants.0.sku' {
-  if (error instanceof ApiError && error.code === 'PRODUCT_VARIANT_IN_OPEN_ORDERS')
-    return 'variants';
-  if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
-  return variantCount === 1 ? 'variants.0.sku' : 'variants';
+function productErrorField(error: Error, variantCount: number) {
+  if (!(error instanceof ApiError)) return 'root.server';
+  if (Object.hasOwn(productNegotiationIssues, error.code))
+    return productNegotiationIssues[error.code as keyof typeof productNegotiationIssues].field;
+  if (error.code === 'PRODUCT_VARIANT_IN_OPEN_ORDERS') return 'variants';
+  if (error.code === 'PRODUCT_SKU_TAKEN') return variantCount === 1 ? 'variants.0.sku' : 'variants';
+  return 'root.server';
 }

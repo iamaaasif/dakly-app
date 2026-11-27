@@ -25,6 +25,8 @@ const context: SessionContext = {
     canEditProducts: true,
     canViewOrders: false,
     canEditOrders: false,
+    canExportOrders: false,
+    canPrintShippingLabels: false,
     canViewDueBook: false,
     canEditDueBook: false,
     canViewCampaigns: false,
@@ -52,7 +54,10 @@ const context: SessionContext = {
   },
 };
 const empty: ProductResponse = {
+  source: 'manual',
+  code: null,
   ...createProductSchema.parse({ name: 'Silk scarf', pricePoisha: 45000 }),
+  version: 1,
   id: productId,
   category: null,
   brand: null,

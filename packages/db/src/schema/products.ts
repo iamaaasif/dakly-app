@@ -16,7 +16,9 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { ProductBulkEditChange } from '@dakly/contracts/product-bulk-edits';
+import { productStockStatuses } from '@dakly/contracts/product-editor-fields';
 import {
+  productSources,
   productStatuses,
   restockRequestStatuses,
   stockMovementKinds,
@@ -86,6 +88,8 @@ export const products = pgTable(
       .references(() => stores.id),
     name: text('name').notNull(),
     description: text('description'),
+    shortDescription: text('short_description'),
+    barcode: text('barcode'),
     categoryId: uuid('category_id'),
     brandId: uuid('brand_id'),
     // Packed parcel weight in grams for courier charges; null means the seller has not set one.
@@ -99,6 +103,9 @@ export const products = pgTable(
     // (PROD-R1): such a product is not offered in chats, shop sales or the order link.
     pricePoisha: poisha('price_poisha').notNull().default(0),
     compareAtPricePoisha: poisha('compare_at_price_poisha'),
+    negotiationEnabled: boolean('negotiation_enabled').notNull().default(false),
+    negotiationOpeningPoisha: poisha('negotiation_opening_poisha'),
+    negotiationFloorPoisha: poisha('negotiation_floor_poisha'),
     imageFileIds: uuid('image_file_ids')
       .array()
       .notNull()
@@ -106,9 +113,13 @@ export const products = pgTable(
     // Up to three option types and their values, for example Size: S, M, L.
     options: jsonb('options').notNull().default([]),
     isStockTracked: boolean('is_stock_tracked').notNull().default(true),
+    // Read only when stock is not tracked.
+    stockStatus: text('stock_status', { enum: productStockStatuses }).notNull().default('in_stock'),
     isVisibleInChats: boolean('is_visible_in_chats').notNull().default(true),
     isVisibleInOrderLink: boolean('is_visible_in_order_link').notNull().default(true),
     status: text('status', { enum: productStatuses }).notNull().default('active'),
+    // Where the product came from: typed by the shop, a spreadsheet import, or found in chats.
+    source: text('source', { enum: productSources }).notNull().default('manual'),
     askCount: integer('ask_count').notNull().default(0),
     searchEmbedding: vector('search_embedding', { dimensions: 512 }),
     // The main photo, described by the vision tier and embedded with the same model as the text,
@@ -119,6 +130,7 @@ export const products = pgTable(
     // Hash of the text the embedding was built from; a change queues a rebuild.
     searchTextHash: text('search_text_hash'),
     externalRef: text('external_ref'),
+    version: integer('version').notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -144,6 +156,20 @@ export const products = pgTable(
       .on(table.storeId, table.externalRef)
       .where(sql`${table.externalRef} is not null`),
     check('products_status', isOneOf(table.status, productStatuses)),
+    check('products_source', isOneOf(table.source, productSources)),
+    check('products_stock_status', isOneOf(table.stockStatus, productStockStatuses)),
+    check(
+      'products_short_description_length',
+      sql`${table.shortDescription} is null or char_length(${table.shortDescription}) <= 300`,
+    ),
+    check(
+      'products_barcode_length',
+      sql`${table.barcode} is null or char_length(${table.barcode}) <= 64`,
+    ),
+    check(
+      'products_negotiation_price_order',
+      sql`${table.negotiationFloorPoisha} <= ${table.negotiationOpeningPoisha}`,
+    ),
     check(
       'products_price',
       sql`${table.pricePoisha} >= 0 and coalesce(${table.compareAtPricePoisha}, 0) >= 0`,
@@ -153,6 +179,58 @@ export const products = pgTable(
       sql`${table.weightGrams} is null or ${table.weightGrams} between 1 and 100000`,
     ),
     check('products_name_length', sql`char_length(${table.name}) between 1 and 200`),
+  ],
+);
+
+export const priceOffers = pgTable(
+  'price_offers',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    conversationId: uuid('conversation_id').notNull(),
+    contactId: uuid('contact_id').notNull(),
+    productId: uuid('product_id').notNull(),
+    // The turn remains used even when older chat messages move to an archive.
+    customerMessageId: uuid('customer_message_id').notNull(),
+    offeredPricePoisha: poisha('offered_price_poisha').notNull(),
+    step: text('step', { enum: ['opening', 'final'] }).notNull(),
+    expiresAt: timestamptz('expires_at').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'price_offers_conversation_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'price_offers_contact_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'price_offers_product_store_fk',
+      columns: [table.storeId, table.productId],
+      foreignColumns: [products.storeId, products.id],
+    }).onDelete('cascade'),
+    uniqueIndex('price_offers_customer_turn_key').on(
+      table.storeId,
+      table.conversationId,
+      table.productId,
+      table.customerMessageId,
+    ),
+    index('price_offers_scope_expiry_idx').on(
+      table.storeId,
+      table.conversationId,
+      table.contactId,
+      table.productId,
+      table.expiresAt,
+    ),
+    index('price_offers_contact_idx').on(table.storeId, table.contactId),
+    index('price_offers_product_idx').on(table.storeId, table.productId),
+    check('price_offers_step', isOneOf(table.step, ['opening', 'final'])),
+    check('price_offers_nonnegative_price', sql`${table.offeredPricePoisha} >= 0`),
   ],
 );
 

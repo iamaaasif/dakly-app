@@ -11,14 +11,20 @@ import { RolePicker } from './role-picker';
 import { TeamError } from './team-error';
 import { formError } from '@/lib/form-error';
 
-export function InviteForm({ onDone }: { onDone: () => void }) {
-  const [channel, setChannel] = useState<'phone' | 'email'>('phone');
+export function InviteForm({
+  defaultChannel,
+  onDone,
+}: {
+  defaultChannel: 'phone' | 'email';
+  onDone: () => void;
+}) {
+  const [channel, setChannel] = useState(defaultChannel);
   const form = useForm({
     resolver: zodResolver(inviteMemberSchema),
     defaultValues: {
       builtInRole: 'support_agent' as const,
-      phone: '',
-      email: undefined as string | undefined,
+      phone: channel === 'phone' ? '' : undefined,
+      email: channel === 'email' ? '' : undefined,
       roleId: undefined as string | undefined,
     },
   });
@@ -52,10 +58,7 @@ export function InviteForm({ onDone }: { onDone: () => void }) {
           form.setValue('roleId', role.roleId);
         }}
       />
-      <p className="text-sm text-text-muted">
-        The recipient must verify this contact. Invitations expire in seven days and reserve a seat
-        until they expire or are cancelled.
-      </p>
+      <InviteInstructions recommendEmail={defaultChannel === 'email' && channel === 'phone'} />
       <TeamError message={form.formState.errors.root?.message} />
       <div className="flex justify-end gap-3 pt-2">
         <Button variant="secondary" onClick={onDone}>
@@ -66,5 +69,15 @@ export function InviteForm({ onDone }: { onDone: () => void }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function InviteInstructions({ recommendEmail }: { recommendEmail: boolean }) {
+  return (
+    <p className="text-sm text-text-muted">
+      The recipient must verify this contact. Invitations expire in seven days and reserve a seat
+      until they expire or are cancelled.
+      {recommendEmail ? ' Invite by email if the recipient needs to create an account.' : null}
+    </p>
   );
 }

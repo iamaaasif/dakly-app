@@ -32,7 +32,6 @@ export const staffConfirmation = { to: 'to_pack' } as const;
 export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
 
 const groupedStages: Partial<Record<OrderStage, OrderStage[]>> = {
-  to_confirm: ['to_confirm', 'on_hold'],
   delivered: ['delivered', 'partially_delivered'],
 };
 
@@ -112,18 +111,37 @@ export function requireEditableOrder(
 
 const stageSnapshot = z.object({ state: z.enum(orderStages) });
 
-export async function orderStageHistory(storeId: string, orderId: string, audit: AuditService) {
+export async function orderStageHistory(
+  storeId: string,
+  orderId: string,
+  audit: AuditService,
+  includePriceOffer: boolean,
+) {
   const history = await audit.history(storeId, {
     entityType: 'order',
     entityId: orderId,
     action: 'order.stage_changed',
   });
-  return history.map(({ before, after, createdAt, ...row }) => ({
+  const stages = history.map(({ before, after, createdAt, ...row }) => ({
     ...row,
     from: stageSnapshot.parse(before).state,
     to: stageSnapshot.parse(after).state,
     occurredAt: createdAt.toISOString(),
   }));
+  if (!includePriceOffer) return stages;
+  const offers = await audit.history(storeId, {
+    entityType: 'order',
+    entityId: orderId,
+    action: 'order.ai_price_offer',
+  });
+  return [
+    ...offers.map(({ id, createdAt }) => ({
+      id,
+      occurredAt: createdAt.toISOString(),
+      reason: 'AI price offer' as const,
+    })),
+    ...stages,
+  ];
 }
 
 export async function recordOrderCreation(

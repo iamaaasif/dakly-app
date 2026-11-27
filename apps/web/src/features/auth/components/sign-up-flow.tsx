@@ -30,7 +30,6 @@ const copy = {
   },
   verify: {
     title: 'Enter the code we sent you',
-    subtitle: 'We sent a 6-digit code by SMS to confirm your number.',
   },
 };
 // A new Google account is created at once; anything else finishes on the sign-in page.
@@ -82,14 +81,18 @@ function frameFor(stage: Stage, setStage: (stage: Stage) => void) {
   };
 }
 
-// The standalone sign-up page: email and password, then the business, then the mobile code.
 export function SignUpFlow({ config }: { config: LegalConfig }) {
   const [account, setAccount] = useState<AccountDetails>();
   const [stage, setStage] = useState<Stage>('account');
   const [sent, setSent] = useState<Sent>();
   const openShop = useOpenFirstShop(() => setStage('creating'));
+  const contact = config.signupCodeChannel === 'email' ? 'email address' : 'mobile number';
+  const frame =
+    stage === 'verify'
+      ? { ...copy.verify, subtitle: `Use the 6-digit code to verify your ${contact}.` }
+      : copy[stage];
   return (
-    <AuthFrame {...copy[stage]} {...frameFor(stage, setStage)}>
+    <AuthFrame {...frame} {...frameFor(stage, setStage)}>
       {stage === 'account' ? (
         <div className="space-y-5.5">
           <SignUpSocial config={config} />
@@ -107,6 +110,7 @@ export function SignUpFlow({ config }: { config: LegalConfig }) {
         <SignUpBusinessStep
           account={account}
           legal={config.legal}
+          channel={config.signupCodeChannel}
           onSent={(value) => {
             setSent(value);
             setStage('verify');
@@ -116,6 +120,7 @@ export function SignUpFlow({ config }: { config: LegalConfig }) {
       {stage === 'verify' && sent ? (
         <SignUpVerify
           account={sent}
+          channel={config.signupCodeChannel}
           onBack={() => setStage('business')}
           onAuthenticated={() => void openShop(sent.shop)}
         />

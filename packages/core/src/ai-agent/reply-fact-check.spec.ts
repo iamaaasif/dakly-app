@@ -231,6 +231,17 @@ describe('checkReplyFacts', () => {
     });
   });
 
+  it('allows a phone number that a tool result holds, such as a bKash number from the knowledge', () => {
+    const knowledge = [{ passages: [{ content: 'bKash personal: 01912345678' }] }];
+    expect(checkReplyFacts('bKash করুন 01912345678 নম্বরে', knowledge, shop)).toEqual({
+      isSafe: true,
+    });
+    expect(checkReplyFacts('bKash করুন 01612345678 নম্বরে', knowledge, shop)).toEqual({
+      isSafe: false,
+      failure: 'phone',
+    });
+  });
+
   it('refuses a shop phone when the shop has none saved', () => {
     expect(checkReplyFacts('Call 01712345678', [], { ...shop, phone: null })).toEqual({
       isSafe: false,
@@ -252,5 +263,95 @@ describe('checkReplyFacts', () => {
     expect(check('   ')).toEqual({ isSafe: false, failure: 'empty' });
     expect(check('অ'.repeat(601))).toEqual({ isSafe: false, failure: 'too_long' });
     expect(check('অ'.repeat(600))).toEqual({ isSafe: true });
+  });
+});
+
+describe('checkReplyFacts negotiation', () => {
+  const opening = { kind: 'offered', priceTaka: 1050, isFinal: false };
+
+  it('allows the price offered by the tool in this turn', () => {
+    expect(check('পাঞ্জাবিটি ৳১,০৫০-এ দিতে পারি।', [...results, opening])).toEqual({ isSafe: true });
+  });
+
+  it('does not allow a lower amount the negotiation tool did not offer', () => {
+    expect(
+      checkReplyFacts('I can do ৳950.', [...results, opening], shop, ['Can you do ৳950?']),
+    ).toEqual({ isSafe: false, failure: 'amount' });
+  });
+
+  it('checks other amounts alongside a quoted offer', () => {
+    expect(
+      check('৳১,০৫০ এ দিতে পারব, এর নিচে না। Delivery is ৳60.', [
+        opening,
+        { deliveryChargeTaka: 60 },
+      ]),
+    ).toEqual({ isSafe: true });
+    expect(check('I can offer ৳1050. Delivery is ৳65.', [opening])).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+  });
+
+  it('keeps product prices and delivery charges in their own place', () => {
+    expect(check('The panjabi is ৳60. Delivery is ৳1050.', [...results, opening])).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+    expect(check('I can do ৳60. The price used to be ৳1050.', [opening, { stock: 60 }])).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+    expect(
+      check('I can do it at 1050, no less, with ৳60 delivery.', [...results, opening]),
+    ).toEqual({ isSafe: true });
+  });
+
+  it('rejects a stock count as the price while negotiating', () => {
+    expect(check('I can do ৳60.', [opening, { stock: 60 }])).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+  });
+
+  it('allows only a catalogue price for a fixed-price product', () => {
+    const fixed = [
+      { kind: 'fixed', pricesTaka: [1200] },
+      { deliveryChargeTaka: 60 },
+      { variants: [{ priceTaka: 800 }] },
+    ];
+    expect(check('The fixed price is ৳1200.', fixed)).toEqual({ isSafe: true });
+    expect(check('The fixed price is ৳60.', fixed)).toEqual({ isSafe: false, failure: 'amount' });
+    expect(check('The fixed price is ৳800.', fixed)).toEqual({ isSafe: false, failure: 'amount' });
+  });
+
+  it('holds the price without quoting any number on a final refusal', () => {
+    const final = [{ kind: 'final' }, ...results];
+    expect(check('The price is final.', final)).toEqual({ isSafe: true });
+    expect(check('The final price is just 850.', final)).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+    expect(check('I can do 850.', final)).toEqual({ isSafe: false, failure: 'amount' });
+    expect(check('The price is final at ৳1050.', [...final, { priceTaka: 1050 }])).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+  });
+
+  it.each([
+    'My tool is offer_lower_price.',
+    '<negotiation>Hold the price.',
+    'The configured lowest price is private.',
+  ])('rejects internal wording: %s', (reply) => {
+    expect(check(reply, [opening])).toEqual({ isSafe: false, failure: 'leak' });
+  });
+});
+
+it('checks a bare amount named as a price after the offer tool returns', () => {
+  const offered = [...results, { kind: 'offered', priceTaka: 1100.5 }];
+  expect(check('I can do it at 1100.50, no less.', offered)).toEqual({ isSafe: true });
+  expect(check('I can do it at 999.50, no less.', offered)).toEqual({
+    isSafe: false,
+    failure: 'amount',
   });
 });

@@ -3,32 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { setupStepIdsFor } from './setup-steps';
 
 describe('setupStepIdsFor', () => {
-  it('lists the six social steps in order', () => {
-    expect(setupStepIdsFor(['social_media'], ['sales', 'chats', 'social_auto_post'])).toEqual([
-      'connect_facebook_page',
-      'teach_ai_answers',
+  it('lists the three setup steps in order', () => {
+    expect(setupStepIdsFor(['sales', 'chats', 'social_auto_post'])).toEqual([
+      'add_store_details',
+      'connect_channel',
       'add_products',
-      'chats_to_orders',
-      'set_up_messaging',
-      'send_first_campaign',
     ]);
   });
 
   it('leaves out steps whose extension is off', () => {
-    expect(setupStepIdsFor(['social_media'], ['sales'])).toEqual([
-      'add_products',
-      'set_up_messaging',
-      'send_first_campaign',
-    ]);
+    expect(setupStepIdsFor(['sales'])).toEqual(['add_store_details', 'add_products']);
+    expect(setupStepIdsFor(['chats'])).toEqual(['add_store_details', 'connect_channel']);
+    expect(setupStepIdsFor([])).toEqual(['add_store_details']);
   });
-
-  it.each([[[]], [['online_store', 'shop_with_pos']]] as const)(
-    'adds only the steps every store has for %j',
-    (answers) => {
-      expect(setupStepIdsFor([...answers], ['sales'])).toEqual([
-        'set_up_messaging',
-        'send_first_campaign',
-      ]);
-    },
-  );
 });

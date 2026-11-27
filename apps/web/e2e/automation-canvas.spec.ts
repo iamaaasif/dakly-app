@@ -126,7 +126,7 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
       await expect(steps.getByText('Exit', { exact: true }).first()).toBeVisible();
       if (index === 1) {
         await expect(steps.getByText('Tapped the link in step 1')).toBeVisible();
-        await expect(page.getByText('Else', { exact: true })).toBeVisible();
+        await expect(page.getByText('No', { exact: true })).toBeVisible();
       }
       await captureEvidence(page, evidence, `canvas-${index + 1}`);
     }
@@ -137,7 +137,8 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
     await page.getByRole('button', { name: 'Zoom out' }).click();
     await expect(zoom).toHaveText(/^\d+%$/);
     await page.getByRole('button', { name: 'Fit to screen' }).click();
-    await page.getByRole('button', { name: 'Workflow settings' }).click();
+    await page.getByRole('button', { name: 'Workflow options' }).click();
+    await page.getByRole('menuitem', { name: 'Workflow settings' }).click();
     await expect(page.getByRole('dialog', { name: 'Workflow settings' })).toBeVisible();
     await page.getByRole('button', { name: 'Done' }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/${ids.at(-1)}/canvas$`));
@@ -159,6 +160,33 @@ async function screenshotBoth(page: Page, directory: string | undefined, name: s
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }
+
+test('shows separate Messenger and fallback messages in a COD confirmation', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const { headers } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Confirm a COD order', templateKey: 'cod_order_confirmation' },
+  });
+  expect(created.status()).toBe(201);
+  const { id } = (await created.json()) as { id: string };
+  try {
+    await page.goto(`/automations/${id}/canvas`);
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
+    await expect(page.getByLabel('Messenger message')).toHaveValue(/\{order_number\}/u);
+    await expect(page.getByLabel('Fallback message')).toHaveValue(/\{confirm_link\}/u);
+    const evidence = resolve(process.cwd(), 'e2e-artifacts/ord-4-messenger');
+    await mkdir(evidence, { recursive: true });
+    await screenshotBoth(page, evidence, 'message');
+  } finally {
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.end();
+  }
+});
 
 test('adds, deletes and saves steps on the canvas', async ({ page, context, baseURL }) => {
   const { headers } = await signIn(context, baseURL!);
@@ -196,7 +224,7 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Add a step here' }).first().click();
     await page.getByRole('menuitem', { name: 'Tag contact' }).click();
-    await expect(steps.getByText('Add tag')).toBeVisible();
+    await expect(steps.getByText('Tag contact')).toBeVisible();
     const checks = page.getByRole('region', { name: 'Workflow checks' });
     await expect(checks.getByText(/sample tag/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start workflow' })).toBeDisabled();
@@ -209,15 +237,16 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     await checks.getByRole('button', { name: 'Delete step' }).click();
-    await expect(steps.getByText('Add tag')).toHaveCount(0);
+    await expect(steps.getByText('Tag contact')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Start workflow' })).toBeEnabled();
     await page.getByRole('button', { name: 'Add a step here' }).first().click();
     await page.getByRole('menuitem', { name: 'Tag contact' }).click();
     await page.getByRole('button', { name: /Options for step 1/ }).click();
     await page.getByRole('menuitem', { name: 'Delete step' }).click();
-    await expect(steps.getByText('Add tag')).toHaveCount(0);
+    await expect(steps.getByText('Tag contact')).toHaveCount(0);
     await expect(steps.getByRole('listitem')).toHaveCount(before + 1);
-    await page.getByRole('button', { name: 'Edit name' }).click();
+    await page.getByRole('button', { name: 'Workflow options' }).click();
+    await page.getByRole('menuitem', { name: 'Rename workflow' }).click();
     await page.getByLabel('Workflow name').fill('Renamed on the canvas');
     await page.getByRole('button', { name: 'Save name' }).click();
     await expect(page.getByRole('heading', { name: 'Renamed on the canvas' })).toBeVisible();
@@ -272,7 +301,9 @@ test('shows how many entries reached each step', async ({ page, context, baseURL
     const steps = page.getByRole('list', { name: 'Workflow steps' });
     await expect(steps.getByText('Trigger', { exact: true })).toBeVisible();
     await expect(steps.getByText(/entry|entries|tapped/)).toHaveCount(0);
-    await page.getByRole('button', { name: 'Show stats' }).click();
+    await page.getByRole('button', { name: 'Workflow options' }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Show stats' }).click();
+    await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/stats=1/);
     await page.reload();
     await expect(steps.getByText(/^1 sent · 1 tapped/)).toBeVisible();

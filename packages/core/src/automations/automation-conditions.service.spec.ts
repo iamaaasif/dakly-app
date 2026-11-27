@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import type { ContactsService } from '../contacts/contacts.service';
+import type { MessagingService } from '../messaging/messaging.service';
 import type { OrderReportingService } from '../orders/order-reporting.service';
 import type { SegmentsService } from '../segments/segments.service';
 import type { SendPolicyService } from '../sending/send-policy.service';
@@ -22,6 +23,7 @@ function conditions(progress: OrderProgress | undefined) {
   return new AutomationConditionsService(
     unused as SegmentsService,
     unused as SendPolicyService,
+    { latestChatRoute: async () => undefined } as unknown as MessagingService,
     contacts,
     orders,
     repository,
@@ -32,6 +34,7 @@ function facts(orderId: string | null): RunFacts {
   return {
     graph,
     automationId: 'a',
+    templateKey: 'cod_order_confirmation',
     storeId: 's',
     runId: 'r',
     contactId: 'c',
@@ -84,5 +87,16 @@ describe('COD confirmation exits', () => {
     const onHold = { isConfirmed: false, isCancelled: false, isAwaitingConfirmation: false };
     const plain = { ...reminder, message: { text: 'ধন্যবাদ {first_name}', buttons: [] } };
     expect(await conditions(onHold).refreshExitReason(facts('o'), plain, at)).toBeUndefined();
+  });
+
+  it('holds a message with COD buttons even when the fallback link was removed', async () => {
+    const onHold = { isConfirmed: false, isCancelled: false, isAwaitingConfirmation: false };
+    const step = {
+      ...reminder,
+      message: { ...reminder.message, text: 'অর্ডারটি এখনো নিশ্চিত হয়নি।' },
+    };
+    expect(await conditions(onHold).refreshExitReason(facts('o'), step, at)).toBe(
+      'order_not_awaiting_confirmation',
+    );
   });
 });

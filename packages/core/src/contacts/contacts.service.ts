@@ -4,8 +4,6 @@ import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
   ContactDetailResponse,
   ContactImportRow,
-  ContactListQuery,
-  ContactListResponse,
   ContactResponse,
   CreateContactInput,
   ImportDuplicateMode,
@@ -81,8 +79,10 @@ export class ContactsService {
     await this.phoneAccess.checkLimit(storeId, 'write', access.seeFullPhone, actor);
     const contact = await this.transaction.run(storeId, async () => {
       // A staff add is an intentional customer under the glossary, whatever its orders.
+      const { age, ...details } = input;
       const created = await this.contactsRepository.insert(storeId, {
-        ...input,
+        ...details,
+        birthYear: age === undefined ? undefined : this.clock.now().getUTCFullYear() - age,
         source: 'manual',
         kind: 'customer',
       });
@@ -118,25 +118,6 @@ export class ContactsService {
         return identity;
       }
     });
-  }
-
-  async list(
-    storeId: string,
-    query: ContactListQuery,
-    { seeFullPhone }: Access,
-    actor: Extract<Actor, { kind: 'user' }>,
-  ): Promise<ContactListResponse> {
-    const { search, ...filter } = query;
-    const match = searchFilter(search, seeFullPhone);
-    if (match.phone) await this.phoneAccess.checkLimit(storeId, 'lookup', seeFullPhone, actor);
-    const rows = await this.contactsRepository.list(storeId, { ...filter, ...match });
-    const items = rows.slice(0, query.limit).map((contact) => ({
-      ...contact,
-      phone: maskedUnless(seeFullPhone, contact.phone),
-      whatsappPhone: maskedUnless(seeFullPhone, contact.whatsappPhone),
-      createdAt: contact.createdAt.toISOString(),
-    }));
-    return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
   // The chat list narrows by these ids; phone searches keep the customer list's rules and limit.
@@ -377,6 +358,10 @@ export class ContactsService {
 
   countMatching(storeId: string, rules: SegmentRules): Promise<number> {
     return this.contactsRepository.countMatching(storeId, rules);
+  }
+
+  countReachable(storeId: string, rules: SegmentRules) {
+    return this.contactsRepository.countReachable(storeId, rules);
   }
 
   isMatching(storeId: string, contactId: string, rules: SegmentRules): Promise<boolean> {

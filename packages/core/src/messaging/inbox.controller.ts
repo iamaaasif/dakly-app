@@ -33,6 +33,11 @@ import {
   orderIdempotencyKeySchema,
   type CreateConversationOrderInput,
 } from '@dakly/contracts/orders';
+import {
+  productPhotoUploadSchema,
+  type ProductPhotoUploadInput,
+  type ProductPhotoUploadResponse,
+} from '@dakly/contracts/products';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
@@ -77,8 +82,8 @@ export class InboxController {
 
   @Get('counts')
   @RequirePermission('chats.view')
-  counts(@CurrentStore() storeId: string) {
-    return this.inbox.counts(storeId);
+  counts(@CurrentStore() storeId: string, @CurrentUser() userId: string) {
+    return this.inbox.counts(storeId, { kind: 'user', userId });
   }
 
   @Get('summary')
@@ -131,6 +136,17 @@ export class InboxController {
     @Body(new ZodValidationPipe(createConversationReplySchema)) input: CreateConversationReplyInput,
   ) {
     return this.replies.reply(storeId, id, userId, input);
+  }
+
+  @Post(':conversationId/photos/upload-url')
+  @RequirePermission('chats.edit')
+  @HttpCode(200)
+  requestPhotoUpload(
+    @CurrentStore() storeId: string,
+    @Param('conversationId', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(productPhotoUploadSchema)) input: ProductPhotoUploadInput,
+  ): Promise<ProductPhotoUploadResponse> {
+    return this.replies.requestPhotoUpload(storeId, id, input);
   }
 
   @Post(':conversationId/orders')

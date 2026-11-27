@@ -29,9 +29,10 @@ import { ProductsService } from '../products/products.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { practiceError } from './ai-practice.errors';
 import { classifierInput } from './chat-memory';
+import { declineReply } from './decline-reply';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { classifyChat } from './prompts/classify-chat.v2';
+import { classifyChat } from './prompts/classify-chat.v4';
 import { gradeTestAnswer } from './prompts/grade-test-answer.v1';
 import { SalesAgentService } from './sales-agent.service';
 
@@ -94,9 +95,9 @@ export class AiPracticeService {
     const { rules } = await this.settings.practice(storeId);
     const screened = screenCustomerTexts([question], {
       handOverDiscounts: rules.handover.discounts,
-      earlierTexts: [],
+      earlier: [],
     });
-    if (screened) return { kind: 'handover', reason: screened };
+    if (screened) return this.stopped(screened, rules.replyLanguage, question);
     const classified = await this.ai.run(storeId, {
       tier: 'fast',
       purpose: 'classify',
@@ -113,7 +114,7 @@ export class AiPracticeService {
             takesOrders: rules.takeOrders,
           })
         : 'ai_unavailable';
-    if (reason) return { kind: 'handover', reason };
+    if (reason) return this.stopped(reason, rules.replyLanguage, question);
     const composed = await this.sales.compose({
       storeId,
       // Matches no real contact, so the order tools find nothing.
@@ -122,8 +123,23 @@ export class AiPracticeService {
       rules,
     });
     if (composed.kind === 'busy') throw practiceError('PRACTICE_AI_BUSY');
-    if (composed.kind === 'handover') return composed;
+    if (composed.kind === 'handover')
+      return this.stopped(composed.reason, rules.replyLanguage, question);
     return { kind: 'reply', text: composed.text, source: await this.sourceOf(storeId, composed) };
+  }
+
+  // The reason `other` gets the refusal line a customer would get, not a hand-over.
+  private stopped(
+    reason: Extract<TestAnswerResponse, { kind: 'handover' }>['reason'],
+    replyLanguage: Parameters<typeof declineReply>[0],
+    question: string,
+  ): TestAnswerResponse {
+    if (reason !== 'other') return { kind: 'handover', reason };
+    return {
+      kind: 'reply',
+      text: declineReply(replyLanguage, [question]),
+      source: { kind: 'general' },
+    };
   }
 
   // Knowledge wins over store rules, and store rules over products, because an owner's own answer is

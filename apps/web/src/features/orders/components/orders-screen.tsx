@@ -2,59 +2,58 @@
 
 import { useRef, useState, type RefObject } from 'react';
 
-import { orderTabs, type OrderListQuery, type OrderStage } from '@dakly/contracts/orders';
+import {
+  orderTabs,
+  type OrderAlerts as Alerts,
+  type OrderListQuery,
+  type OrderStage,
+} from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
-import { QueryError } from '@dakly/ui/query-error';
 
 import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
-import { parseOrdersScreen } from '../orders-url';
+import { parseOrdersScreen, type OrdersNavigationQuery } from '../orders-url';
 import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
-import { OrderFilters } from './order-filters';
-import { OrdersList } from './orders-list';
-import { Refreshing } from '@/components/refreshing';
+import { OrderExportMenu } from './order-export-menu';
+import { OrdersResults } from './orders-results';
 import { StorePage } from '@/components/store-page';
 import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
-type OrdersScreenProps = { query: OrderListQuery; selected?: string };
+type OrdersScreenProps = { query: OrderListQuery; selected?: string; labelOrderIds?: string[] };
 
 export function OrdersScreen(initial: OrdersScreenProps) {
-  const { query, selected } = useUrlQuery(initial, parseOrdersScreen);
+  const { query, selected, labelOrderIds = [] } = useUrlQuery(initial, parseOrdersScreen);
   const orders = useOrders(query);
-  const pendingListRefresh = orders.fetchStatus !== 'idle';
+  const alerts = useRememberedAlerts(orders.data?.alerts);
   const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
-  const listHref = `/orders?${ordersSearch(query)}`;
+  const navigationQuery = { ...query, labelOrderIds };
+  const pendingListRefresh = orders.fetchStatus !== 'idle';
 
   return (
     <StorePage permission="canViewOrders">
-      <main className="mx-auto max-w-7xl space-y-4 p-6 md:p-8">
+      <main className="space-y-4 p-4 md:p-8">
         <OrdersHeader
           heading={heading}
-          onSaved={(id) => router.replace(`/orders?${ordersSearch({ ...query, selected: id })}`)}
+          query={query}
+          onSaved={(id) =>
+            router.replace(`/orders?${ordersSearch({ ...navigationQuery, selected: id })}`)
+          }
         />
-        {orders.data ? <OrderAlerts alerts={orders.data.alerts} /> : null}
-        <OrderStageNav query={query} counts={orders.data?.counts} />
-        <OrderFilters query={query} />
-        {orders.isPending ? <p role="status">Loading orders…</p> : null}
-        {orders.error ? (
-          <QueryError
-            message={orders.error.message}
-            onRetry={() => void orders.refetch()}
-            retryLabel="Retry orders"
-          />
-        ) : null}
-        {orders.data ? (
-          <Refreshing active={orders.isPlaceholderData}>
-            <OrdersList page={orders.data} query={query} />
-          </Refreshing>
-        ) : null}
+        {alerts ? <OrderAlerts alerts={alerts} labelOrderIds={labelOrderIds} /> : null}
+        <OrderStageNav query={navigationQuery} counts={orders.data?.counts} />
+        <OrdersResults
+          query={navigationQuery}
+          orders={orders}
+          counts={orders.data?.counts}
+          selected={selected}
+        />
         <p className="text-xs text-text-muted">Return risk is based on your past orders.</p>
         {selected ? (
           <OrderDetailSheet
@@ -63,7 +62,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
             restoreFocusTo={() =>
               orderRowFocus(heading.current, pendingListRefresh ? undefined : selected)
             }
-            onClose={() => router.replace(listHref)}
+            onClose={() => router.replace(`/orders?${ordersSearch(navigationQuery)}`)}
           />
         ) : null}
       </main>
@@ -71,22 +70,31 @@ export function OrdersScreen(initial: OrdersScreenProps) {
   );
 }
 
+// The alerts come with each list, so another tab's loading list must not make the row blink away.
+function useRememberedAlerts(latest: Alerts | undefined) {
+  const [alerts, setAlerts] = useState(latest);
+  if (latest && latest !== alerts) setAlerts(latest);
+  return alerts;
+}
+
 type OrdersHeaderProps = {
   heading: RefObject<HTMLHeadingElement | null>;
+  query: OrderListQuery;
   onSaved: (id: string) => void;
 };
 
-function OrdersHeader({ heading, onSaved }: OrdersHeaderProps) {
+function OrdersHeader({ heading, query, onSaved }: OrdersHeaderProps) {
   const { data } = useSessionContext();
   const [open, setOpen] = useState(false);
-  const canCreate = data?.currentStore?.canEditOrders;
+  const store = data?.currentStore;
+  const canCreate = store?.canEditOrders;
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1
           ref={heading}
           tabIndex={-1}
-          className="text-2xl font-bold tracking-tight text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="text-page font-bold tracking-tight text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
           Orders
         </h1>
@@ -95,11 +103,14 @@ function OrdersHeader({ heading, onSaved }: OrdersHeaderProps) {
           in hand.
         </p>
       </div>
-      {canCreate && (
-        <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
-          <span aria-hidden="true">+ </span>New order
-        </Button>
-      )}
+      <div className="flex flex-wrap items-start gap-2">
+        {store?.canExportOrders ? <OrderExportMenu query={query} /> : null}
+        {canCreate ? (
+          <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
+            <span aria-hidden="true">+ </span>New order
+          </Button>
+        ) : null}
+      </div>
       {open && (
         <NewOrderDialog
           onClose={() => setOpen(false)}
@@ -123,7 +134,7 @@ function orderRowFocus(heading: HTMLHeadingElement | null, orderId: string | und
 }
 
 type OrderStageNavProps = {
-  query: OrderListQuery;
+  query: OrdersNavigationQuery;
   counts?: Record<OrderStage, number>;
 };
 

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0105_snapshot.json`: **110 tables, 1446 columns, 438 explicit indexes and 340 foreign keys**.
+Built from `packages/db/migrations/meta/0117_snapshot.json`: **114 tables, 1480 columns, 447 explicit indexes and 351 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -397,7 +397,7 @@ erDiagram
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`, `ad-links.ts`, `due-book.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `contact-notes.ts`, `customer-insights.ts`, `chats.ts`, `ad-links.ts`, `due-book.ts`.
 
 ```mermaid
 erDiagram
@@ -453,6 +453,9 @@ erDiagram
     stores ||..o{ contact_memories : "store_id"
     users |o..o{ contact_memories : "edited_by_user_id"
     contacts ||..o| contact_memories : "store_id, contact_id"
+    stores ||..o{ contact_notes : "store_id"
+    users |o..o{ contact_notes : "author_user_id"
+    contacts ||..o{ contact_notes : "store_id, contact_id"
     stores ||..o{ customer_insights : "store_id"
     users |o..o{ customer_insights : "hidden_by_user_id"
     stores ||..o{ conversations : "store_id"
@@ -649,6 +652,7 @@ erDiagram
         jsonb rules "NOT NULL; jsonb"
         text ai_prompt "NULL; text"
         uuid created_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone archived_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -693,6 +697,14 @@ erDiagram
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
+    contact_notes {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid contact_id FK "NOT NULL; uuid"
+        text body "NOT NULL; text"
+        uuid author_user_id FK "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
     customer_insights {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
@@ -719,6 +731,8 @@ erDiagram
         text responder "NOT NULL; text"
         uuid assignee_user_id FK "NULL; uuid"
         text handover_reason "NULL; text"
+        text handover_summary "NULL; text"
+        text suggested_reply "NULL; text"
         timestamp_with_time_zone handed_over_at "NULL; timestamp with time zone"
         timestamp_with_time_zone ai_resumes_at "NULL; timestamp with time zone"
         text intent_tag "NULL; text"
@@ -891,7 +905,7 @@ erDiagram
 
 ## Products, orders and payments
 
-Schema files: `products.ts`, `orders.ts`, `payments.ts`.
+Schema files: `products.ts`, `product-tags.ts`, `orders.ts`, `payments.ts`.
 
 ```mermaid
 erDiagram
@@ -901,6 +915,10 @@ erDiagram
     stores ||..o{ products : "store_id"
     product_categories |o..o{ products : "store_id, category_id"
     product_brands |o..o{ products : "store_id, brand_id"
+    stores ||..o{ price_offers : "store_id"
+    conversations ||..o{ price_offers : "store_id, conversation_id"
+    contacts ||..o{ price_offers : "store_id, contact_id"
+    products ||..o{ price_offers : "store_id, product_id"
     stores ||..o{ product_variants : "store_id"
     products ||..o{ product_variants : "product_id"
     products ||..o{ product_variants : "store_id, product_id"
@@ -917,6 +935,10 @@ erDiagram
     conversations |o..o{ restock_requests : "store_id, conversation_id"
     stores ||..o{ product_bulk_edits : "store_id"
     users |o..o{ product_bulk_edits : "actor_user_id"
+    stores ||..o{ product_tags : "store_id"
+    stores ||..o{ product_tag_links : "store_id"
+    products ||..o{ product_tag_links : "store_id, product_id"
+    product_tags ||..o{ product_tag_links : "store_id, tag_id"
     stores ||..o{ delivery_zones : "store_id"
     stores ||..o{ discount_codes : "store_id"
     contacts |o..o{ discount_codes : "contact_id"
@@ -985,26 +1007,45 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         text name "NOT NULL; text"
         text description "NULL; text"
+        text short_description "NULL; text"
+        text barcode "NULL; text"
         uuid category_id FK "NULL; uuid"
         uuid brand_id FK "NULL; uuid"
         integer weight_grams "NULL; integer"
         text__ aliases "NOT NULL; text[]"
         bigint price_poisha "NOT NULL; bigint"
         bigint compare_at_price_poisha "NULL; bigint"
+        boolean negotiation_enabled "NOT NULL; boolean"
+        bigint negotiation_opening_poisha "NULL; bigint"
+        bigint negotiation_floor_poisha "NULL; bigint"
         uuid__ image_file_ids "NOT NULL; uuid[]"
         jsonb options "NOT NULL; jsonb"
         boolean is_stock_tracked "NOT NULL; boolean"
+        text stock_status "NOT NULL; text"
         boolean is_visible_in_chats "NOT NULL; boolean"
         boolean is_visible_in_order_link "NOT NULL; boolean"
         text status "NOT NULL; text"
+        text source "NOT NULL; text"
         integer ask_count "NOT NULL; integer"
         vector_512_ search_embedding "NULL; vector(512)"
         vector_512_ image_embedding "NULL; vector(512)"
         text embedding_model "NULL; text"
         text search_text_hash "NULL; text"
         text external_ref "NULL; text"
+        integer version "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    price_offers {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid conversation_id FK "NOT NULL; uuid"
+        uuid contact_id FK "NOT NULL; uuid"
+        uuid product_id FK "NOT NULL; uuid"
+        uuid customer_message_id "NOT NULL; uuid"
+        bigint offered_price_poisha "NOT NULL; bigint"
+        text step "NOT NULL; text"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
     }
     product_variants {
         uuid id PK "NOT NULL; uuid"
@@ -1060,6 +1101,17 @@ erDiagram
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone undo_until "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone undone_at "NULL; timestamp with time zone"
+    }
+    product_tags {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text name "NOT NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    product_tag_links {
+        uuid store_id FK "NOT NULL; uuid"
+        uuid product_id PK,FK "NOT NULL; uuid"
+        uuid tag_id PK,FK "NOT NULL; uuid"
     }
     delivery_zones {
         uuid id PK "NOT NULL; uuid"
@@ -1147,6 +1199,7 @@ erDiagram
         smallint attributed_window_days "NULL; smallint"
         uuid possible_duplicate_of_order_id FK "NULL; uuid"
         text note "NULL; text"
+        text team_note "NULL; text"
         text external_ref "NULL; text"
         text idempotency_key "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
@@ -2241,6 +2294,9 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `contact_memories_store_id_stores_id_fk`                             | `contact_memories(store_id)`                              | `stores(id)`                                | no action |
 | `contact_memories_edited_by_user_id_users_id_fk`                     | `contact_memories(edited_by_user_id)`                     | `users(id)`                                 | no action |
 | `contact_memories_contact_id_store_fk`                               | `contact_memories(store_id, contact_id)`                  | `contacts(store_id, id)`                    | cascade   |
+| `contact_notes_store_id_stores_id_fk`                                | `contact_notes(store_id)`                                 | `stores(id)`                                | no action |
+| `contact_notes_author_user_id_users_id_fk`                           | `contact_notes(author_user_id)`                           | `users(id)`                                 | no action |
+| `contact_notes_contact_id_store_fk`                                  | `contact_notes(store_id, contact_id)`                     | `contacts(store_id, id)`                    | cascade   |
 | `consents_store_id_stores_id_fk`                                     | `consents(store_id)`                                      | `stores(id)`                                | no action |
 | `consents_contact_id_contacts_id_fk`                                 | `consents(contact_id)`                                    | `contacts(id)`                              | cascade   |
 | `consents_captured_by_user_id_users_id_fk`                           | `consents(captured_by_user_id)`                           | `users(id)`                                 | no action |
@@ -2363,6 +2419,14 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
 | `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
 | `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
+| `product_tag_links_store_id_stores_id_fk`                            | `product_tag_links(store_id)`                             | `stores(id)`                                | no action |
+| `product_tag_links_product_store_fk`                                 | `product_tag_links(store_id, product_id)`                 | `products(store_id, id)`                    | cascade   |
+| `product_tag_links_tag_store_fk`                                     | `product_tag_links(store_id, tag_id)`                     | `product_tags(store_id, id)`                | cascade   |
+| `product_tags_store_id_stores_id_fk`                                 | `product_tags(store_id)`                                  | `stores(id)`                                | no action |
+| `price_offers_store_id_stores_id_fk`                                 | `price_offers(store_id)`                                  | `stores(id)`                                | no action |
+| `price_offers_conversation_store_fk`                                 | `price_offers(store_id, conversation_id)`                 | `conversations(store_id, id)`               | cascade   |
+| `price_offers_contact_store_fk`                                      | `price_offers(store_id, contact_id)`                      | `contacts(store_id, id)`                    | cascade   |
+| `price_offers_product_store_fk`                                      | `price_offers(store_id, product_id)`                      | `products(store_id, id)`                    | cascade   |
 | `product_brands_store_id_stores_id_fk`                               | `product_brands(store_id)`                                | `stores(id)`                                | no action |
 | `product_bulk_edits_store_id_stores_id_fk`                           | `product_bulk_edits(store_id)`                            | `stores(id)`                                | no action |
 | `product_bulk_edits_actor_user_id_users_id_fk`                       | `product_bulk_edits(actor_user_id)`                       | `users(id)`                                 | no action |

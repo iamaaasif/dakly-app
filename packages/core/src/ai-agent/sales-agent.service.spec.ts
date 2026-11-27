@@ -8,6 +8,7 @@ import type { InboxService } from '../messaging/inbox.service';
 import type { Clock } from '../platform/clock';
 import type { ProductsService } from '../products/products.service';
 import type { StoresService } from '../stores/stores.service';
+import { salesAgentToolsFor } from './sales-agent-tool-definitions';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
 import { defaultShopRules } from './shop-rules';
@@ -27,9 +28,10 @@ function build(memoryText: string | undefined = undefined) {
   });
   const ai = { run } as unknown as AiService;
   const tools = {
-    run: vi.fn().mockResolvedValue({ products: [] }),
+    run: vi.fn().mockResolvedValue({ result: { products: [] } }),
     adProducts: vi.fn().mockResolvedValue([]),
     productNamedBy: vi.fn().mockResolvedValue([]),
+    deliveryZones: vi.fn().mockResolvedValue([]),
   } as unknown as SalesAgentToolsService;
   const inbox = {
     replyHistory: vi.fn().mockResolvedValue([]),
@@ -151,9 +153,9 @@ const shownKurtiReply = {
 it('reads the products shown earlier in the chat again, so "L ache?" quotes that one', async () => {
   const { service, run, inbox, tools } = build();
   vi.mocked(inbox.shownProductHistory).mockResolvedValue([shownKurtiReply]);
-  vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
-    name === 'get_product' ? kurti : { products: [] },
-  );
+  vi.mocked(tools.run).mockImplementation(async (_scope, name) => ({
+    result: name === 'get_product' ? kurti : { products: [] },
+  }));
 
   const composed = await service.compose({
     storeId,
@@ -168,7 +170,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v13+products-in-chat.v2');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v18+products-in-chat.v2');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -191,9 +193,9 @@ it.each(['ওইটা এখনো আছে?', 'oita ekhono ache?', 'oita এ�
       ...kurti,
       variants: [{ variantId: 'v-l', title: 'L', priceTaka: 1550, stock: 0 }],
     };
-    vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
-      name === 'get_product' ? today : { products: [] },
-    );
+    vi.mocked(tools.run).mockImplementation(async (_scope, name) => ({
+      result: name === 'get_product' ? today : { products: [] },
+    }));
 
     await service.compose({
       storeId,
@@ -216,9 +218,9 @@ it.each(['ওইটা এখনো আছে?', 'oita ekhono ache?', 'oita এ�
 it('leaves a shown product out when it can no longer be read', async () => {
   const { service, run, inbox, tools } = build();
   vi.mocked(inbox.shownProductHistory).mockResolvedValue([shownKurtiReply]);
-  vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
-    name === 'get_product' ? { error: 'PRODUCT_NOT_FOUND' } : { products: [] },
-  );
+  vi.mocked(tools.run).mockImplementation(async (_scope, name) => ({
+    result: name === 'get_product' ? { error: 'PRODUCT_NOT_FOUND' } : { products: [] },
+  }));
 
   await service.compose({
     storeId,
@@ -270,13 +272,13 @@ it('adds no shown products when the chat has none, so the model still asks which
   });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v13');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v18');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 
 it('saves the product a reply names with its sources, for the next turn', async () => {
   const { service, run, tools } = build();
-  vi.mocked(tools.run).mockResolvedValue({ products: [kurti] });
+  vi.mocked(tools.run).mockResolvedValue({ result: { products: [kurti] } });
   run.mockResolvedValue({
     kind: 'output',
     aiRunId: 'run-1',
@@ -389,7 +391,7 @@ it('lets the model answer a refund itself when the owner turned that hand-over o
 
 it('hands over a refund when the owner left that hand-over on', async () => {
   const { service, run, tools } = build();
-  vi.mocked(tools.run).mockResolvedValue({ reason: 'refund' });
+  vi.mocked(tools.run).mockResolvedValue({ result: { reason: 'refund' } });
   run.mockResolvedValueOnce(toolCall('hand_over', { reason: 'refund' }));
 
   const composed = await service.compose({
@@ -471,7 +473,7 @@ it('answers a bare price question from the ad’s products and limits search to 
   const call = run.mock.calls[0]![1];
   expect(call.input).toContain('<ad_products>');
   expect(call.input).toContain('নীল কুর্তি');
-  expect(call.prompt.version).toBe('chat-reply.v13+ad-products.v1');
+  expect(call.prompt.version).toBe('chat-reply.v18+ad-products.v1');
   expect(tools.run).toHaveBeenCalledWith(
     expect.objectContaining({ adProductIds: ['p-red', 'p-blue'] }),
     'search_products',
@@ -576,4 +578,36 @@ it('answers from reads started earlier without reading the chat again', async ()
   expect(composed.kind).toBe('reply');
   expect(inbox.replyHistory).toHaveBeenCalledTimes(1);
   expect(run).toHaveBeenCalledTimes(1);
+});
+
+it('includes compact delivery zones in <shop> and allows quoting their charges', async () => {
+  const { service, run, tools } = build();
+  vi.mocked(tools.deliveryZones).mockResolvedValue([
+    { name: 'Inside Dhaka', chargeTaka: 60 },
+    { name: 'Outside Dhaka', chargeTaka: 120 },
+  ]);
+  run.mockResolvedValue({
+    kind: 'output',
+    aiRunId: 'run-1',
+    output: { reply: 'ঢাকায় ডেলিভারি চার্জ ৳60।' },
+  });
+
+  const composed = await service.compose({
+    storeId,
+    contactId: 'c-1',
+    customerTexts: ['Dhaka delivery charge koto?'],
+    rules: defaultShopRules,
+  });
+
+  const input: string = run.mock.calls[0]![1].input;
+  expect(input).toContain('"deliveryZones":[{"name":"Inside Dhaka","chargeTaka":60}');
+  expect(composed).toMatchObject({ kind: 'reply', text: 'ঢাকায় ডেলিভারি চার্জ ৳60।' });
+});
+
+it('omits order tools when takeOrders is false and card tool when showProducts is false while keeping order', () => {
+  const allNames = salesAgentToolsFor({ showProducts: true, takeOrders: true }).map((t) => t.name);
+  const noOrders = salesAgentToolsFor({ showProducts: true, takeOrders: false }).map((t) => t.name);
+  const noCards = salesAgentToolsFor({ showProducts: false, takeOrders: true }).map((t) => t.name);
+  expect(noOrders).toEqual(allNames.filter((n) => n !== 'draft_order' && n !== 'confirm_order'));
+  expect(noCards).toEqual(allNames.filter((n) => n !== 'send_product_card'));
 });

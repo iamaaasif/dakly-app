@@ -87,6 +87,11 @@ it('returns a due chat once and keeps a staff extension in force', async () => {
   const due = await timedConversation(f.a, f.userA, past);
   const extended = await timedConversation(f.b, f.userB, past);
   const pending = await timedConversation(f.b, f.userB, future);
+  for (const id of [due, extended])
+    await f.connection.pool.query(
+      "update conversations set handover_summary = 'Karim, order 1042' where id = $1",
+      [id],
+    );
   const sweep = app.get(QueueConversationReturnsJob);
   await sweep.handle({});
   await sweep.handle({});
@@ -121,12 +126,15 @@ it('returns a due chat once and keeps a staff extension in force', async () => {
   expect(await f.row('conversations', due)).toMatchObject({
     responder: 'ai',
     ai_resumes_at: null,
+    handover_summary: null,
     version: 0,
     status: 'needs_you',
     assignee_user_id: f.userA,
   });
+  // A person who took the chat keeps the summary until the AI takes it back.
   expect(await f.row('conversations', extended)).toMatchObject({
     responder: 'human',
+    handover_summary: 'Karim, order 1042',
     version: 1,
   });
   expect(await f.row('conversations', pending)).toMatchObject({

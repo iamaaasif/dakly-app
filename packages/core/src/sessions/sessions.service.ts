@@ -65,10 +65,13 @@ export class SessionsService {
   private storeFlags(access: StoreAccess, extensions: string[]) {
     const can = (extension: string, area: PermissionArea, level: 'view' | 'edit') =>
       extensions.includes(extension) && this.team.canAccess(access, area, level);
+    const canViewOrders = can('sales', 'orders', 'view');
     return {
       canViewProducts: can('sales', 'products', 'view'),
       canEditProducts: can('sales', 'products', 'edit'),
-      canViewOrders: can('sales', 'orders', 'view'),
+      canViewOrders,
+      canExportOrders: canViewOrders && access.exportLists,
+      canPrintShippingLabels: canViewOrders && access.seeFullPhone,
       canEditOrders: can('sales', 'orders', 'edit'),
       canViewDueBook: can('physical_shop', 'dueBook', 'view'),
       canEditDueBook: can('physical_shop', 'dueBook', 'edit'),
@@ -120,15 +123,19 @@ export class SessionsService {
 
   async create(
     userId: string,
-    input: CreateSessionInput,
+    { selectFirstStore, ...input }: CreateSessionInput & { selectFirstStore?: boolean },
   ): Promise<{ token: string; session: Session }> {
     const token = randomBytes(32).toString('base64url');
     const now = this.clock.now();
+    const firstStore = selectFirstStore
+      ? (await this.team.storesFor(userId, { limit: 1 })).items[0]
+      : undefined;
     const session = await this.repository.insert(userId, {
       tokenHash: hashToken(token),
       input,
       now,
       expiresAt: new Date(now.getTime() + lifetimeMilliseconds(input.isRemembered)),
+      activeStoreId: firstStore?.storeId,
     });
     return { token, session };
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { isChannelSendable } from './catalogue';
 import { automationGraphSchema } from './graph';
 import { automationTemplates } from './templates';
 
@@ -37,6 +38,24 @@ function messages(result: ReturnType<typeof automationGraphSchema.safeParse>) {
 describe('automationGraphSchema', () => {
   it.each(Object.entries(automationTemplates))('accepts the %s template', (_key, template) => {
     expect(automationGraphSchema.parse(template.graph)).toEqual(template.graph);
+  });
+
+  it('uses Messenger buttons with an SMS link fallback in both COD confirmation steps', () => {
+    const { steps } = automationTemplates.cod_order_confirmation.graph;
+    for (const step of [steps.ask, steps.remind]) {
+      expect(step).toMatchObject({
+        channels: ['messenger', 'sms'],
+        category: 'transactional',
+        message: {
+          text: expect.stringContaining('{confirm_link}'),
+          messengerText: expect.stringContaining('{order_number}'),
+          buttons: [
+            { key: 'confirm', label: 'Confirm order' },
+            { key: 'cancel', label: 'Cancel order' },
+          ],
+        },
+      });
+    }
   });
 
   it('accepts a random split whose paths add up to 100%', () => {
@@ -233,6 +252,15 @@ describe('automationGraphSchema', () => {
   it('rejects a send step that lists a channel twice', () => {
     const graph = workflow({ start: { ...send, channels: ['sms', 'sms'] }, end: { kind: 'exit' } });
     expect(automationGraphSchema.safeParse(graph).success).toBe(false);
+  });
+
+  it('accepts Instagram as a send channel and as a reachable condition', () => {
+    const graph = workflow({
+      start: { ...send, channels: ['messenger', 'instagram', 'sms'] },
+      end: { kind: 'exit' },
+    });
+    expect(automationGraphSchema.safeParse(graph).success).toBe(true);
+    expect(isChannelSendable('instagram')).toBe(true);
   });
 
   it('accepts order fields only when an order starts the workflow', () => {

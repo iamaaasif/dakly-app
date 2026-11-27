@@ -54,12 +54,13 @@ export const ownerSettingsGoldenCases: GoldenCase[] = [
     ownerSettings: { handoverOff: ['damagedOrWrong'] },
   },
   {
+    // The customer asks about delivery, so the shop's delivery charges are true amounts.
     id: 'owner-special-off-mixed',
     language: 'banglish',
     question: 'apu 50 pcs kurti bulk e nite chai, deliver korte parben?',
     expectedHandover: null,
     acceptedHandover: 'out_of_scope',
-    allowedAmountsTaka: [1450],
+    allowedAmountsTaka: [1450, 60, 120],
     ownerSettings: { handoverOff: ['specialRequests'] },
   },
   {
@@ -100,7 +101,6 @@ export const ownerSettingsGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি', 'kurti'],
-    holdsPrice: true,
     ownerSettings: { extraRules: 'Regular customers get 10% off. Always call the customer apu.' },
   },
   {

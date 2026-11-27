@@ -14,15 +14,17 @@ import {
 } from '../../ai-agent/chat-memory';
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV13 } from '../../ai-agent/prompts/chat-reply.v13';
+import { productDiscountRequest } from '../../ai-agent/manipulation-screen';
+import { chatReplyV18 } from '../../ai-agent/prompts/chat-reply.v18';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
-import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
+import { classifyChat } from '../../ai-agent/prompts/classify-chat.v4';
 import {
   checkReplyFacts,
   factCheckFailedBlock,
   type FactCheckFailure,
 } from '../../ai-agent/reply-fact-check';
-import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
+import { salesAgentToolsFor } from '../../ai-agent/sales-agent-tool-definitions';
+import { shopBlock } from '../../ai-agent/shop-block';
 import {
   defaultShopRules,
   refuseToolCall,
@@ -30,13 +32,15 @@ import {
   shopRulesBlock,
 } from '../../ai-agent/shop-rules';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
-import { evalPhotoKey, evalProducts, evalShop } from './eval-catalog';
+import { deliveryZones, evalPhotoKey, evalProducts, evalShop } from './eval-catalog';
 import type { EvalMeter } from './eval-meter';
 import { matchEvalPhoto, runFixtureTool } from './fixture-tools';
 
 const MAX_ROUNDS = 4;
 const TIMEOUT_MS = 60_000;
 const MIN_SEARCH_LENGTH = 3;
+// The zones the agent puts in the shop block, without the flag only the delivery tool reads.
+const evalShopZones = deliveryZones.map(({ name, chargeTaka }) => ({ name, chargeTaka }));
 type Reason = (typeof handoverReasons)[number];
 
 // A failed call still billed its tokens, so the meter counts them before the error goes on.
@@ -80,7 +84,9 @@ export async function classifyQuestion(
 }
 
 // The owner's settings a case runs under: the defaults, then what the case changes.
-export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSettings'>): ShopRules {
+export function evalShopRules(
+  golden: Pick<GoldenCase, 'handsOverDiscounts' | 'ownerSettings'>,
+): ShopRules {
   const { handoverOff = [], ...changes } = golden.ownerSettings ?? {};
   return {
     ...defaultShopRules,
@@ -89,19 +95,20 @@ export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSett
     handover: {
       ...defaultShopRules.handover,
       ...Object.fromEntries(handoverOff.map((name) => [name, false])),
-      ...(golden.holdsPrice ? { discounts: false } : {}),
+      ...(golden.handsOverDiscounts ? { discounts: true } : {}),
     },
   };
 }
 
 export function handoverFor(
-  golden: Pick<GoldenCase, 'question' | 'holdsPrice' | 'ownerSettings'>,
+  golden: Pick<GoldenCase, 'question' | 'handsOverDiscounts' | 'ownerSettings' | 'earlier'>,
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
     ? handoverReason([golden.question], classified, {
         ...evalShopRules(golden).handover,
         takesOrders: evalShopRules(golden).takeOrders,
+        shopReplies: (golden.earlier ?? []).filter(({ from }) => from === 'shop').length,
       })
     : 'ai_unavailable';
 }
@@ -123,9 +130,10 @@ type ReplyCase = Pick<
   | 'earlier'
   | 'shownProducts'
   | 'adProducts'
-  | 'holdsPrice'
+  | 'handsOverDiscounts'
   | 'ownerSettings'
   | 'draftedOrder'
+  | 'negotiation'
 >;
 
 function replyContext({
@@ -146,7 +154,7 @@ function replyContext({
     { from: 'customer', text: golden.question },
   ];
   return [
-    `<shop>${JSON.stringify(evalShop)}</shop>`,
+    shopBlock({ address: null, ...evalShop }, evalShopZones),
     shopRulesBlock(evalShopRules(golden)),
     ...(golden.memory
       ? [`<customer_memory untrusted="true">${golden.memory}</customer_memory>`]
@@ -220,10 +228,10 @@ function answerToolCalls({
   calls: ToolCall[];
   toolResults: object[];
   note: Note;
-  shop: { rules: ShopRules; draftedOrder: readonly string[] | undefined };
+  shop: { rules: ShopRules; golden: Pick<ReplyCase, 'draftedOrder' | 'negotiation' | 'question'> };
   onlyProductIds: readonly string[] | undefined;
 }) {
-  const { rules, draftedOrder } = shop;
+  const { rules, golden } = shop;
   const answered: { name: string; result: object }[] = [];
   for (const call of calls) {
     const refusal = refuseToolCall(rules, call);
@@ -233,7 +241,12 @@ function answerToolCalls({
       runFixtureTool(
         call.name,
         call.argumentsJson,
-        { draftedOrder, suggestAddOns: rules.suggestAddOns },
+        {
+          draftedOrder: golden.draftedOrder,
+          suggestAddOns: rules.suggestAddOns,
+          negotiation: golden.negotiation,
+          customerText: golden.question,
+        },
         onlyProductIds,
       );
     if (call.name === 'hand_over' && 'reason' in result) {
@@ -312,6 +325,14 @@ function replyBlocks(history: Run['history'], golden: ReplyCase, toolResults: ob
   return { context, onlyProductIds };
 }
 
+function replyModelConfiguration(rules: ShopRules, question: string, history: Run['history']) {
+  if (history === 'last20') {
+    return { instructions: chatReplyV9.instructions, tools: salesAgentToolsFor(rules) };
+  }
+  const canOffer = !rules.handover.discounts && Boolean(productDiscountRequest(question));
+  return { instructions: chatReplyV18.instructions, tools: salesAgentToolsFor(rules, canOffer) };
+}
+
 // One pass of the loop, with fixture tools instead of the database.
 async function composeOnce(
   { driver, meter, model, history }: Run,
@@ -322,6 +343,8 @@ async function composeOnce(
   const ended = (outcome: EvalOutcome): Composed => ({ kind: 'ended', outcome });
   const toolResults: object[] = [];
   const { context, onlyProductIds } = replyBlocks(history, golden, toolResults);
+  const rules = evalShopRules(golden);
+  const configuration = replyModelConfiguration(rules, golden.question, history);
   let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(
@@ -330,10 +353,9 @@ async function composeOnce(
       history ? `reply:${model}:${history}` : `reply:${model}`,
       {
         model,
-        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV13.instructions,
+        ...configuration,
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentLlmTools,
         timeoutMs: TIMEOUT_MS,
       },
     ).catch((error: unknown) => {
@@ -351,7 +373,7 @@ async function composeOnce(
       calls: result.toolCalls,
       toolResults,
       note,
-      shop: { rules: evalShopRules(golden), draftedOrder: golden.draftedOrder },
+      shop: { rules, golden },
       onlyProductIds,
     });
     if (outcome.handover) return ended({ kind: 'handover', reason: outcome.handover });

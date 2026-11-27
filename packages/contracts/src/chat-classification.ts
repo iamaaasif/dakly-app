@@ -1,23 +1,9 @@
 import { z } from 'zod';
 
-import { handoverReasons } from './chats';
+import { chatIntents, handoverReasons } from './chats';
 
 export const chatClassificationSchema = z.strictObject({
-  intent: z.enum([
-    'greeting',
-    'price',
-    'size_or_stock',
-    'delivery',
-    'payment',
-    'order',
-    'confirm',
-    'order_status',
-    'exchange',
-    'complaint',
-    'photo',
-    'special_request',
-    'other',
-  ]),
+  intent: z.enum(chatIntents),
   language: z.enum(['bn', 'banglish', 'en']),
   sentiment: z.enum(['positive', 'neutral', 'negative', 'angry']),
   asksForPerson: z.boolean(),

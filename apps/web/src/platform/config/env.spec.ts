@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { webAllowedDevOrigins, webAuthConfig } from './env';
+import { webAllowedDevOrigins, webAuthConfig, webSupportWhatsapp } from './env';
 
 afterEach(() => vi.unstubAllEnvs());
 describe('Registration configuration', () => {
@@ -12,7 +12,14 @@ describe('Registration configuration', () => {
       'WEB_GOOGLE_CLIENT_ID',
     ])
       vi.stubEnv(key, '');
-    expect(webAuthConfig()).toEqual({ legal: null, googleClientId: null });
+    vi.stubEnv('SIGNUP_CODE_CHANNEL', undefined);
+    expect(webAuthConfig()).toEqual({
+      legal: null,
+      googleClientId: null,
+      signupCodeChannel: 'email',
+    });
+    vi.stubEnv('SIGNUP_CODE_CHANNEL', 'sms');
+    expect(webAuthConfig().signupCodeChannel).toBe('sms');
   });
   it('rejects unsafe document schemes and invalid Google client identifiers', () => {
     vi.stubEnv('WEB_TERMS_URL', 'javascript:alert(1)');
@@ -34,5 +41,18 @@ describe('Development origins', () => {
   it('rejects full URLs, which Next does not match', () => {
     vi.stubEnv('WEB_ALLOWED_DEV_ORIGINS', 'https://shop.ngrok-free.app');
     expect(() => webAllowedDevOrigins()).toThrow();
+  });
+});
+describe('Support line', () => {
+  it('shows the live support number unless another one is configured', () => {
+    vi.stubEnv('WEB_SUPPORT_WHATSAPP', '');
+    expect(webSupportWhatsapp()).toEqual({
+      phone: '+880 19 1635 3441',
+      url: 'https://wa.me/8801916353441',
+    });
+    vi.stubEnv('WEB_SUPPORT_WHATSAPP', '8801712345678');
+    expect(webSupportWhatsapp().phone).toBe('+880 17 1234 5678');
+    vi.stubEnv('WEB_SUPPORT_WHATSAPP', '+8801712345678');
+    expect(() => webSupportWhatsapp()).toThrow();
   });
 });

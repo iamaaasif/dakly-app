@@ -11,6 +11,11 @@ import {
 } from './catalogue';
 import { usesOrderFields } from './text';
 
+// Campaigns send on three channels. A workflow also sends on Instagram, because it answers where
+// the customer wrote last.
+export const automationChannels = [...campaignChannels, 'instagram'] as const;
+export type AutomationChannel = (typeof automationChannels)[number];
+
 // Limits from feature 09.
 export const MAX_WORKFLOW_STEPS = 50;
 export const MAX_WAIT_MINUTES = 90 * 24 * 60;
@@ -79,7 +84,7 @@ const conditionSchema = z.discriminatedUnion('kind', [
   }),
   z.strictObject({ kind: z.literal('has_tag'), tag: tagSchema }),
   z.strictObject({ kind: z.literal('in_segment'), segmentId: z.uuid() }),
-  z.strictObject({ kind: z.literal('reachable'), channel: z.enum(campaignChannels) }),
+  z.strictObject({ kind: z.literal('reachable'), channel: z.enum(automationChannels) }),
   z.strictObject({ kind: z.literal('placed_order') }),
 ]);
 
@@ -118,6 +123,7 @@ const waitSchema = z.discriminatedUnion('until', [
 
 const messageSchema = z.strictObject({
   text: z.string().trim().min(1).max(1024),
+  messengerText: z.string().trim().min(1).max(640).optional(),
   // WhatsApp allows 3 reply buttons of up to 20 characters.
   buttons: z
     .array(z.strictObject({ key: buttonKeySchema, label: z.string().trim().min(1).max(20) }))
@@ -169,7 +175,7 @@ const stepSchema = z.discriminatedUnion('kind', [
     kind: z.literal('send'),
     category: z.enum(sendCategories),
     // Tried in this order; the first reachable channel sends.
-    channels: z.array(z.enum(campaignChannels)).min(1).refine(isUnique, 'Channels repeat'),
+    channels: z.array(z.enum(automationChannels)).min(1).refine(isUnique, 'Channels repeat'),
     message: messageSchema,
     ifNotReachable: z.enum(['skip', 'exit']),
     reviewBeforeSending: z.boolean(),
@@ -308,7 +314,10 @@ function checkPaths({ firstStepKey, steps }: GraphShape, context: Context) {
 function checkOrderFields({ trigger, steps }: GraphShape, context: Context) {
   if (orderTriggerKeys.includes(trigger.key)) return;
   for (const [key, step] of Object.entries(steps)) {
-    if (step.kind === 'send' && usesOrderFields(step.message.text))
+    if (
+      step.kind === 'send' &&
+      (usesOrderFields(step.message.text) || usesOrderFields(step.message.messengerText ?? ''))
+    )
       addIssue(context, ['steps', key], 'Order fields need a trigger that starts from an order');
   }
 }

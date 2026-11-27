@@ -14,6 +14,18 @@ export const goldenCaseSchema = z.strictObject({
   acceptedHandover: z.enum(handoverReasons).optional(),
   // Taka amounts the shop's catalog allows in an answer to this question.
   allowedAmountsTaka: z.array(z.number().nonnegative()),
+  requiredAmountsTaka: z.array(z.number().nonnegative()).optional(),
+  // An explicit null runs a negotiation case with no product offer settings.
+  negotiation: z
+    .strictObject({
+      productName: z.string().min(1),
+      openingTaka: z.number().positive(),
+      floorTaka: z.number().positive(),
+      previousStep: z.enum(['opening', 'lowest']).optional(),
+      accepted: z.literal(true).optional(),
+    })
+    .nullable()
+    .optional(),
   // The answer must name at least one of these: the product asked for, or an in-stock alternative.
   mentionsAnyOf: z.array(z.string().min(1)).optional(),
   // Products with no stock. Naming one as an offer fails the run.
@@ -27,9 +39,10 @@ export const goldenCaseSchema = z.strictObject({
   // What the shop remembers about this customer, as the agent is shown it. The answer must still
   // follow the tools and the rules, never the memory.
   memory: z.string().min(1).optional(),
-  // The shop keeps its price on a first discount ask (hand-over rule `discounts` off): the AI says
-  // the price is fixed and keeps selling, and a repeat ask goes to a person.
-  holdsPrice: z.literal(true).optional(),
+  // The shop sends every discount ask to a person (hand-over rule `discounts` on). Without it the
+  // shop keeps its price, the default: the AI says the price is fixed and keeps selling, and a
+  // repeat ask goes to a person.
+  handsOverDiscounts: z.literal(true).optional(),
   // What the owner saved on the AI agent screen, where it differs from the defaults. Hand-over
   // switches named here are off, so the AI answers that kind of message itself.
   ownerSettings: z

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { signUpCodeChannelSchema } from '@dakly/contracts/auth';
+
 const apiOrigin = z.url().refine((value) => {
   const parsed = new URL(value);
   return parsed.origin === value && ['http:', 'https:'].includes(parsed.protocol);
@@ -29,6 +31,7 @@ export function webAuthConfig() {
   const privacy = process.env.WEB_PRIVACY_URL;
   const version = process.env.WEB_TERMS_VERSION;
   return {
+    signupCodeChannel: webSignupCodeChannel(),
     legal:
       terms && privacy && version
         ? {
@@ -45,4 +48,18 @@ export function webAuthConfig() {
           .parse(process.env.WEB_GOOGLE_CLIENT_ID)
       : null,
   };
+}
+
+const supportWhatsapp = z.string().regex(/^8801\d{9}$/, 'WEB_SUPPORT_WHATSAPP takes 8801XXXXXXXXX');
+// The number shops use to reach Dakly support; the default is the live support line.
+export function webSupportWhatsapp() {
+  const digits = supportWhatsapp.parse(process.env.WEB_SUPPORT_WHATSAPP || '8801916353441');
+  return {
+    phone: `+880 ${digits.slice(3, 5)} ${digits.slice(5, 9)} ${digits.slice(9)}`,
+    url: `https://wa.me/${digits}`,
+  };
+}
+
+export function webSignupCodeChannel() {
+  return signUpCodeChannelSchema.parse(process.env.SIGNUP_CODE_CHANNEL);
 }

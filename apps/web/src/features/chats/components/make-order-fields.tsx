@@ -28,7 +28,12 @@ export function MakeOrderFields() {
       <MakeOrderProduct onPick={setVariant} />
       <FormField name="recipient.name" label="Name">
         {(props) => (
-          <Input {...props} placeholder="Customer name" {...register('recipient.name')} />
+          <Input
+            {...props}
+            className="text-sm"
+            placeholder="Customer name"
+            {...register('recipient.name')}
+          />
         )}
       </FormField>
       <FormField name="recipient.phone" label="Phone">
@@ -36,6 +41,7 @@ export function MakeOrderFields() {
           <Input
             {...props}
             type="tel"
+            className="text-sm"
             autoComplete="tel-national"
             placeholder="01712-345678"
             {...register('recipient.phone')}
@@ -44,7 +50,12 @@ export function MakeOrderFields() {
       </FormField>
       <FormField name="recipient.address" label="Address">
         {(props) => (
-          <Input {...props} placeholder="House, road, area" {...register('recipient.address')} />
+          <Input
+            {...props}
+            className="text-sm"
+            placeholder="House, road, area"
+            {...register('recipient.address')}
+          />
         )}
       </FormField>
       <OrderAreaFields
@@ -53,15 +64,35 @@ export function MakeOrderFields() {
         }
       />
       <PaidInAdvance chargePoisha={chargePoisha} />
-      <dl className="space-y-1 rounded-lg bg-surface-muted p-3">
-        <Row label="Product" value={formatMoney(subtotal)} />
-        <Row
-          label="Delivery"
-          value={chargePoisha === undefined ? 'Choose a district' : formatMoney(chargePoisha)}
-        />
-        <Row label="Total" value={formatMoney(subtotal + (chargePoisha ?? 0))} strong />
-      </dl>
+      <OrderTotals subtotal={subtotal} chargePoisha={chargePoisha} />
     </>
+  );
+}
+
+function OrderTotals({
+  subtotal,
+  chargePoisha,
+}: {
+  subtotal: number;
+  chargePoisha: number | undefined;
+}) {
+  const { control } = useFormContext<CreateConversationOrderValues>();
+  const advance = useWatch({ control, name: 'advancePaidPoisha' });
+  // A delivery charge paid in advance is not collected again at the door.
+  const paidAhead = Boolean(advance) && advance !== '0';
+  return (
+    <dl className="space-y-1 rounded-md bg-surface-muted p-3 text-sm">
+      <Row label="Product" value={formatMoney(subtotal)} />
+      <Row
+        label="Delivery"
+        value={chargePoisha === undefined ? 'Choose a district' : formatMoney(chargePoisha)}
+      />
+      <Row
+        label="Cash on delivery"
+        value={formatMoney(subtotal + (paidAhead ? 0 : (chargePoisha ?? 0)))}
+        strong
+      />
+    </dl>
   );
 }
 

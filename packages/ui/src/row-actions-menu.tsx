@@ -1,0 +1,32 @@
+'use client';
+import { EllipsisVertical } from 'lucide-react';
+import type { ReactNode } from 'react';
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  type DropdownMenuContentProps,
+  DropdownMenuTrigger,
+} from './dropdown-menu';
+
+export type RowActionsMenuProps = {
+  label: string;
+  children: ReactNode;
+  // A menu item that opens a dialog uses this to move focus after the menu closes.
+  onCloseAutoFocus?: DropdownMenuContentProps['onCloseAutoFocus'];
+};
+
+// The label names the row ("Actions for Cotton Panjabi") so screen readers can tell the menus apart.
+export function RowActionsMenu({ label, children, onCloseAutoFocus }: RowActionsMenuProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={label}
+        className="inline-grid size-8 place-items-center rounded-md text-text-secondary hover:bg-neutral-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-[state=open]:bg-neutral-soft"
+      >
+        <EllipsisVertical aria-hidden="true" size={16} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent onCloseAutoFocus={onCloseAutoFocus}>{children}</DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

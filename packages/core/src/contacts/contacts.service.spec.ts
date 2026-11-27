@@ -7,9 +7,11 @@ import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import type { ContactIdentitiesRepository } from './contact-identities.repository';
+import type { ContactListRepository, ContactFilter } from './contact-list.repository';
+import { ContactListService } from './contact-list.service';
 import type { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
-import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
+import type { Contact, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import type { ImportContactsRepository } from './import-contacts.repository';
 import type { OrderContactsRepository } from './order-contacts.repository';
@@ -31,6 +33,7 @@ describe('ContactsService', () => {
     insert: vi.fn(),
     findById: vi.fn(),
     list: vi.fn(),
+    countListed: vi.fn().mockResolvedValue(0),
     findIdentities: vi.fn(),
     update: vi.fn(),
     softDeleteAll: vi.fn(),
@@ -38,6 +41,7 @@ describe('ContactsService', () => {
   };
   const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
   let service: ContactsService;
+  let listService: ContactListService;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -46,6 +50,11 @@ describe('ContactsService', () => {
     const storeTransaction = transaction as unknown as StoreTransaction;
     const outbox = { publish: vi.fn(), publishAll: vi.fn() } as unknown as OutboxService;
     const clock = { now: () => new Date('2026-11-16T04:30:00Z') } as Clock;
+    const phoneAccess = new ContactPhoneAccessService(
+      { consume: async () => ({ allowed: true, retryAfter: 0 }) } as RateLimiter,
+      {} as AuditService,
+      storeTransaction,
+    );
     service = new ContactsService(
       contacts,
       {} as ContactIdentitiesRepository,
@@ -59,13 +68,54 @@ describe('ContactsService', () => {
       } as unknown as ImportContactsRepository,
       {} as OrderContactsRepository,
       new ContactDeletionService(contacts, storeTransaction, outbox, clock),
-      new ContactPhoneAccessService(
-        { consume: async () => ({ allowed: true, retryAfter: 0 }) } as RateLimiter,
-        {} as AuditService,
-        storeTransaction,
-      ),
+      phoneAccess,
       {} as ContactMatchSuggestionsService,
     );
+    listService = new ContactListService(
+      repository as unknown as ContactListRepository,
+      phoneAccess,
+    );
+  });
+
+  it('saves the Add contact form fields, turning the age into a birth year', async () => {
+    repository.insert.mockImplementation(async (_storeId: string, input: NewContact) => ({
+      ...contact,
+      name: input.name,
+      phone: input.phone,
+    }));
+
+    await service.create(
+      STORE_ID,
+      {
+        name: 'Rahim',
+        phone: '01712345678',
+        whatsappPhone: '01812345678',
+        email: 'rahim@example.com',
+        gender: 'male',
+        age: 30,
+        address: 'House 4, Road 2',
+        district: 'Mirpur',
+        tags: ['kurti lover'],
+        notes: 'Prefers a call after 6 pm',
+      },
+      { seeFullPhone: true },
+      actor,
+    );
+
+    expect(repository.insert).toHaveBeenCalledWith(STORE_ID, {
+      name: 'Rahim',
+      phone: '01712345678',
+      whatsappPhone: '01812345678',
+      email: 'rahim@example.com',
+      gender: 'male',
+      birthYear: 1996,
+      address: 'House 4, Road 2',
+      district: 'Mirpur',
+      tags: ['kurti lover'],
+      notes: 'Prefers a call after 6 pm',
+      source: 'manual',
+      kind: 'customer',
+    });
   });
 
   it('creates a staff add as a customer in the given store', async () => {
@@ -233,7 +283,7 @@ describe('ContactsService', () => {
     };
     const search = async (term: string, seeFullPhone: boolean) =>
       (
-        await service.list(STORE_ID, { limit: 50, search: term }, { seeFullPhone }, actor)
+        await listService.list(STORE_ID, { limit: 50, search: term }, { seeFullPhone }, actor)
       ).items.map((item) => [item.name, item.phone]);
 
     beforeEach(() => {
@@ -263,11 +313,11 @@ describe('ContactsService', () => {
     });
 
     it('returns a cursor only while more contacts follow', async () => {
-      const first = await service.list(STORE_ID, { limit: 2 }, { seeFullPhone: true }, actor);
+      const first = await listService.list(STORE_ID, { limit: 2 }, { seeFullPhone: true }, actor);
       expect(first.items.map((item) => item.id)).toEqual([people[0]!.id, people[1]!.id]);
       expect(first.nextCursor).toBe(people[1]!.id);
 
-      const second = await service.list(
+      const second = await listService.list(
         STORE_ID,
         { limit: 2, cursor: first.nextCursor! },
         { seeFullPhone: true },

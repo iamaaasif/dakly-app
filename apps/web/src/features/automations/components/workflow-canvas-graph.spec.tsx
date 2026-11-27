@@ -50,7 +50,7 @@ const graph: AutomationGraph = {
 };
 
 describe('WorkflowCanvasGraph', () => {
-  it('shows the trigger, every kind of step and a number on each step', () => {
+  it('shows the trigger, every kind of step and a hidden number on each step', () => {
     render(<WorkflowCanvasGraph graph={graph} layout={layoutWorkflow(graph)} />);
     const steps = within(screen.getByRole('list', { name: 'Workflow steps' }));
 
@@ -60,16 +60,16 @@ describe('WorkflowCanvasGraph', () => {
     expect(steps.getByText('Once every 7 days')).toBeTruthy();
     expect(steps.getByText('Places an order')).toBeTruthy();
     expect(steps.getByText('1 hour')).toBeTruthy();
-    expect(steps.getByText('SMS / WhatsApp')).toBeTruthy();
+    expect(steps.getByText('Send message')).toBeTruthy();
     expect(steps.getByText(/your cart is waiting/)).toBeTruthy();
     expect(steps.getByText('Conditional split')).toBeTruthy();
     expect(steps.getByText('Give a coupon')).toBeTruthy();
     expect(steps.getByText('10% off, valid 3 days')).toBeTruthy();
     expect(steps.getByText('Random split')).toBeTruthy();
     expect(steps.getByText('Exit')).toBeTruthy();
-    expect(steps.getAllByText('Step')).toHaveLength(5);
-    expect(steps.getByText('Tapped the link in step 2: step 4')).toBeTruthy();
-    expect(steps.getByText('Else: step 5')).toBeTruthy();
+    expect(steps.getAllByText(/^Step \d$/)).toHaveLength(5);
+    expect(steps.getByText('Yes: step 4')).toBeTruthy();
+    expect(steps.getByText('No: step 5')).toBeTruthy();
   });
 
   it('shows the recent entry count on the trigger card', () => {

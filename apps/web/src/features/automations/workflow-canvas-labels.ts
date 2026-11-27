@@ -1,9 +1,13 @@
-import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
-import type { CampaignChannel } from '@dakly/contracts/campaigns';
+import type {
+  AutomationChannel,
+  AutomationGraph,
+  AutomationStep,
+} from '@dakly/contracts/automations/graph';
 import { formatMoney } from '@dakly/contracts/money';
 
 import { channelLabels } from './automation-labels';
 import { delayUnit, minutesPerUnit } from './workflow-library';
+import { pluralize } from '@/lib/pluralize';
 
 type Condition = AutomationGraph['workflowFilters'][number];
 type ExitCondition = NonNullable<AutomationGraph['goal']>;
@@ -19,13 +23,9 @@ function words(value: string) {
   return value.replaceAll('_', ' ');
 }
 
-function plural(count: number, unit: string) {
-  return `${count} ${unit}${count === 1 ? '' : 's'}`;
-}
-
 function durationLabel(minutes: number) {
   const unit = delayUnit(minutes);
-  return plural(minutes / minutesPerUnit[unit], unit.slice(0, -1));
+  return pluralize(minutes / minutesPerUnit[unit], unit.slice(0, -1));
 }
 
 // The second part is the amount, which the card shows in bold.
@@ -42,7 +42,7 @@ export function waitParts(wait: WaitStep): [string, string] {
 
 export function actionLabel(action: ActionStep) {
   const labels = {
-    add_tag: 'Add tag',
+    add_tag: 'Tag contact',
     remove_tag: 'Remove tag',
     create_task: 'Create task',
     notify_team: 'Notify team',
@@ -53,11 +53,12 @@ export function actionLabel(action: ActionStep) {
 }
 
 export function actionDetail(action: ActionStep) {
-  if (action.action === 'add_tag' || action.action === 'remove_tag') return action.tag;
+  if (action.action === 'add_tag') return `Add “${action.tag}”`;
+  if (action.action === 'remove_tag') return `Remove “${action.tag}”`;
   if (action.action === 'create_task') return action.title;
   if (action.action === 'notify_team') return action.text;
   if (action.action !== 'give_coupon') return undefined;
-  return `${discountLabel(action.discount)}, valid ${plural(action.validDays, 'day')}`;
+  return `${discountLabel(action.discount)}, valid ${pluralize(action.validDays, 'day')}`;
 }
 
 function discountLabel(discount: Extract<ActionStep, { action: 'give_coupon' }>['discount']) {
@@ -114,11 +115,11 @@ const filterLabels: FilterLabels = {
   lifecycle_stage: (filter) => `Stage: ${words(filter.stage)}`,
   order_total: (filter) => amountFilter('Order total', filter),
   cart_total: (filter) => amountFilter('Cart total', filter),
-  product: (filter) => plural(filter.productIds.length, 'product'),
+  product: (filter) => pluralize(filter.productIds.length, 'product'),
   payment_status: (filter) => `Payment: ${filter.statuses.map(words).join(', ')}`,
-  delivery_district: (filter) => plural(filter.bdAreaIds.length, 'delivery area'),
+  delivery_district: (filter) => pluralize(filter.bdAreaIds.length, 'delivery area'),
   first_order: () => 'First order only',
-  days: (filter) => plural(filter.days, 'day'),
+  days: (filter) => pluralize(filter.days, 'day'),
 };
 
 function triggerFilterLabel(filter: TriggerFilter) {
@@ -128,20 +129,20 @@ function triggerFilterLabel(filter: TriggerFilter) {
 function frequencyLabel(reEntry: AutomationGraph['reEntry']) {
   if (reEntry.rule === 'once') return 'Once ever';
   if (reEntry.rule === 'every_time') return 'Every time';
-  return `Once every ${plural(reEntry.days, 'day')}`;
+  return `Once every ${pluralize(reEntry.days, 'day')}`;
 }
 
 // Marketing sends need consent; order updates go out without it (CAMP-R2).
 function channelConsentLabels(steps: AutomationGraph['steps']) {
-  const subscribed = new Set<CampaignChannel>();
-  const orderUpdates = new Set<CampaignChannel>();
+  const subscribed = new Set<AutomationChannel>();
+  const orderUpdates = new Set<AutomationChannel>();
   for (const step of Object.values(steps)) {
     if (step.kind !== 'send') continue;
     for (const channel of step.channels)
       (step.category === 'marketing' ? subscribed : orderUpdates).add(channel);
   }
   for (const channel of subscribed) orderUpdates.delete(channel);
-  const groups: [string, Set<CampaignChannel>][] = [
+  const groups: [string, Set<AutomationChannel>][] = [
     ['subscribed', subscribed],
     ['order updates', orderUpdates],
   ];
@@ -154,7 +155,9 @@ function channelConsentLabels(steps: AutomationGraph['steps']) {
 
 export function triggerRows(graph: AutomationGraph, stepNumber: (key: string) => number) {
   const { trigger, workflowFilters, goal, exitConditions, reEntry, steps } = graph;
-  const exits = [goal, ...exitConditions].filter((exit) => exit !== null).map(exitLabel);
+  const exits = [
+    ...new Set([goal, ...exitConditions].filter((exit) => exit !== null).map(exitLabel)),
+  ];
   return [
     ['Trigger filters', trigger.filters.map(triggerFilterLabel).join(' · ') || 'None'],
     [

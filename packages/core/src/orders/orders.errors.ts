@@ -1,3 +1,5 @@
+import { shippingLabelsPhoneRequired } from '@dakly/contracts/order-shipping-labels';
+
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const ORDER_ERRORS = {
@@ -13,6 +15,7 @@ const ORDER_ERRORS = {
     status: 400,
     message: 'Order totals are too large or a line discount exceeds its price',
   },
+  ORDER_ITEM_OUT_OF_STOCK: { status: 409, message: 'An item on this order is out of stock' },
   ORDER_PRICE_REQUIRED: { status: 409, message: 'Set a price for each item before ordering' },
   ORDER_CHANGED: {
     status: 409,
@@ -26,6 +29,15 @@ const ORDER_ERRORS = {
   },
   ORDER_NOT_PAYABLE: { status: 409, message: 'This order cannot take a payment link' },
   ORDER_COD_NOT_COLLECTABLE: { status: 409, message: 'COD cannot be recorded for this order' },
+  ORDER_EXPORT_NOT_ALLOWED: { status: 403, message: 'You cannot download order lists' },
+  ORDER_SHIPPING_LABELS_PHONE_REQUIRED: {
+    status: 403,
+    message: shippingLabelsPhoneRequired,
+  },
+  ORDER_EXPORT_TOO_LARGE: {
+    status: 400,
+    message: 'Too many order lines to download at once. Narrow the filters',
+  },
   ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
   ORDER_CONFIRMATION_RATE_LIMITED: {
     status: 429,

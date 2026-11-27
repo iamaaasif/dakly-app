@@ -14,16 +14,24 @@ export const colourSuggestions = [
   'Blue',
   'Green',
   'Grey',
+  'Silver',
   'Navy',
   'Pink',
   'Brown',
   'Yellow',
 ];
 
+export function optionNameKey(name: string) {
+  const key = name.trim().toLowerCase();
+  return key === 'colour' ? 'color' : key;
+}
+
 export function valueSuggestions(optionName: string): string[] {
-  const name = optionName.trim().toLowerCase();
-  if (name === 'size') return sizeSuggestions;
-  return name === 'colour' || name === 'color' ? colourSuggestions : [];
+  const name = optionNameKey(optionName);
+  if (name === 'size') return ['XS', ...sizeSuggestions, 'XXXL'];
+  if (name === 'material')
+    return ['Cotton', 'Linen', 'Polyester', 'Wool', 'Silk', 'Denim', 'Leather'];
+  return name === 'color' ? colourSuggestions : [];
 }
 
 // Rows keep their option values by option position, so renaming an option changes nothing.
@@ -107,6 +115,26 @@ export function applyOptions(
   return sortRows(next, [...kept, ...added]).slice(0, MAX_VARIANTS);
 }
 
+export function moveOption(
+  options: GridOption[],
+  variants: GridVariant[],
+  { from, to }: { from: number; to: number },
+) {
+  const positions = options.map((_, position) => position);
+  positions.splice(to, 0, positions.splice(from, 1)[0]!);
+  const ordered = positions.map((position) => options[position]!);
+  const rows = variants.map((variant) => ({
+    ...variant,
+    optionValues: Object.fromEntries(
+      positions.flatMap((previous, position) => {
+        const value = valueAt(variant, previous);
+        return value === undefined ? [] : [[position, value]];
+      }),
+    ),
+  }));
+  return { options: ordered, variants: sortRows(ordered, rows) };
+}
+
 export function removeOptionAt(
   options: GridOption[],
   variants: GridVariant[],
@@ -160,19 +188,27 @@ export function variantLabel(variant: GridVariant, options: GridOption[]): strin
 
 export type VariantGroup = { label: string; rows: { variant: GridVariant; index: number }[] };
 
-export function groupVariants(options: GridOption[], variants: GridVariant[]): VariantGroup[] {
+export function groupVariants(
+  options: GridOption[],
+  variants: GridVariant[],
+  position = 0,
+): VariantGroup[] {
   const groups = new Map<string, VariantGroup>();
   variants.forEach((variant, index) => {
-    const label = valueAt(variant, 0) ?? '';
+    const label = valueAt(variant, position) ?? '';
     const group = groups.get(label) ?? { label, rows: [] };
     group.rows.push({ variant, index });
     groups.set(label, group);
   });
-  return options.length ? [...groups.values()] : [];
+  const option = options[position];
+  if (!option) return [];
+  return [...groups.values()].sort(
+    (a, b) => option.values.indexOf(a.label) - option.values.indexOf(b.label),
+  );
 }
 
-export function rowStock(variant: GridVariant): number {
-  return Number(variant.initialStock) || 0;
+export function availableStock(variant: GridVariant, reserved = 0) {
+  return Math.max(0, (Number(variant.initialStock) || 0) - reserved);
 }
 
 function takaNumber(text: string | undefined): number | null {
@@ -210,9 +246,8 @@ export function cleanPastedNumber(cell: string): string {
 export function withSuggestions(options: GridOption[], suggested: GridOption[]): GridOption[] {
   const next = options.map((option) => ({ ...option, values: [...option.values] }));
   for (const suggestion of suggested) {
-    const match = next.find(
-      (option) => option.name.trim().toLowerCase() === suggestion.name.toLowerCase(),
-    );
+    const key = optionNameKey(suggestion.name);
+    const match = next.find((option) => optionNameKey(option.name) === key);
     if (match) {
       const known = new Set(match.values.map((value) => value.toLowerCase()));
       match.values.push(...suggestion.values.filter((value) => !known.has(value.toLowerCase())));
@@ -225,4 +260,5 @@ export function rowKey(variant: GridVariant): string {
   return variant.id ?? `new:${JSON.stringify(variant.optionValues)}`;
 }
 
-export type EditableField = 'priceOverridePoisha' | 'costPoisha' | 'initialStock' | 'sku';
+export type EditableField =
+  'priceOverridePoisha' | 'costPoisha' | 'initialStock' | 'sku' | 'lowStockThreshold';

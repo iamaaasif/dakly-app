@@ -12,6 +12,8 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
+import { ProductBrandsRepository } from './product-brands.repository';
+import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductImportService, type ImportProduct } from './product-import.service';
@@ -40,6 +42,7 @@ function product(variants: ImportProduct['variants'], name = 'পাঞ্জা
   return {
     name,
     category: null,
+    brand: null,
     description: null,
     status: 'active',
     pricePoisha: 100000,
@@ -60,6 +63,7 @@ describe('ProductImportService with Postgres', () => {
     new ProductCategoriesRepository(tenant),
     transaction,
   );
+  const brands = new ProductBrandsService(new ProductBrandsRepository(tenant), transaction);
   const products = new ProductsService(
     repository,
     new ProductOrderVariantsRepository(tenant),
@@ -71,6 +75,8 @@ describe('ProductImportService with Postgres', () => {
     } as unknown as StoresService,
     {} as FileStorageDriver,
     categories,
+    brands,
+    {} as never,
     {} as never,
   );
   const stock = new ProductStockService(
@@ -83,6 +89,7 @@ describe('ProductImportService with Postgres', () => {
     repository,
     products,
     categories,
+    brands,
     stock,
     transaction,
     outbox,
@@ -103,12 +110,30 @@ describe('ProductImportService with Postgres', () => {
       'product_variants',
       'products',
       'product_categories',
+      'product_brands',
     ])
       await f.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [f.a, f.b],
       ]);
     await app.pool.end();
     await f.close();
+  });
+
+  it('previews brand matching the same way the shop list matches it', async () => {
+    const name = 'İpek';
+    const { rows } = await f.connection.pool.query<{ folded: string }>(
+      'select lower($1::text) as folded',
+      [name],
+    );
+    const other = await brands.create(f.b, { name });
+    const item = product([variant('BRAND-PREVIEW')]);
+    await importer.importBatch(f.a, [{ ...item, brand: name }], context);
+    const imported = (await brands.list(f.a)).items.find((brand) => brand.name === name);
+    expect(imported).toMatchObject({ name, productCount: 1 });
+    expect(imported?.id).not.toBe(other.id);
+    expect(
+      await importer.preview(f.a, [{ ...item, brand: rows[0]!.folded }], 'update'),
+    ).toMatchObject([{ result: 'skipped' }]);
   });
 
   async function stored(storeId: string, sku: string) {
@@ -173,6 +198,47 @@ describe('ProductImportService with Postgres', () => {
     const row = await stored(f.a, 'UPD-1');
     expect(row).toMatchObject({ on_hand: 8, cost_poisha: 70000 });
     expect((await movements(row.id)).map(({ quantity }) => quantity)).toEqual([5, 3]);
+  });
+
+  it('rejects an editor save loaded before a cost-only import', async () => {
+    const loaded = await products.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Scarf',
+        pricePoisha: 100000,
+        variants: [{ sku: 'COST-1' }],
+      }),
+      actor,
+    );
+    const update = product([variant('COST-1', { costPoisha: 70000 })]);
+    await importer.importBatch(f.a, [{ ...update, pricePoisha: 0, status: undefined }], context);
+
+    await expect(
+      products.edit(f.a, loaded.id, { name: 'Stale name', expectedVersion: loaded.version }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED' });
+    expect(await repository.findById(f.a, loaded.id)).toMatchObject({
+      name: 'Scarf',
+      pricePoisha: 100000,
+      version: loaded.version + 1,
+    });
+    expect(await stored(f.a, 'COST-1')).toMatchObject({ cost_poisha: 70000 });
+  });
+
+  it('adjusts stock without advancing the version when an import leaves seller fields blank', async () => {
+    const loaded = await products.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Scarf',
+        pricePoisha: 100000,
+        variants: [{ sku: 'STOCK-1' }],
+      }),
+      actor,
+    );
+    const update = product([variant('STOCK-1', { onHand: 5 })]);
+    await importer.importBatch(f.a, [{ ...update, pricePoisha: 0, status: undefined }], context);
+
+    expect(await repository.findById(f.a, loaded.id)).toMatchObject({ version: loaded.version });
+    expect(await stored(f.a, 'STOCK-1')).toMatchObject({ on_hand: 5 });
   });
 
   it('skips a matching sku in skip mode and leaves its stock and prices', async () => {

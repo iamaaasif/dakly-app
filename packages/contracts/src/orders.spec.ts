@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { orderExportQuerySchema } from './order-export';
 import {
   codCollectedSchema,
   createOrderSchema,
@@ -36,6 +37,24 @@ describe('order list query', () => {
     { search: 'invalid\0text' },
   ])('rejects an unsupported filter %j', (query) => {
     expect(orderListQuerySchema.safeParse(query).success).toBe(false);
+  });
+});
+
+describe('order export query', () => {
+  it('takes the pipeline filters and a CSV or XLSX format', () => {
+    const filters = { stage: 'delivered', alert: 'cod', search: 'Karim', source: 'manual' };
+    for (const format of ['csv', 'xlsx'])
+      expect(orderExportQuerySchema.parse({ ...filters, format })).toEqual({ ...filters, format });
+  });
+
+  it.each([
+    { format: 'xls' },
+    { format: 'csv', cursor: '123' },
+    { format: 'csv', limit: '1' },
+    { format: 'csv', selected: '019c01ea-cf15-7d31-a7f5-d73d66007ad8' },
+    { format: 'csv', createdFrom: '2026-11-18', createdThrough: '2026-11-17' },
+  ])('rejects a query that cannot describe an export %j', (query) => {
+    expect(orderExportQuerySchema.safeParse(query).success).toBe(false);
   });
 });
 
@@ -167,4 +186,30 @@ it.each([
     note: 'Staff counted the parcel',
   });
   expect(result.error?.issues).toMatchObject([{ path: ['items', 0, 'quantity'], message }]);
+});
+
+describe('order notes', () => {
+  const draft = {
+    buyer: { name: 'Rahim' },
+    recipient: { name: 'Rahim', phone: '01712458903', address: 'Dhanmondi', areaId: 301 },
+    items: [{ variantId: '7f0e6c3a-9b4d-4c52-8a7e-1d2f3a4b5c6d', quantity: 1 }],
+  };
+
+  it('trims both notes and turns empty text into no note', () => {
+    expect(
+      createOrderSchema.parse({ ...draft, note: ' Call first ', teamNote: '   ' }),
+    ).toMatchObject({ note: 'Call first', teamNote: null });
+    expect(createOrderSchema.parse(draft)).not.toHaveProperty('teamNote');
+  });
+
+  it('refuses a note over 500 characters', () => {
+    expect(createOrderSchema.safeParse({ ...draft, teamNote: 'a'.repeat(501) }).success).toBe(
+      false,
+    );
+  });
+
+  it('counts a note alone as a change to the order', () => {
+    expect(editOrderSchema.safeParse({ teamNote: 'Regular buyer' }).success).toBe(true);
+    expect(editOrderSchema.safeParse({}).success).toBe(false);
+  });
 });

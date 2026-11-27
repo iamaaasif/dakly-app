@@ -8,6 +8,7 @@ import { AutomationOrderTextService } from './automation-order-text.service';
 import { AutomationRunsRepository, type RunClaim } from './automation-runs.repository';
 import {
   failed,
+  type ChatChannel,
   type GateResult,
   goOn,
   MESSENGER_WINDOW_MS,
@@ -16,10 +17,13 @@ import {
   type StepResult,
 } from './automation-step-rules';
 
-type Route = NonNullable<Awaited<ReturnType<MessagingService['latestMessengerRoute']>>>;
+type Route = NonNullable<Awaited<ReturnType<MessagingService['latestChatRoute']>>>;
+const CHAT_CHANNELS: readonly ChatChannel[] = ['messenger', 'instagram'];
+const CHANNEL_NAMES = { messenger: 'Messenger', instagram: 'Instagram' } as const;
 
-// A workflow send step on Messenger: it goes through the chat transport while the contact's
-// window is open. It never retries, because a second try could send the text twice.
+// A workflow send step on Messenger or Instagram: it goes through the chat transport while the
+// contact's 24-hour window is open. It never retries, because a second try could send the text
+// twice.
 @Injectable()
 export class AutomationMessengerSendService {
   constructor(
@@ -29,16 +33,25 @@ export class AutomationMessengerSendService {
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
   ) {}
 
-  // The channels are tried in this order: Messenger, then SMS. Undefined when the step lists
-  // neither.
+  // The channels are tried in this order: Messenger, Instagram, then SMS. Undefined when the step
+  // lists none of them.
   async checkChannels(
     storeId: string,
     step: SendStep,
     contactId: string,
     lockedContactExists: boolean | undefined,
   ) {
-    const messenger = await this.checkMessenger(storeId, step, contactId, lockedContactExists);
-    if (messenger || !step.channels.includes('sms')) return messenger;
+    const chats = CHAT_CHANNELS.filter((channel) => step.channels.includes(channel));
+    for (const [index, channel] of chats.entries()) {
+      const hasFallback = index < chats.length - 1 || step.channels.includes('sms');
+      const checked = await this.checkChat(
+        storeId,
+        { step, contactId, channel, hasFallback },
+        lockedContactExists,
+      );
+      if (checked) return checked;
+    }
+    if (!step.channels.includes('sms')) return undefined;
     const checked = await this.sendPolicy.checkForSend(
       storeId,
       { contactId, channel: 'sms', category: step.category },
@@ -47,21 +60,24 @@ export class AutomationMessengerSendService {
     return { ...checked, channel: 'sms' as const };
   }
 
-  // Undefined when the step does not list Messenger, or the contact cannot be reached there and
-  // the step lists SMS to try instead.
-  private async checkMessenger(
+  // Undefined when the contact cannot be reached on this channel and the step lists another to
+  // try instead.
+  private async checkChat(
     storeId: string,
-    step: SendStep,
-    contactId: string,
+    {
+      step,
+      contactId,
+      channel,
+      hasFallback,
+    }: { step: SendStep; contactId: string; channel: ChatChannel; hasFallback: boolean },
     lockedContactExists: boolean | undefined,
   ) {
-    if (!step.channels.includes('messenger')) return undefined;
-    const route = await this.messaging.latestMessengerRoute(storeId, contactId);
+    const route = await this.messaging.latestChatRoute(storeId, contactId, channel);
     const policy = await this.sendPolicy.checkForSend(
       storeId,
       {
         contactId,
-        channel: 'messenger',
+        channel,
         category: step.category,
         windowClosesAt: route && new Date(route.lastInboundAt.getTime() + MESSENGER_WINDOW_MS),
       },
@@ -72,19 +88,20 @@ export class AutomationMessengerSendService {
     const { decision } = policy;
     const noChat = !route && decision.action === 'skip' && decision.reason === 'window_closed';
     const checked = noChat ? { ...policy, decision: skipped('no_address') } : policy;
-    if (checked.decision.action === 'skip' && step.channels.includes('sms')) return undefined;
-    return { ...checked, channel: 'messenger' as const, route };
+    if (checked.decision.action === 'skip' && hasFallback) return undefined;
+    return { ...checked, channel, route };
   }
 
   // Inside the gate's transaction: the step row is written before the message is sent.
   async reserve(
-    { storeId, claim, orderId, step, contactId }: ReserveInput,
+    { storeId, claim, orderId, step, contactId, channel }: ReserveInput,
     route: Route | undefined,
     times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<GateResult> {
     if (!route) return { decision: skipped('no_address') };
-    const prepared = await this.orderText.prepare(storeId, orderId, step.message.text);
-    const body = (await prepared?.render()) ?? step.message.text;
+    const text = step.message.messengerText ?? step.message.text;
+    const prepared = await this.orderText.prepare(storeId, orderId, text);
+    const body = (await prepared?.render()) ?? text;
     const stepId = newId();
     await this.repository.insertStep(storeId, claim.runId, contactId, {
       stepKey: claim.stepKey,
@@ -92,7 +109,7 @@ export class AutomationMessengerSendService {
       category: step.category,
       id: stepId,
       outcome: 'sending',
-      channel: 'messenger',
+      channel,
       ...times,
       renderedText: body,
     });
@@ -102,28 +119,32 @@ export class AutomationMessengerSendService {
       destination: route.address,
       at: times.sentAt,
       firstTriedAt: times.firstTriedAt,
-      messenger: { connectionId: route.connectionId, identityId: route.identityId, stepId },
+      chat: { channel, connectionId: route.connectionId, identityId: route.identityId, stepId },
     };
   }
 
   async deliver(
     { storeId, contactId, step }: { storeId: string; contactId: string; step: SendStep },
-    { claim, at, body, messenger }: PlannedSend,
+    { claim, at, body, chat }: PlannedSend,
   ): Promise<StepResult> {
-    const { connectionId, identityId, stepId } = messenger;
+    const { channel, connectionId, identityId, stepId } = chat;
     const result = await this.messaging
       .sendCampaignMessage(storeId, {
-        channel: 'messenger',
+        channel,
         contactId,
         connectionId,
         identityId,
         content: body,
         category: step.category,
         operationKey: operationKey(claim),
-        buttons: step.message.buttons.map(({ key, label }) => ({
-          title: label,
-          payload: `workflow:${stepId}:${key}`,
-        })),
+        // The Instagram driver sends text and cards only, so a reply button is a Messenger feature.
+        buttons:
+          channel === 'messenger'
+            ? step.message.buttons.map(({ key, label }) => ({
+                title: label,
+                payload: `workflow:${stepId}:${key}`,
+              }))
+            : [],
       })
       .catch((error: unknown) => {
         if (!(error instanceof AppError)) throw error;
@@ -138,16 +159,16 @@ export class AutomationMessengerSendService {
       };
     if (result.status === 'failed')
       return {
-        ...failed(`Messenger did not send the message (${result.errorCode})`, now),
+        ...failed(`${CHANNEL_NAMES[channel]} did not send the message (${result.errorCode})`, now),
         claim,
         stepChange: { outcome: 'failed' },
       };
-    return { ...unconfirmed(now), claim };
+    return { ...unconfirmed(now, channel), claim };
   }
 
   // A worker stopped after the step row was written, so the message may or may not have gone out.
-  interrupted(now: Date): StepResult {
-    return unconfirmed(now);
+  interrupted(now: Date, channel: ChatChannel): StepResult {
+    return unconfirmed(now, channel);
   }
 }
 
@@ -155,9 +176,12 @@ function skipped(reason: SkipReason) {
   return { action: 'skip', reason } as const;
 }
 
-function unconfirmed(now: Date): StepResult {
+function unconfirmed(now: Date, channel: ChatChannel): StepResult {
   return {
-    ...failed('Messenger did not confirm this message, so it is not sent again', now),
+    ...failed(
+      `${CHANNEL_NAMES[channel]} did not confirm this message, so it is not sent again`,
+      now,
+    ),
     stepChange: { outcome: 'unconfirmed' },
   };
 }
@@ -168,10 +192,11 @@ type ReserveInput = {
   contactId: string;
   orderId: string | null;
   step: SendStep;
+  channel: ChatChannel;
 };
 type PlannedSend = {
   claim: RunClaim;
   at: Date;
   body: string;
-  messenger: NonNullable<Extract<GateResult, { messenger?: unknown }>['messenger']>;
+  chat: NonNullable<Extract<GateResult, { chat?: unknown }>['chat']>;
 };

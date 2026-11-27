@@ -46,7 +46,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 | Business details (step 3 of 4)        | Business name, what you sell (8 chips), district (64), how you sell (4 multi-select cards: Facebook or social media; Online store; Shop with a POS; Shop without a POS), customer list size (Under 500; 500–2,000; 2,000–10,000; Over 10,000).                                                                                                        |
 | Pick a plan (step 4 of 4)             | Monthly / Yearly switch, 4 plan cards; paid plans say "Start N-day free trial", with N from the plan (D34).                                                                                                                                                                                                                                           |
 | Forgot password / New password / Done | Mobile number or email → code → new password (8+ characters with a number) → success.                                                                                                                                                                                                                                                                 |
-| Setup checklist (Dashboard)           | Built from the "how you sell" answers (see How it works). Shows "N of M done", each step with a button, Hide guide, Change setup.                                                                                                                                                                                                                     |
+| Setup checklist (Dashboard)           | Shows up to three steps for the shop’s enabled extensions, along with progress and links to finish setup.                                                                                                                                                                                                                                             |
 | Extensions                            | 4 cards (Sales, Chats, Physical Shop, Social Auto Post): on/off switch, what it adds, Open. Header "N of 4 on".                                                                                                                                                                                                                                       |
 | Store settings                        | Tabs Store information, SMS settings, WhatsApp settings (Email settings hidden until email campaigns ship). SMS and WhatsApp settings are in [02-channel-connections.md](02-channel-connections.md).                                                                                                                                                  |
 | Team and permissions                  | Members tab (seat meter, invite, role picker per member, status, last active, remove) and Roles tab (built-in and custom roles, per-area access).                                                                                                                                                                                                     |
@@ -65,17 +65,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 
 **Setup checklist**
 
-Steps are added in this order, only for the answers given:
-
-| Answer                         | Steps added                                                                                                                             |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Facebook or social media       | Connect your Facebook Page; Teach Dakly AI your answers (delivery charge, payment, exchange); Add your products; Turn chats into orders |
-| Online store                   | Connect Shopify or WooCommerce                                                                                                          |
-| Shop with a POS                | Connect your POS                                                                                                                        |
-| Shop without a POS (release 2) | Record your first counter sale; Add a baki to the Due book; Scan your khata (optional)                                                  |
-| Always                         | Set up WhatsApp and SMS; Send your first campaign                                                                                       |
-
-A step is done when its real condition is true (for example a Page is connected and its token is valid), never by clicking. The checklist hides itself when every step is done and shows "Dakly is ready" once. "Change setup" reopens the "How do you sell?" question, prefilled.
+The Dashboard setup guide shows Add store details, Connect a channel, and Create your first product. Steps follow the shop’s enabled extensions. Once every step is done, an Owner or Admin can hide the guide.
 
 **Extensions**
 
@@ -542,13 +532,17 @@ instantiate an SMS driver. Captured messages do not prove live SMS delivery.
 
 ## Code sign-up and sign-in
 
-ACC-2 provides the phone routes. Both require an allowed `Origin`.
+Both routes require an allowed `Origin`. Set `SIGNUP_CODE_CHANNEL` to the same
+value on the API and web app. It defaults to `email`; use `sms` for mobile verification.
+The team invite form defaults to the same channel. In email mode, invite new users
+by email so their signup proves the invited address.
 
-- `POST /auth/code`: `purpose: sign_up` takes name, normalized BD phone, optional
-  email and `termsVersion`. An existing phone returns `409 AUTH_ACCOUNT_EXISTS`.
+- `POST /auth/code`: `purpose: sign_up` takes name, `termsVersion` and the configured
+  contact. Email mode requires email. SMS mode requires a normalized BD phone and
+  accepts an optional email. An existing verified contact returns `409 AUTH_ACCOUNT_EXISTS`.
   `purpose: sign_in` takes a phone; an unknown account returns
   `404 AUTH_ACCOUNT_NOT_FOUND` without sending a message.
-- `POST /auth/code/verify`: takes the same phone and purpose, a six-digit code and
+- `POST /auth/code/verify`: takes the same contact and purpose, a six-digit code and
   optional `isRemembered` (default false). It returns 204 and sets the session
   cookie; neither the code nor the session token appears in the response body.
 
@@ -562,14 +556,15 @@ invalidates its old grant; the final account row lock rechecks the current phone
 disabled flag and TOTP status before issuing a session. Resend waits 30 seconds;
 sends are limited to five per target and twenty per IP in an hour. Concurrent or
 failed delivery attempts can consume capacity without a delivered message. The
-code is saved before SMS delivery, outside any database transaction. An uncertain
-delivery failure retains the code and cooldown and returns `AUTH_SMS_UNAVAILABLE`.
+code is saved before delivery, outside any database transaction. An uncertain delivery
+failure retains the code and cooldown and returns `AUTH_EMAIL_UNAVAILABLE` or `AUTH_SMS_UNAVAILABLE`.
 
 `AuthService.completeSignIn` is the sole production session issuer. It accepts an
 internal identity and plain request context, inserts a pending registration if
 needed, and commits the user and storeless session in one account transaction.
-Sign-up records phone verification and accepted terms; its optional email remains
-unverified. Phone uniqueness protects concurrent sign-ups. Email uniqueness applies
+Sign-up records verification for the contact that received the code and saves accepted terms.
+Email sign-up creates an email account. SMS sign-up verifies the phone and leaves any
+optional email unverified. Phone uniqueness protects concurrent sign-ups. Email uniqueness applies
 only to verified addresses, so an optional unverified signup email cannot reserve
 an identity. A consumed code is never restored after database failure: the user
 must request another code. If the database committed but clearing failure state
@@ -739,7 +734,9 @@ under the account lock. Sign-in and password-change codes cannot reset a passwor
 The password update, revocation of every old session and `password.changed` and
 `sessions.revoked` events commit atomically. Audit failure rolls them all back.
 Reset then calls the common sign-in gate; TOTP can refuse session issuance while
-the reset and old-session revocation remain committed. Later account and store
+the reset and old-session revocation remain committed. A successful reset session
+selects the first shop listed among the user's active memberships. The confirmation then opens the
+dashboard automatically. Later account and store
 requests with revoked cookies return 401; requests already authorized may finish.
 
 Email-change and password-code proof stores only domain-separated fingerprints
@@ -968,7 +965,8 @@ Google email verification tickets stay in component memory. Keep me signed in
 is ticked by default, as in the design. `/sign-in` and `/sign-up` send a person with a live
 session to the Dashboard.
 
-`/sign-up` has account and SMS verification steps. `/setup` resumes the verified
+`/sign-up` verifies an email or mobile number according to `SIGNUP_CODE_CHANNEL`.
+`/setup` resumes the verified
 account at business details and plan choice. The final `POST /stores` commits the
 business details, Owner membership and subscription together. Reloading before
 verification clears the account draft; after verification, the session can resume
@@ -1103,13 +1101,11 @@ audit log, store closing and export are separate tasks.
 
 ### Setup checklist API (ACC-13, first PR)
 
-`GET /setup-checklist` returns the steps for the shop in order, each as an id and a `done` flag, with the saved "how you sell" answers and whether the guide is hidden. The API sends ids and state only; the Dashboard owns the titles, texts and buttons. Any member can read it.
+`GET /setup-checklist` returns the steps for the shop in order, each as an id and a `done` flag, and whether the guide is hidden. The API sends ids and state only; the Dashboard owns the titles, texts and buttons. Any member can read it.
 
-Steps follow the table under Setup checklist, with three differences for release 1. Shopify, WooCommerce and POS connections do not exist yet (D6, D21), and the counter-sale steps arrive with Physical Shop, so those answers add no steps. A step is left out while its extension is off: the Facebook Page, "Teach Dakly AI" and "Turn chats into orders" steps need Chats, and "Add your products" needs Sales. A store with no answers saved gets only the two steps every store has.
+Add store details checks the store category and district. Connect a channel needs Chats and an active Messenger, Instagram or WhatsApp connection. Create your first product needs Sales and a product the AI can show in chats.
 
-Each step checks its real condition. "Connect your Facebook Page" needs an active Page connection. "Teach Dakly AI your answers" needs one active knowledge item. "Add your products" needs a product the AI can show in chats. "Turn chats into orders" needs an order from Messenger, Instagram or WhatsApp. "Set up WhatsApp and SMS" needs an active WhatsApp connection or an approved SMS sender, because WhatsApp connect (CHN-3) is blocked. "Send your first campaign" needs a campaign that has started sending.
-
-`PATCH /setup-checklist` takes either `{ howYouSell }` or `{ hidden: true }`. New answers replace the saved ones, turn on the extensions from ACC-R5 that are still off (never turning one off), bring a hidden guide back, and return the extensions turned on in `turnedOn` for the toast. `hidden: true` is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can change it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`.
+`PATCH /setup-checklist` takes `{ hidden: true }` and puts the guide away. It is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can do it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`. The "how you sell" answers are asked once when the shop is created and are not changed from the guide.
 
 ### Owner audit log API (ACC-13, fourth PR)
 
@@ -1119,15 +1115,9 @@ Each step checks its real condition. "Connect your Facebook Page" needs an activ
 
 `/activity` shows the audit API as a list of cards, newest first: the action in plain words, who (You and role, a role, Dakly support, Dakly, Dakly AI or a customer) with the Dhaka time, the changed field names and the reason when there is one. "Older activity" and "Latest activity" move through pages with `before` in the URL. Only the Owner opens it (the same flag as Support access, `canApproveSupport`); others see the no-access note. Settings lists it as "Activity log" for the Owner. There is no design image for this screen, so it reuses the card list of the Security history; evidence is in `docs/design/evidence/acc-13-audit/`. Actions without a plain label show their code as words.
 
-### Setup banner and card on the Dashboard (ACC-13, second PR)
+### Setup guide on the Dashboard (ACC-13, second PR)
 
-The Dashboard shows the "How do you sell?" banner above the greeting card and the "Get started with Dakly" card below it (evidence in `docs/design/evidence/acc-13-setup-checklist/`). The page hands both in, as it does the Ask box.
-
-The banner shows only for a shop with no saved answers, because sign-up asks the question once and the second ask in the prototype was dropped. "Set up Dakly" opens a dialog with the four answers as toggle cards. Saving calls `PATCH /setup-checklist`, then a toast reads "Dakly is set up for how you sell. Turned on: …" and the menu is refreshed when extensions changed.
-
-The card shows "N of M done", one card per step in API order, and only the first open step gets the filled button; a done step shows a green tick and "Done". "Change setup" reopens the dialog with the saved answers. When every step is done the card reads "You're all set" and "Hide guide" hides it for the shop. Members who cannot change extensions (`canChangeExtensions`) see the card without Change setup and Hide guide, and never see the banner. The step titles, texts, buttons and links live in the web app. Teach Dakly opens the AI agent drawer on its Knowledge tab (`/chats?agent=knowledge`).
-
-The design shows three steps for a shop with no answers. Release 1 has no store connection, so such a shop sees two. Steps use the action fill, not the brighter orange in the image, to keep the 4.5:1 text contrast in `docs/design/theme.md`.
+The Dashboard shows the setup guide below the greeting. It shows progress and directs the member to Store information, Integrations, or the new product form. Only members with the relevant edit permission see each action. The first unfinished step the member can change uses the primary button. Once all steps are complete, an Owner or Admin can hide the guide.
 
 ### Extensions screen (ACC-13, third PR)
 
@@ -1146,7 +1136,7 @@ sign-up screen uses them to create the first shop on the free plan, so a new own
 dashboard without the setup screen. `businessType` and `district` are optional on `POST /stores`
 for that reason; the setup screen still requires both.
 
-The sign-up page has three steps: email, password and source; name, business name, phone, website and what the business offers; then the SMS code. After the code is right the page creates the first shop (free plan, "social media" as how they sell, under 500 customers) and opens the dashboard. If creating the shop fails the owner lands on the setup screen instead. A Google or Facebook sign-up has no business step and goes to setup. The sign-in page has one "Email or mobile number" field because accounts made by SMS have no email. A wrong reset code shows on the password step with a link back to the code step.
+The sign-up page asks for email, password and source, then for name, business name, website and what the business offers. SMS mode also asks for a mobile number. The last step checks the code sent to the configured contact. After the code is right the page creates the first shop (free plan, "social media" as how they sell, under 500 customers) and opens the dashboard. If creating the shop fails the owner lands on the setup screen instead. A Google or Facebook sign-up has no business step and goes to setup. The sign-in page has one "Email or mobile number" field. A wrong reset code shows on the password step with a link back to the code step.
 
 ### Continue with Facebook (ACC-19, part 6)
 

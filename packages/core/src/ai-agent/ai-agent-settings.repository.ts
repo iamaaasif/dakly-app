@@ -23,7 +23,16 @@ import { shopRulesFrom } from './shop-rules';
 export class AiAgentSettingsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async enabled(storeId: string) {
+  enabled(storeId: string) {
+    return this.settings(storeId, true);
+  }
+
+  // A person may ask for a draft while the AI is off; the owner's rules still shape it.
+  forDrafts(storeId: string) {
+    return this.settings(storeId, false);
+  }
+
+  private async settings(storeId: string, onlyAutoReply: boolean) {
     const [settings] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -37,7 +46,12 @@ export class AiAgentSettingsRepository {
           extraRules: aiAgentSettings.extraRules,
         })
         .from(aiAgentSettings)
-        .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),
+        .where(
+          and(
+            eq(aiAgentSettings.storeId, storeId),
+            onlyAutoReply ? eq(aiAgentSettings.isAutoReplyOn, true) : undefined,
+          ),
+        ),
     );
     if (!settings) return undefined;
     const { productCardStyle, answerComments } = agentAbilitiesSchema
@@ -52,6 +66,18 @@ export class AiAgentSettingsRepository {
       answerComments: answerComments ?? defaultAgentAbilities.answerComments,
       rules: shopRulesFrom(settings),
     };
+  }
+
+  // A person's card follows the owner's style even while the AI is off.
+  async productCardStyle(storeId: string) {
+    const [settings] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ abilities: aiAgentSettings.abilities })
+        .from(aiAgentSettings)
+        .where(eq(aiAgentSettings.storeId, storeId)),
+    );
+    const { productCardStyle } = agentAbilitiesSchema.partial().parse(settings?.abilities ?? {});
+    return productCardStyle ?? defaultAgentAbilities.productCardStyle;
   }
 
   async testers(storeId: string): Promise<string[]> {

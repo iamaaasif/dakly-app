@@ -1,119 +1,73 @@
 'use client';
 
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { DashboardQuery, DashboardResponse } from '@dakly/contracts/dashboard';
-import { Card } from '@dakly/ui/card';
-import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
-import { Skeleton } from '@dakly/ui/skeleton';
 
 import { useDashboard } from '../api/dashboard';
-import { DashboardMetrics, LifecycleGroups } from './dashboard-metrics';
+import { DashboardActions, type DashboardSupportLink } from './dashboard-actions';
+import { DashboardOverview, type DashboardActivity } from './dashboard-overview';
 import { formatCalendarDate, localHour } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
-const periods = [7, 30, 90] as const;
-
-// The Ask box and the setup guide belong to other features, so the page hands them in.
 export function Dashboard({
   period,
-  askBox,
-  setupBanner,
   setupCard,
-}: DashboardQuery & { askBox: ReactNode; setupBanner: ReactNode; setupCard: ReactNode }) {
+  activity,
+  support,
+}: DashboardQuery & {
+  setupCard: ReactNode;
+  activity: DashboardActivity;
+  support: DashboardSupportLink;
+}) {
   const { data: session } = useSessionContext();
-  const { data, error, isPending, refetch } = useDashboard(period, Boolean(session?.currentStore));
-  if (!session?.currentStore) return null;
+  const store = session?.currentStore;
+  const report = useDashboard(period, Boolean(store));
+  const { data } = report;
+  if (!store) return null;
 
   const firstName = session.user.name.trim().split(/\s+/)[0];
+  const reportPeriod = data?.period ?? period;
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-6 md:p-8">
-      {setupBanner}
-      <DashboardHeader data={data} name={firstName} period={period} askBox={askBox} />
-      {setupCard}
-      {isPending && (
-        <div role="status" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <span className="sr-only">Loading dashboard reports</span>
-          {[0, 1, 2, 3].map((slot) => (
-            <Skeleton key={slot} className="h-36 w-full" />
-          ))}
-        </div>
-      )}
-      {error && (
-        <QueryError
-          message={error.message}
-          onRetry={() => refetch()}
-          retryLabel="Retry dashboard"
+    <main className="px-3.5 py-5 sm:px-6 sm:py-6">
+      <div className="@container/dashboard mx-auto max-w-300 space-y-5">
+        <DashboardGreeting data={data} name={firstName} />
+        {report.error && (
+          <QueryError
+            message={report.error.message}
+            onRetry={() => report.refetch()}
+            retryLabel="Retry dashboard"
+          />
+        )}
+        <DashboardOverview data={data} period={reportPeriod} activity={activity} store={store} />
+        {setupCard}
+        <DashboardActions
+          activity={activity}
+          store={store}
+          stoppedBuying={data?.lifecycle?.stopped_buying}
+          support={support}
         />
-      )}
-      {data && <DashboardResults data={data} period={period} />}
+      </div>
     </main>
   );
 }
 
-type HeaderProps = DashboardQuery & {
-  data?: DashboardResponse;
-  name?: string;
-  askBox: ReactNode;
-};
-
-function DashboardHeader({ data, name, period, askBox }: HeaderProps) {
+function DashboardGreeting({ data, name }: { data?: DashboardResponse; name?: string }) {
   return (
-    <Card className="space-y-6 bg-linear-to-b from-primary-soft to-surface md:p-8">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          {data && (
-            <time dateTime={data.asOf} className="mb-2 block text-sm text-text-muted">
-              {formatCalendarDate(data.asOf, data.timeZone)}
-            </time>
-          )}
-          <h1 className={cn(data ? 'sr-only' : 'text-xl font-bold md:text-2xl')}>Dashboard</h1>
-          {data && (
-            <p className="text-xl font-bold md:text-2xl">
-              {greeting(data)}, {name}
-            </p>
-          )}
-        </div>
-        {(!data || hasReports(data)) && (
-          <nav
-            aria-label="Reporting period"
-            className="flex w-fit max-w-full flex-wrap gap-1 rounded-md border border-border bg-surface p-1"
-          >
-            {periods.map((days) => (
-              <Link
-                key={days}
-                href={`/dashboard?period=${days}`}
-                aria-current={period === days ? 'page' : undefined}
-                className={cn(
-                  'inline-flex min-h-10 items-center rounded-md px-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-                  period === days ? 'bg-primary-soft text-action-hover' : 'hover:bg-surface-muted',
-                )}
-              >
-                {days} days
-              </Link>
-            ))}
-          </nav>
-        )}
-      </div>
-      {askBox}
-    </Card>
-  );
-}
-
-function hasReports(data: DashboardResponse) {
-  return data.lifecycle !== undefined || Object.values(data.cards).some(Boolean);
-}
-
-function DashboardResults({ data, period }: { data: DashboardResponse; period: number }) {
-  if (!hasReports(data))
-    return <p className="text-text-muted">No reports are available with your access.</p>;
-  return (
-    <>
-      <DashboardMetrics cards={data.cards} period={period} />
-      {data.lifecycle && <LifecycleGroups counts={data.lifecycle} />}
-    </>
+    <header className="space-y-1.5">
+      <h1 className={data ? 'sr-only' : 'text-title font-bold tracking-tight'}>Dashboard</h1>
+      {data && (
+        <>
+          <time dateTime={data.asOf} className="block text-sm font-semibold text-text-muted">
+            {formatCalendarDate(data.asOf, data.timeZone)}
+          </time>
+          <h2 className="text-xl leading-tight font-bold tracking-tight sm:text-title">
+            {name ? `${greeting(data)}, ${name}` : greeting(data)}
+          </h2>
+        </>
+      )}
+    </header>
   );
 }
 
