@@ -4227,6 +4227,24 @@ fixture('POST /posts/:postId/approve', async () => {
   expect(await f.row('posts', foreign)).toEqual(before);
 });
 
+fixture('POST /posts/:postId/duplicate', async () => {
+  const { a, b } = await pair();
+  const channel = await seedChannel(b);
+  const own = await postDraft(b, channel, 'ঈদ অফার');
+  const foreign = await postDraft(a, await seedChannel(a));
+  const copy = await success(b, 'POST', `/posts/${own}/duplicate`, 201);
+  expect(copy.json().id).not.toBe(own);
+  expect(copy.json()).toMatchObject({
+    caption: 'নতুন পাঞ্জাবি',
+    createdByUserId: b.owner.id,
+    targets: [{ channelConnectionId: channel, captionOverride: 'ঈদ অফার', status: 'draft' }],
+  });
+  expect(await f.row('posts', copy.json().id)).toMatchObject({ store_id: b.id });
+  const before = await f.admin.pool.query('select count(*) from posts');
+  await hidden(b, 'POST', (id) => `/posts/${id}/duplicate`, foreign);
+  expect(await f.admin.pool.query('select count(*) from posts')).toEqual(before);
+});
+
 fixture('POST /posts/:postId/schedule', async () => {
   const { a, b } = await pair();
   const own = await aiPostDraft(a);
