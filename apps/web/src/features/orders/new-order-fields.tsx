@@ -24,3 +24,17 @@ export function OrderCard({
     </Card>
   );
 }
+
+// A value the system filled in stays tinted until staff change it, so they can check it.
+export const filledClass = 'border-primary bg-primary-soft';
+
+export function BdtPrefix({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex min-h-10 min-w-0 items-center gap-2 rounded-md border border-input-border bg-surface px-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus">
+      <span aria-hidden="true" className="text-text-muted">
+        BDT
+      </span>
+      {children}
+    </span>
+  );
+}

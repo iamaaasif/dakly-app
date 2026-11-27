@@ -35,6 +35,7 @@ export function useCreateOrder<Body = CreateOrderInput>(path = '/orders') {
       setMustRetry(false);
       void client.invalidateQueries({ queryKey: ordersKey });
       void client.invalidateQueries({ queryKey: productsKeys.all });
+      void client.invalidateQueries({ queryKey: ['order-customer-lookup'] });
     },
   });
   return { ...create, mustRetry };
