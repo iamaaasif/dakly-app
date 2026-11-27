@@ -6,6 +6,7 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 import { cn } from '@dakly/ui/cn';
 
 import { AccountMenu } from './account-menu';
+import { KeyboardShortcuts } from './keyboard-shortcuts';
 import { MobileNavigation } from './mobile-navigation';
 import { ShellNavigation } from './shell-navigation';
 import { ShellNavigationCollapse } from './shell-navigation-collapse';
@@ -44,6 +45,7 @@ export function ShellFrame({
       >
         Skip to content
       </a>
+      <KeyboardShortcuts />
       <ShellHeader {...{ data, blocked, actions, onSwitch, onSignOut }} />
       <div className="flex min-h-0 flex-1">
         <aside

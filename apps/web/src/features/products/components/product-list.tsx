@@ -1,5 +1,7 @@
 import { Pencil, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import type { MouseEvent } from 'react';
 
 import { formatMoney } from '@dakly/contracts/money';
 import type { ProductListItem, ProductResponse, ProductReadiness } from '@dakly/contracts/products';
@@ -157,9 +159,20 @@ function SelectProduct({ product, selection }: Pick<RowProps, 'product' | 'selec
   );
 }
 
+// The whole row opens the product; controls inside it keep their own click.
+function useOpenProduct(productId: string) {
+  const router = useRouter();
+  return (event: MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('a, button, input, label, [role="checkbox"], [role="menuitem"]')) return;
+    router.push(`/products/${productId}`);
+  };
+}
+
 function ProductRow({ product, columns, onAdjust, onChangeStock, selection }: RowProps) {
+  const open = useOpenProduct(product.id);
   return (
-    <TableRow className="h-[72px]">
+    <TableRow className="h-[72px] cursor-pointer" onClick={open}>
       {selection ? (
         <TableCell className="w-12 pl-4">
           <SelectProduct product={product} selection={selection} />
@@ -198,8 +211,9 @@ function ProductRow({ product, columns, onAdjust, onChangeStock, selection }: Ro
 }
 
 function ProductCard({ product, onAdjust, onChangeStock, selection }: RowProps) {
+  const open = useOpenProduct(product.id);
   return (
-    <li className="space-y-3 p-4">
+    <li className="cursor-pointer space-y-3 p-4" onClick={open}>
       <div className="flex items-start gap-3">
         <SelectProduct product={product} selection={selection} />
         <ProductIdentity product={product} />
