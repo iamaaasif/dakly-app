@@ -1,14 +1,22 @@
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 
 import { formatMoney } from '@dakly/contracts/money';
-import type { ProductListItem, ProductResponse } from '@dakly/contracts/products';
+import type { ProductListItem, ProductResponse, ProductReadiness } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@dakly/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
+import type { ProductColumn } from '../product-columns';
+import { readinessLabels } from '../product-labels';
 import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
 import { ProductActionsMenu } from './product-actions-menu';
 import { ProductThumbnail } from './product-thumbnail';
@@ -21,13 +29,24 @@ export type ProductSelection = {
 };
 type ProductListProps = {
   products: ProductListItem[];
+  columns: ProductColumn[];
+  readiness?: ProductReadiness;
+  onReadiness: (readiness: ProductReadiness | undefined) => void;
   onAdjust?: (variantId: string) => void;
   onChangeStock?: (productId: string) => void;
   selection?: ProductSelection;
 };
-type RowProps = Omit<ProductListProps, 'products'> & {
+type RowProps = Omit<ProductListProps, 'products' | 'readiness' | 'onReadiness'> & {
   product: ProductListItem;
 };
+
+const readinessFilters: ProductReadiness[] = [
+  'running_low',
+  'out_of_stock',
+  'needs_price',
+  'needs_photo',
+  'hidden',
+];
 
 export function ProductList(props: ProductListProps) {
   const { products } = props;
@@ -52,7 +71,14 @@ export function ProductList(props: ProductListProps) {
   );
 }
 
-function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
+function ProductTableHead({
+  products,
+  columns,
+  readiness,
+  onReadiness,
+  onAdjust,
+  selection,
+}: ProductListProps) {
   const allSelected = products.every((product) => selection?.selectedIds.has(product.id));
   return (
     <TableHeader>
@@ -67,14 +93,56 @@ function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
           </TableHead>
         ) : null}
         <TableHead>Product</TableHead>
-        <TableHead>Price</TableHead>
-        <TableHead>Stock</TableHead>
-        <TableHead>Status</TableHead>
+        {columns.includes('price') ? <TableHead>Price</TableHead> : null}
+        {columns.includes('stock') ? <TableHead>Stock</TableHead> : null}
+        {columns.includes('status') ? (
+          <TableHead>
+            <ReadinessFilter readiness={readiness} onReadiness={onReadiness} />
+          </TableHead>
+        ) : null}
         {onAdjust ? (
           <TableHead className="pr-4 text-right whitespace-nowrap">Actions</TableHead>
         ) : null}
       </TableRow>
     </TableHeader>
+  );
+}
+
+// The readiness chips moved here from the page: the column the person already reads as "state".
+function ReadinessFilter({
+  readiness,
+  onReadiness,
+}: Pick<ProductListProps, 'readiness' | 'onReadiness'>) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Filter products by status"
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          readiness && 'text-action',
+        )}
+      >
+        Status
+        <SlidersHorizontal aria-hidden="true" size={12} strokeWidth={2} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuCheckboxItem
+          checked={!readiness}
+          onCheckedChange={() => onReadiness(undefined)}
+        >
+          All products
+        </DropdownMenuCheckboxItem>
+        {readinessFilters.map((each) => (
+          <DropdownMenuCheckboxItem
+            key={each}
+            checked={readiness === each}
+            onCheckedChange={() => onReadiness(each)}
+          >
+            {readinessLabels[each]}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -89,7 +157,7 @@ function SelectProduct({ product, selection }: Pick<RowProps, 'product' | 'selec
   );
 }
 
-function ProductRow({ product, onAdjust, onChangeStock, selection }: RowProps) {
+function ProductRow({ product, columns, onAdjust, onChangeStock, selection }: RowProps) {
   return (
     <TableRow className="h-[72px]">
       {selection ? (
@@ -100,15 +168,21 @@ function ProductRow({ product, onAdjust, onChangeStock, selection }: RowProps) {
       <TableCell>
         <ProductIdentity product={product} />
       </TableCell>
-      <TableCell>
-        <ProductPrice product={product} />
-      </TableCell>
-      <TableCell>
-        <ProductStock product={product} onAdjust={onAdjust} />
-      </TableCell>
-      <TableCell>
-        <ProductVisibility product={product} />
-      </TableCell>
+      {columns.includes('price') ? (
+        <TableCell>
+          <ProductPrice product={product} />
+        </TableCell>
+      ) : null}
+      {columns.includes('stock') ? (
+        <TableCell>
+          <ProductStock product={product} onAdjust={onAdjust} />
+        </TableCell>
+      ) : null}
+      {columns.includes('status') ? (
+        <TableCell>
+          <ProductVisibility product={product} />
+        </TableCell>
+      ) : null}
       {onAdjust ? (
         <TableCell className="pr-4">
           <ProductRowActions

@@ -262,7 +262,7 @@ describe('Products screen', () => {
     await userEvent.click(within(table).getByRole('checkbox', { name: 'Select Cotton Panjabi' }));
     const dialog = await openArchiveDialog(table);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Archive product' }));
-    expect(await screen.findByRole('heading', { name: 'No products yet' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'No product created yet' })).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByText('1 selected')).toBeNull();
   });
@@ -392,12 +392,10 @@ describe('Products screen', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Products could not load');
     failed = false;
     await userEvent.click(screen.getByRole('button', { name: 'Retry products' }));
-    expect(await screen.findByRole('heading', { name: 'No products yet' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'No product created yet' })).toBeTruthy();
     const catalogue = screen.getByRole('region', { name: 'Product catalogue' });
     expect(
-      within(catalogue).getByText(
-        'Products you add show here, and Dakly uses them to answer chats and take orders.',
-      ),
+      within(catalogue).getByText('Once you create a product, it will show here.'),
     ).toBeTruthy();
     await userEvent.click(within(catalogue).getByRole('button', { name: 'Add product' }));
     expect(await screen.findByRole('dialog', { name: 'Add product' })).toBeTruthy();
@@ -405,41 +403,59 @@ describe('Products screen', () => {
   it('offers to clear filters when a search has no products', async () => {
     stubFetch(async () => response({ items: [], nextCursor: null, totalCount: 1 }));
     show({ limit: 50, search: 'Cotton' });
-    expect(await screen.findByText('No products on this page.')).toBeTruthy();
+    expect(await screen.findByText('No products on this page')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Clear filters' }).getAttribute('href')).toBe(
       '/products',
     );
   });
-  it('keeps search and readiness in cursor links and clears the cursor when filters change', async () => {
+  it('keeps search and status when paging and clears the cursor when filters change', async () => {
     const cursor = '019c01ea-cf15-7d31-a7f5-d73d66007ae4';
     let requested = '';
     stubFetch(async (path: string) => {
       requested = path;
-      return response({ items: [product], nextCursor: cursor });
+      return response({ items: [product], nextCursor: cursor, totalCount: 120 });
     });
     show({ limit: 50, search: 'Cotton', readiness: 'running_low', cursor: product.id });
-    const next = await screen.findByRole('link', { name: 'Next page' });
+    await screen.findByText('Showing 1 of 120');
     expect(new URL(requested, 'http://localhost').searchParams.get('cursor')).toBe(product.id);
-    const nextQuery = new URL(next.getAttribute('href')!, 'http://localhost').searchParams;
+    expect(screen.getByText('Page 2 of 3')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const nextQuery = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
     expect(nextQuery.get('cursor')).toBe(cursor);
     expect(nextQuery.get('search')).toBe('Cotton');
     expect(nextQuery.get('readiness')).toBe('running_low');
-    const allQuery = new URL(
-      screen.getByRole('link', { name: 'All' }).getAttribute('href')!,
-      'http://localhost',
-    ).searchParams;
+    await userEvent.click(screen.getByRole('button', { name: 'Filter products by status' }));
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'All products' }));
+    const allQuery = new URL(push.mock.calls[1]![0], 'http://localhost').searchParams;
     expect(allQuery.get('cursor')).toBeNull();
     expect(allQuery.get('search')).toBe('Cotton');
-    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search products' }));
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'ab{enter}');
-    expect(push).not.toHaveBeenCalled();
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'c{enter}');
-    const searchQuery = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
-    expect(searchQuery.get('search')).toBe('abc');
-    expect(searchQuery.get('readiness')).toBe('running_low');
-    expect(searchQuery.get('cursor')).toBeNull();
+    expect(allQuery.has('readiness')).toBe(false);
   });
-  it('keeps Best selling selected in pagination and filter links', async () => {
+  it('searches while typing after a pause and keeps the other filters', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null, totalCount: 1 }));
+    show({ limit: 50, readiness: 'running_low' });
+    const search = await screen.findByRole('searchbox', { name: 'Search products' });
+    await userEvent.type(search, 'Co');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(push).not.toHaveBeenCalled();
+    await userEvent.type(search, 'tton');
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const searched = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
+    expect(searched.get('search')).toBe('Cotton');
+    expect(searched.get('readiness')).toBe('running_low');
+    expect(searched.get('cursor')).toBeNull();
+  });
+  it('starts on page 1 with Previous off and Next set to the server cursor', async () => {
+    const cursor = '019c01ea-cf15-7d31-a7f5-d73d66007ae4';
+    stubFetch(async () => response({ items: [product], nextCursor: cursor, totalCount: 120 }));
+    show({ limit: 50 });
+    await screen.findByText('Page 1 of 3');
+    expect(screen.getByRole('button', { name: 'Previous' })).toHaveProperty('disabled', true);
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const nextQuery = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
+    expect(nextQuery.get('cursor')).toBe(cursor);
+  });
+  it('keeps Best selling selected in paging and filter changes', async () => {
     const nextCursor = `3_2026-11-17T08:00:00Z_${product.id}`;
     let requested = '';
     let finishSort!: (value: Response) => void;
@@ -450,25 +466,26 @@ describe('Products screen', () => {
       requested = path;
       return path.includes('sort=best_selling')
         ? sorting
-        : response({ items: [product], nextCursor: product.id });
+        : response({ items: [product], nextCursor: product.id, totalCount: 120 });
     });
     const query = { limit: 50, search: 'Cotton', readiness: 'running_low' } as const;
     const { setQuery } = show(query);
-    await screen.findByRole('link', { name: 'Next page' });
+    await screen.findByText('Showing 1 of 120');
     setQuery({ ...query, sort: 'best_selling' });
-    expect(screen.queryByRole('link', { name: 'Next page' })).toBeNull();
-    finishSort(response({ items: [product], nextCursor }));
-
-    const next = await screen.findByRole('link', { name: 'Next page' });
-    expect(screen.getByRole('combobox', { name: 'Sort products' }).textContent).toBe(
-      'Best selling',
+    finishSort(response({ items: [product], nextCursor, totalCount: 120 }));
+    await vi.waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Sort products' }).textContent).toBe(
+        'Best selling',
+      ),
     );
     expect(new URL(requested, 'http://localhost').searchParams.get('sort')).toBe('best_selling');
-    const nextQuery = new URL(next.getAttribute('href')!, 'http://localhost').searchParams;
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const nextQuery = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
     expect(nextQuery.get('sort')).toBe('best_selling');
     expect(nextQuery.get('cursor')).toBe(nextCursor);
-    const all = screen.getByRole('link', { name: 'All' });
-    const allQuery = new URL(all.getAttribute('href')!, 'http://localhost').searchParams;
+    await userEvent.click(screen.getByRole('button', { name: 'Filter products by status' }));
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'All products' }));
+    const allQuery = new URL(push.mock.calls[1]![0], 'http://localhost').searchParams;
     expect(allQuery.get('sort')).toBe('best_selling');
     expect(allQuery.get('search')).toBe('Cotton');
     expect(allQuery.has('readiness')).toBe(false);
@@ -691,22 +708,20 @@ describe('Product editor navigation', () => {
     expect(within(row).getByText('Active')).toBeTruthy();
   });
 
-  it('renders inline toolbar with search input and all readiness chips', async () => {
+  it('renders the toolbar, status filter and table settings from the design', async () => {
     stubFetch(async () => response({ items: [product], nextCursor: null, totalCount: 1 }));
     show({ limit: 50 });
     await screen.findByRole('table');
     expect(screen.getByRole('searchbox', { name: 'Search products' })).toBeTruthy();
-    expect(screen.getByPlaceholderText('Search by name')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'All' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Running low' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Needs a price' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Needs a photo' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Draft' })).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: 'Category' })).toBeNull();
-    expect(screen.queryByRole('combobox', { name: 'Sort' })).toBeNull();
+    expect(screen.getByPlaceholderText('Search name or code')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Sort products' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Import' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Filter products by status' }));
+    for (const name of ['Running low', 'Out of stock', 'Needs a price', 'Needs a photo', 'Draft'])
+      expect(screen.getByRole('menuitemcheckbox', { name })).toBeTruthy();
   });
 
-  it('shows the waiting count and the found in chats badge', async () => {
+  it('shows the waiting count, the found in chats badge and the footer total', async () => {
     const found: ProductListItem = {
       ...product,
       name: 'Leather sandal',
@@ -714,11 +729,23 @@ describe('Product editor navigation', () => {
       isStockTracked: false,
       waitingToConfirmCount: 2,
     };
-    stubFetch(async () => response({ items: [found], nextCursor: null, totalCount: 1 }));
+    stubFetch(async () => response({ items: [found], nextCursor: product.id, totalCount: 2486 }));
     show({ limit: 50 });
     const table = await screen.findByRole('table');
     expect(within(table).getByText('Found in chats')).toBeTruthy();
     expect(within(table).getByText('2 waiting to confirm')).toBeTruthy();
     expect(within(table).getByText('Not tracked')).toBeTruthy();
+    expect(screen.getByText('Showing 1 of 2,486')).toBeTruthy();
+    expect(screen.getByText('Page 1 of 50')).toBeTruthy();
+  });
+
+  it('hides a column chosen in table settings', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null, totalCount: 1 }));
+    show({ limit: 50 });
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Price' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Table settings' }));
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Price' }));
+    expect(within(table).queryByRole('columnheader', { name: 'Price' })).toBeNull();
   });
 });
