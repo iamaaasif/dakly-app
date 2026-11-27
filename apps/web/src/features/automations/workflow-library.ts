@@ -64,7 +64,7 @@ export type WorkflowTemplateCard = (typeof workflowTemplates)[number];
 
 export function templateRequirement(template: WorkflowTemplateCard) {
   const needs: readonly string[] = template.needs;
-  if (needs.includes('channels')) return 'Needs a connected Messenger or Instagram account';
+  if (needs.includes('channels')) return 'Needs a connected channel';
   if (needs.includes('products')) return 'Needs product alerts and the back-in-stock trigger';
   if (needs.includes('orders')) return 'Needs order triggers';
   return 'Waiting for this trigger';
