@@ -6,6 +6,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { DeliveryService } from '../delivery/delivery.service';
+import { AppError } from '../platform/errors/app-error';
 import { ProductsService } from '../products/products.service';
 import { OrderEntryRepository } from './order-entry.repository';
 
@@ -63,7 +64,12 @@ export class OrderEntryService {
   async recentProducts(storeId: string): Promise<OrderCatalogueProduct[]> {
     const ids = await this.repository.findRecentProductIds(storeId, recentProductLimit * 2);
     const found = await Promise.all(
-      ids.map((id) => this.products.getForOrder(storeId, id).catch(() => undefined)),
+      ids.map((id) =>
+        this.products.getForOrder(storeId, id).catch((error: unknown) => {
+          if (error instanceof AppError && error.code === 'PRODUCT_NOT_FOUND') return undefined;
+          throw error;
+        }),
+      ),
     );
     return found.flatMap((product) => (product ? [product] : [])).slice(0, recentProductLimit);
   }
