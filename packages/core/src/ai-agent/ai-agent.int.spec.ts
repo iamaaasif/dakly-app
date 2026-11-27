@@ -294,7 +294,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     ],
     replies: [
       {
-        body: 'আপনার বিষয়টি নোট করা হয়েছে। আমাদের টিম খুব শীঘ্রই আপনার সাথে কথা বলবে।',
+        body: 'নোট করে রাখলাম। আমাদের টিম থেকে একটু পরই আপনার সাথে কথা বলবে।',
         author_type: 'system',
         recipient_identity_id: message.sender_identity_id,
       },
@@ -593,9 +593,9 @@ it('answers price and delivery from tool results, saves the run and sources, and
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v17' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v18' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v17' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v18' },
     ],
     usage: [{ id: expect.any(String) }],
   });

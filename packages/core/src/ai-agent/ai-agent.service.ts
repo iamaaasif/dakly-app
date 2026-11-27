@@ -30,6 +30,7 @@ import { CardTapRepliesService } from './card-tap-replies.service';
 import { ChatClassifierService, type Classified } from './chat-classifier.service';
 import { type ConversationEntry, conversationEntries } from './chat-memory';
 import { declineReply, holdingReply } from './decline-reply';
+import { formatHandoverSummary } from './handover-summary';
 import { screenCustomerTexts } from './manipulation-screen';
 import { burstText, isFlood, isSameTurn, replyToolChat } from './reply-burst';
 import { outageRetryDelay, retryAt } from './reply-retry';
@@ -44,9 +45,6 @@ import type { ShopRules } from './shop-rules';
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
 const MEDIA_WAIT_MS = 3000;
-// With no summary from the model, staff still get the customer's own words; a notification body
-// stays short.
-const FALLBACK_SUMMARY_ISSUE_LENGTH = 200;
 // Enough to see the product or question the latest messages answer, few enough to stay cheap.
 const CLASSIFY_HISTORY_LENGTH = 6;
 type Reason = (typeof handoverReasons)[number];
@@ -118,8 +116,8 @@ export class AiAgentService {
   private async showTyping(storeId: string, conversationId: string) {
     const candidate = await this.eligibleTurn(storeId, conversationId);
     if (!candidate) return;
-    const recipientExternalId = candidate.recipientExternalId;
-    await this.channels.showMetaTyping(storeId, { ...candidate.target, recipientExternalId });
+    const { target, recipientExternalId } = candidate;
+    await this.channels.showMetaTyping(storeId, { ...target, recipientExternalId });
   }
 
   // A person's reply keeps the chat with people until the store's return timer runs out.
@@ -319,14 +317,11 @@ export class AiAgentService {
     await this.transaction.runLocked(storeId, async () => {
       const current = await this.lockCurrent(storeId, conversationId, before);
       if (!current) return;
-      const latestText = current.turn.latest.body?.trim();
-      const handoverSummary =
-        summary?.trim() ||
-        `Reason: ${reason}${latestText ? ` | Issue: ${latestText.slice(0, FALLBACK_SUMMARY_ISSUE_LENGTH)}` : ''}`;
+      const body = formatHandoverSummary({ reason, summary, latestText: current.turn.latest.body });
       const change = await this.inbox.handOver(storeId, conversationId, {
         reason,
         returnAfterMinutes: current.claimTimeoutMinutes,
-        summary: handoverSummary,
+        summary: body,
       });
       if (!change) return;
       await this.outbox.publish({
@@ -348,7 +343,7 @@ export class AiAgentService {
         category: 'fix_now',
         dedupeKey: `handover:${current.turn.latest.id}`,
         title: 'A conversation needs your reply',
-        body: handoverSummary,
+        body,
       });
     });
   }

@@ -1,6 +1,6 @@
 import type { handoverReasons } from '@dakly/contracts/chats';
 
-import { chatReplyV17 } from './prompts/chat-reply.v17';
+import { chatReplyV18 } from './prompts/chat-reply.v18';
 import { suggestReplyV2 } from './prompts/suggest-reply.v2';
 import { promptWith } from './reply-prompt-version';
 import { salesAgentLlmTools, salesAgentToolsFor } from './sales-agent-tool-definitions';
@@ -49,7 +49,7 @@ export function replyMode(
   const canOffer = Boolean(input.chat?.discountAskMessageId && !input.rules.handover.discounts);
   return {
     purpose: 'chat_reply' as const,
-    prompt: promptWith(chatReplyV17, inChat, ad),
+    prompt: promptWith(chatReplyV18, inChat, ad),
     tools: salesAgentToolsFor(input.rules, canOffer),
     opening: '',
     allows: () => true,

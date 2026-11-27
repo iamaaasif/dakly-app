@@ -139,9 +139,37 @@ export const complaintGoldenCases: GoldenCase[] = [
       { from: 'shop', text: 'দেখছি, একটু অপেক্ষা করুন।' },
     ],
   },
+  // "order" in an order intent is not an order number; the AI asks which product, no hand-over.
+  {
+    id: 'order-intent-bn',
+    language: 'bangla',
+    question: 'অর্ডার করতে চাই',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+    mentionsAnyOf: ['কোন', 'পণ্য'],
+  },
+  {
+    id: 'order-intent-banglish',
+    language: 'banglish',
+    question: 'order korte chai',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+    mentionsAnyOf: ['কোন', 'kon', 'product', 'পণ্য'],
+  },
+  {
+    id: 'order-intent-mixed',
+    language: 'mixed',
+    question: 'ami ekta order দিতে চাই',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+    mentionsAnyOf: ['কোন', 'kon', 'product', 'পণ্য'],
+  },
 ];
 
 export const complaintRecordedOutcomes: Record<string, EvalOutcome> = {
+  'order-intent-bn': { kind: 'reply', text: 'জি, কোন পণ্যটা অর্ডার করতে চান?' },
+  'order-intent-banglish': { kind: 'reply', text: 'Jii, kon product-ta order korte chan?' },
+  'order-intent-mixed': { kind: 'reply', text: 'ঠিক আছে, কোন product-টা নিতে চান বলুন?' },
   'complaint-fraud-banglish': {
     kind: 'reply',
     text: 'দুঃখিত, আপনার অসুবিধার জন্য আমরা লজ্জিত। অর্ডার নম্বর বা ফোন নম্বরটা বলবেন, আমি দেখছি।',

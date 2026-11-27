@@ -15,7 +15,7 @@ import {
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
 import { productDiscountRequest } from '../../ai-agent/manipulation-screen';
-import { chatReplyV17 } from '../../ai-agent/prompts/chat-reply.v17';
+import { chatReplyV18 } from '../../ai-agent/prompts/chat-reply.v18';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v4';
 import {
@@ -330,7 +330,7 @@ function replyModelConfiguration(rules: ShopRules, question: string, history: Ru
     return { instructions: chatReplyV9.instructions, tools: salesAgentToolsFor(rules) };
   }
   const canOffer = !rules.handover.discounts && Boolean(productDiscountRequest(question));
-  return { instructions: chatReplyV17.instructions, tools: salesAgentToolsFor(rules, canOffer) };
+  return { instructions: chatReplyV18.instructions, tools: salesAgentToolsFor(rules, canOffer) };
 }
 
 // One pass of the loop, with fixture tools instead of the database.
