@@ -33,12 +33,6 @@ export const productEditorFields = {
     .nullable()
     .default(null),
   barcode: z.string().trim().min(1).max(64, 'Use 64 characters or fewer').nullable().default(null),
-  // Tags are created by name when a product first uses them.
-  tags: z
-    .array(z.string().trim().min(1, 'Enter a tag').max(50, 'Use 50 characters or fewer'))
-    .max(30, 'Use 30 tags or fewer')
-    .default([]),
-  collectionIds: z.array(z.uuid()).max(30).default([]),
   // Read only when stock is not tracked; a tracked product follows its available count.
   stockStatus: z.enum(productStockStatuses).default('in_stock'),
   // Lets staff add this product to a manual order with no stock. Chats and the order link
@@ -50,8 +44,6 @@ export const productEditorFields = {
 export const productEditorChanges = {
   shortDescription: productEditorFields.shortDescription.unwrap().optional(),
   barcode: productEditorFields.barcode.unwrap().optional(),
-  tags: productEditorFields.tags.unwrap().optional(),
-  collectionIds: productEditorFields.collectionIds.unwrap().optional(),
   stockStatus: productEditorFields.stockStatus.unwrap().optional(),
   allowOrdersWhenOutOfStock: productEditorFields.allowOrdersWhenOutOfStock.unwrap().optional(),
 };

@@ -17,7 +17,6 @@ import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductImportService, type ImportProduct } from './product-import.service';
-import { ProductLabelsService } from './product-labels.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductStockRepository } from './product-stock.repository';
 import { ProductStockService } from './product-stock.service';
@@ -75,7 +74,8 @@ describe('ProductImportService with Postgres', () => {
       settings: async () => ({ stock: { lowStockThreshold: 3 } }),
     } as unknown as StoresService,
     {} as FileStorageDriver,
-    new ProductLabelsService(categories, brands, {} as never, {} as never),
+    categories,
+    brands,
     {} as never,
   );
   const stock = new ProductStockService(

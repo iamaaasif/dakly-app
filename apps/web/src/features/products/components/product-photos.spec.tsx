@@ -58,7 +58,6 @@ const empty: ProductResponse = {
   version: 1,
   id: productId,
   category: null,
-  collections: [],
   brand: null,
   variants: [],
   imageFileIds: [],

@@ -29,13 +29,14 @@ import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provi
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { ProductBrandsService } from './product-brands.service';
 import {
   chatProduct,
   orderCatalogueProduct,
   productResponse,
   type ChatProduct,
 } from './product-catalogue-views';
-import { ProductLabelsService } from './product-labels.service';
+import { ProductCategoriesService } from './product-categories.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { assertProductVersion, productError } from './products.errors';
 import { type Product, ProductsRepository, type Variant } from './products.repository';
@@ -55,7 +56,8 @@ export class ProductsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
-    @Inject(ProductLabelsService) private readonly labels: ProductLabelsService,
+    @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
+    @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
     @Inject(OrderProductSalesService) private readonly sales: OrderProductSalesService,
   ) {}
 
@@ -66,14 +68,12 @@ export class ProductsService {
     showNegotiationPrices = false,
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, tags, collectionIds, ...details } = input;
+      const { variants, ...details } = input;
       const issue = productNegotiationIssue(input);
       if (issue) throw productError(issue);
       await this.assertListsExist(storeId, details);
       const product = await this.repository.insert(storeId, details, this.clock.now());
       await this.saveVariants(storeId, product, variants, []);
-      if (tags.length || collectionIds.length)
-        await this.labels.save(storeId, product.id, { tags, collectionIds });
       await this.publishUpdated(storeId, product.id);
       return this.getById(storeId, product.id, showNegotiationPrices);
     });
@@ -86,7 +86,7 @@ export class ProductsService {
     _actor: Actor,
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, expectedVersion, tags, collectionIds, ...details } = input;
+      const { variants, expectedVersion, ...details } = input;
       const [current] = await this.orderVariantRepository.lockProducts(storeId, [id]);
       assertProductVersion(current, expectedVersion);
       await this.assertListsExist(storeId, details);
@@ -100,7 +100,6 @@ export class ProductsService {
       const product = await this.repository.update(storeId, id, details, this.clock.now());
       if (!product) throw productError('PRODUCT_NOT_FOUND');
       if (variants) await this.saveVariants(storeId, product, variants, currentVariants);
-      if (tags || collectionIds) await this.labels.save(storeId, id, { tags, collectionIds });
       await this.publishUpdated(storeId, id);
       return this.getById(storeId, id, true);
     });
@@ -110,7 +109,8 @@ export class ProductsService {
     storeId: string,
     { categoryId, brandId }: { categoryId?: string | null; brandId?: string | null },
   ): Promise<void> {
-    if (categoryId || brandId) await this.labels.assertExist(storeId, { categoryId, brandId });
+    if (categoryId) await this.categories.assertExists(storeId, categoryId);
+    if (brandId) await this.brands.assertExists(storeId, brandId);
   }
 
   async getById(

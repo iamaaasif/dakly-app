@@ -1,11 +1,10 @@
 import { getTableName, sql } from 'drizzle-orm';
 
-import type { CreateProductInput, ProductCollectionRef } from '@dakly/contracts/products';
+import type { CreateProductInput } from '@dakly/contracts/products';
 import { files } from '@dakly/db/schema/platform';
 import { products, productVariants } from '@dakly/db/schema/products';
 
-export type Product = Omit<CreateProductInput, 'variants' | 'collectionIds'> & {
-  collections: ProductCollectionRef[];
+export type Product = Omit<CreateProductInput, 'variants'> & {
   id: string;
   version: number;
   category: string | null;
@@ -58,13 +57,3 @@ export function photoSnapshot(storeId: string) {
     from ${files} f where f.store_id = ${storeId} and f.id = any(${productImagesColumn})
     and f.purpose = 'product_image' and f.status = 'ready')`;
 }
-
-// The names a product carries, read with it so a list needs no second query.
-export const labelColumns = {
-  tags: sql<
-    string[]
-  >`(select coalesce(array_agg(t.name order by lower(t.name)), '{}') from product_tag_links l join product_tags t on t.store_id = l.store_id and t.id = l.tag_id where l.product_id = ${productIdColumn})`,
-  collections: sql<
-    ProductCollectionRef[]
-  >`(select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name) order by lower(c.name)), '[]'::jsonb) from product_collection_links l join product_collections c on c.store_id = l.store_id and c.id = l.collection_id where l.product_id = ${productIdColumn})`,
-};

@@ -144,13 +144,11 @@ describe('product contracts', () => {
     expect(productListQuerySchema.safeParse({ readiness: 'popular' }).success).toBe(false);
   });
 
-  it('keeps tags and collections when a PATCH leaves them out', () => {
+  it('keeps editor fields when a PATCH leaves them out', () => {
     expect(changeProductSchema.parse({ barcode: '8901234567890' })).toEqual({
       barcode: '8901234567890',
     });
     expect(createProductSchema.parse({ name: 'Scarf' })).toMatchObject({
-      tags: [],
-      collectionIds: [],
       stockStatus: 'in_stock',
       allowOrdersWhenOutOfStock: false,
     });

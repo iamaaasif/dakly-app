@@ -43,8 +43,6 @@ const product = (overrides: Partial<ProductResponse>): ProductResponse => ({
   allowOrdersWhenOutOfStock: false,
   shortDescription: null,
   barcode: null,
-  tags: [],
-  collections: [],
   isVisibleInChats: true,
   isVisibleInOrderLink: true,
   status: 'active',

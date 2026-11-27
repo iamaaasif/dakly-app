@@ -331,12 +331,10 @@ export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   reserved: number;
   available: number;
 };
-export type ProductCollectionRef = { id: string; name: string };
 export type ProductResponse = Omit<
   CreateProductInput,
-  'variants' | 'negotiationOpeningPoisha' | 'negotiationFloorPoisha' | 'collectionIds'
+  'variants' | 'negotiationOpeningPoisha' | 'negotiationFloorPoisha'
 > & {
-  collections: ProductCollectionRef[];
   id: string;
   version: number;
   negotiationOpeningPoisha?: number | null;

@@ -17,7 +17,6 @@ import { productListRank } from './product-list-rank.repository';
 import {
   photoSnapshot,
   type CatalogueVariant,
-  labelColumns,
   type PhotoRef,
   type Product,
   type Variant,
@@ -36,7 +35,6 @@ const productColumns = {
   description: products.description,
   shortDescription: products.shortDescription,
   barcode: products.barcode,
-  ...labelColumns,
   categoryId: products.categoryId,
   category: categoryPathSql,
   brandId: products.brandId,
@@ -86,7 +84,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
   createdAt: Date;
 };
 
-type ProductDetails = Omit<CreateProductInput, 'variants' | 'tags' | 'collectionIds'>;
+type ProductDetails = Omit<CreateProductInput, 'variants'>;
 export type { CatalogueVariant, Product, Variant };
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
