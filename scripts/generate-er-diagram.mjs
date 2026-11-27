@@ -32,6 +32,7 @@ const groups = [
       'contacts',
       'imports',
       'contact-memory',
+      'contact-notes',
       'customer-insights',
       'chats',
       'ad-links',
