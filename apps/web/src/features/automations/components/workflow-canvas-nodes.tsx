@@ -282,6 +282,23 @@ function EditOverlays({
   );
 }
 
+function EditTrigger({ node, editing }: { node: CanvasNode; editing: CanvasEditing }) {
+  return (
+    <button
+      type="button"
+      aria-label="Edit trigger"
+      onClick={() => editing.open(node.key)}
+      className="absolute inset-0 rounded-lg focus-visible:outline-2 focus-visible:outline-focus"
+    />
+  );
+}
+
+function NodeEditing({ node, editing }: { node: CanvasNode; editing: CanvasEditing }) {
+  if (!node.step) return <EditTrigger node={node} editing={editing} />;
+  if (node.number === null) return null;
+  return <EditOverlays node={node} number={node.number} editing={editing} />;
+}
+
 function NodeExtras({
   node,
   editing,
@@ -295,9 +312,7 @@ function NodeExtras({
   return (
     <>
       {stats && step && step.kind !== 'exit' && <StatsChip step={step} stats={stats[node.key]} />}
-      {editing && step && number !== null && (
-        <EditOverlays node={node} number={number} editing={editing} />
-      )}
+      {editing && <NodeEditing node={node} editing={editing} />}
       {node.branches.length > 0 && (
         <ul className="sr-only">
           {node.branches.map((branch, index) => (
