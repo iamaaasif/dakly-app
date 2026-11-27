@@ -22,6 +22,9 @@ import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderConfirmationController } from './order-confirmation.controller';
 import { OrderConfirmationRepository } from './order-confirmation.repository';
 import { OrderConfirmationService } from './order-confirmation.service';
+import { OrderEntryController } from './order-entry.controller';
+import { OrderEntryRepository } from './order-entry.repository';
+import { OrderEntryService } from './order-entry.service';
 import { OrderExportController } from './order-export.controller';
 import { OrderExportRepository } from './order-export.repository';
 import { OrderExportService } from './order-export.service';
@@ -62,6 +65,7 @@ import { OrdersService } from './orders.service';
     OrdersController,
     OrderProductArchiveController,
     OrderCatalogueController,
+    OrderEntryController,
     OrderInvoiceController,
     OrderShippingLabelsController,
     OrderConfirmationController,
@@ -81,6 +85,8 @@ import { OrdersService } from './orders.service';
     OrderStageCountsRepository,
     OrderStageCountsService,
     OrdersService,
+    OrderEntryRepository,
+    OrderEntryService,
     OrderInvoiceRepository,
     OrderInvoiceService,
     OrderShippingLabelsRepository,

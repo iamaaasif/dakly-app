@@ -132,6 +132,11 @@ export class ContactsService {
     return this.contactSearch.findIds(storeId, match, 500);
   }
 
+  async findIdByPhone(storeId: string, phone: string): Promise<string | undefined> {
+    const [match] = await this.importContacts.findByPhones(storeId, [phone]);
+    return match?.id;
+  }
+
   async getPhoneForSend(storeId: string, id: string): Promise<string | null> {
     const [contact] = await this.contactsRepository.findRecipients(storeId, [id]);
     if (!contact) throw contactError('CONTACT_NOT_FOUND');

@@ -25,6 +25,7 @@ import {
   reportFast,
   reportKhata,
   reportMemory,
+  reportOrderFill,
   reportAssistantProducts,
   reportOptionsFromPhoto,
   reportOptionsFromTitle,
@@ -40,6 +41,7 @@ const jobs = [
   'fast',
   'reply',
   'assistant',
+  'orderfill',
   'vision',
   'khata',
   'transcribe',
@@ -55,6 +57,7 @@ const defaultModels: Record<Job, string[]> = {
   fast: chatModels,
   reply: chatModels,
   assistant: chatModels,
+  orderfill: chatModels,
   vision: chatModels,
   khata: ['gpt-6.1-terra'],
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
@@ -119,6 +122,7 @@ async function main() {
     },
     reply: () => reportReply(context, modelsFor('reply'), baselineFastModel),
     assistant: () => reportAssistantProducts(context, modelsFor('assistant')),
+    orderfill: () => reportOrderFill(context, modelsFor('orderfill')),
     vision: async () => {
       await reportVision(context, modelsFor('vision'));
       await reportOptionsFromPhoto(context, modelsFor('vision'));

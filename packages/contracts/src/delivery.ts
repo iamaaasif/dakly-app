@@ -35,10 +35,15 @@ export const areaListQuerySchema = z.strictObject({
   cursor: queryAreaId.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+export const areaSearchQuerySchema = z.strictObject({
+  search: z.string().trim().min(2).max(60),
+  limit: z.coerce.number().int().min(1).max(20).default(8),
+});
 export type CreateDeliveryZoneInput = z.infer<typeof createDeliveryZoneSchema>;
 export type ChangeDeliveryZoneInput = z.infer<typeof changeDeliveryZoneSchema>;
 export type DeliveryZoneListQuery = z.infer<typeof deliveryZoneListQuerySchema>;
 export type AreaListQuery = z.infer<typeof areaListQuerySchema>;
+export type AreaSearchQuery = z.infer<typeof areaSearchQuerySchema>;
 export type DeliveryZoneResponse = CreateDeliveryZoneInput & {
   id: string;
   createdAt: string;
@@ -52,6 +57,9 @@ export type AreaResponse = {
   parentId: number | null;
   kind: (typeof bdAreaKinds)[number];
 };
+// A district, or an upazila with the district it sits in, so a search for "mirpur" reads "Mirpur, Dhaka".
+export type AreaSearchResult = AreaResponse & { districtId: number; districtName: string };
+export type AreaSearchResponse = { items: AreaSearchResult[] };
 export type AreaListResponse = { items: AreaResponse[]; nextCursor: number | null };
 export type DeliveryChargeResponse = {
   deliveryZoneId: string;

@@ -4,6 +4,8 @@ import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
   AreaListQuery,
   AreaListResponse,
+  AreaSearchQuery,
+  AreaSearchResponse,
   ChangeDeliveryZoneInput,
   CreateDeliveryZoneInput,
   DeliveryChargeResponse,
@@ -107,6 +109,14 @@ export class DeliveryService {
     const areas = await this.repository.listAreas(storeId, query);
     const items = areas.slice(0, query.limit);
     return { items, nextCursor: areas.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  async searchAreas(storeId: string, query: AreaSearchQuery): Promise<AreaSearchResponse> {
+    return { items: await this.repository.searchAreas(storeId, query.search, query.limit) };
+  }
+
+  async listDistricts(storeId: string): Promise<AreaListResponse> {
+    return { items: await this.repository.listDistricts(storeId), nextCursor: null };
   }
 
   async calculateDeliveryCharge(storeId: string, areaId: number): Promise<DeliveryChargeResponse> {
