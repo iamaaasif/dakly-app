@@ -29,13 +29,28 @@ describe('ContactTagsRepository (Postgres)', () => {
     storeId = created[0]!.id;
     otherStoreId = created[1]!.id;
     await admin.db.insert(contacts).values([
-      { storeId, name: 'Mim', phone: '01711000001', kind: 'customer', tags: ['vip', 'eid buyer'] },
-      { storeId, name: 'Nusrat', phone: '01711000002', kind: 'customer', tags: ['vip', 'kurti'] },
+      {
+        storeId,
+        name: 'Mim',
+        phone: '01711000001',
+        kind: 'customer',
+        source: 'manual',
+        tags: ['vip', 'eid buyer'],
+      },
+      {
+        storeId,
+        name: 'Nusrat',
+        phone: '01711000002',
+        kind: 'customer',
+        source: 'manual',
+        tags: ['vip', 'kurti'],
+      },
       {
         storeId,
         name: 'Gone',
         phone: '01711000003',
         kind: 'customer',
+        source: 'manual',
         tags: ['deleted only'],
         deletedAt: new Date(),
       },
@@ -45,6 +60,7 @@ describe('ContactTagsRepository (Postgres)', () => {
         name: 'Stranger',
         phone: '01799999999',
         kind: 'customer',
+        source: 'manual',
         tags: ['secret'],
       },
     ]);
