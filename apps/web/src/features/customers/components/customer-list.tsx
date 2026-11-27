@@ -37,7 +37,7 @@ export function CustomerList({ customers, columns }: CustomerListProps) {
 }
 
 const headClass =
-  'whitespace-nowrap text-xs font-semibold tracking-wider text-text-muted uppercase';
+  'whitespace-nowrap px-1.5 text-xs font-semibold tracking-wide text-text-muted uppercase';
 
 function shownColumns(columns: CustomerColumn[], list: readonly CustomerColumn[]) {
   return list.filter((column) => columns.includes(column));
@@ -46,7 +46,7 @@ function shownColumns(columns: CustomerColumn[], list: readonly CustomerColumn[]
 function CustomerTable({ customers, columns }: CustomerListProps) {
   return (
     <div className="hidden md:block">
-      <Table bare>
+      <Table bare className="text-xs">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className={headClass}>Customer</TableHead>
@@ -58,7 +58,7 @@ function CustomerTable({ customers, columns }: CustomerListProps) {
             <TableHead className={headClass}>Type</TableHead>
             <TableHead className={`${headClass} text-right`}>Orders</TableHead>
             <TableHead className={`${headClass} text-right`}>Spent</TableHead>
-            <TableHead className={headClass}>Last purchase</TableHead>
+            <TableHead className={`${headClass} whitespace-normal`}>Last purchase</TableHead>
             {shownColumns(columns, trailingColumns).map((column) => (
               <TableHead key={column} className={headClass}>
                 {customerColumnLabels[column]}
@@ -85,29 +85,35 @@ function CustomerTableRow({
 }) {
   return (
     <TableRow>
-      <TableCell>
-        <div className="flex items-center gap-3">
+      <TableCell className="px-1.5">
+        <div className="flex items-center gap-2">
           <Avatar name={customer.name} />
           <CustomerLink customer={customer} />
         </div>
       </TableCell>
       {shownColumns(columns, leadingColumns).map((column) => (
-        <TableCell key={column} className="whitespace-nowrap">
+        <TableCell
+          key={column}
+          className={column === 'location' ? 'px-1.5' : 'px-1.5 whitespace-nowrap'}
+        >
           <ColumnValue customer={customer} column={column} />
         </TableCell>
       ))}
-      <TableCell>
+      <TableCell className="px-1.5">
         <TypePill customer={customer} />
       </TableCell>
-      <TableCell className="text-right">{customer.ordersCount}</TableCell>
-      <TableCell className="text-right font-medium whitespace-nowrap">
+      <TableCell className="px-1.5 text-right">{customer.ordersCount}</TableCell>
+      <TableCell className="px-1.5 text-right font-medium whitespace-nowrap">
         {formatMoney(customer.netSpendPoisha)}
       </TableCell>
-      <TableCell className="whitespace-nowrap">
+      <TableCell className="px-1.5 whitespace-nowrap">
         <LastPurchase customer={customer} />
       </TableCell>
       {shownColumns(columns, trailingColumns).map((column) => (
-        <TableCell key={column} className="whitespace-nowrap">
+        <TableCell
+          key={column}
+          className={column === 'source' ? 'px-1.5 whitespace-nowrap' : 'px-1.5'}
+        >
           <ColumnValue customer={customer} column={column} />
         </TableCell>
       ))}
@@ -125,7 +131,7 @@ function CustomerMobileList({ customers, columns }: CustomerListProps) {
             <div className="min-w-0 flex-1">
               <CustomerLink customer={customer} />
               {columns.includes('phone') ? (
-                <p className="font-mono text-xs text-text-muted">{customerPhone(customer)}</p>
+                <p className="font-mono text-text-muted">{customerPhone(customer)}</p>
               ) : null}
             </div>
             <TypePill customer={customer} />
@@ -198,7 +204,7 @@ function CustomerLink({ customer }: { customer: ContactListItemResponse }) {
   return (
     <Link
       href={`/customers/${customer.id}`}
-      className="inline-flex min-h-10 items-center font-semibold whitespace-nowrap text-text hover:text-action hover:underline"
+      className="inline-flex min-h-10 items-center text-sm font-semibold whitespace-nowrap text-text hover:text-action hover:underline"
     >
       {customer.name ?? 'No name'}
     </Link>
@@ -212,12 +218,12 @@ function Missing({ children }: { children: string }) {
 type ColumnProps = { customer: ContactListItemResponse };
 
 const columnValues: Record<CustomerColumn, (props: ColumnProps) => ReactNode> = {
-  phone: ({ customer }) => <span className="font-mono text-xs">{customerPhone(customer)}</span>,
+  phone: ({ customer }) => <span className="font-mono">{customerPhone(customer)}</span>,
   // Messages go to the WhatsApp number, or the phone when none is set.
   whatsapp: ({ customer }) => {
     const number = customer.whatsappPhone ?? customer.phone;
     return number ? (
-      <span className="font-mono text-xs">{formatPhone(number)}</span>
+      <span className="font-mono">{formatPhone(number)}</span>
     ) : (
       <Missing>No number</Missing>
     );
