@@ -19,7 +19,7 @@ import type {
   ConfirmProductPhotoInput,
   ReorderProductPhotosInput,
 } from '@dakly/contracts/products';
-import { MAX_PRODUCT_PHOTOS, productNegotiationIssue } from '@dakly/contracts/products';
+import { MAX_PRODUCT_PHOTOS } from '@dakly/contracts/products';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { OrderProductSalesService } from '../orders/order-product-sales.service';
@@ -39,7 +39,8 @@ import {
 } from './product-catalogue-views';
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
-import { assertProductVersion, productError } from './products.errors';
+import { ProductTagsService } from './product-tags.service';
+import { assertNegotiationTerms, assertProductVersion, productError } from './products.errors';
 import { type Product, ProductsRepository, type Variant } from './products.repository';
 
 export type { ChatProduct };
@@ -61,6 +62,7 @@ export class ProductsService {
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
     @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
     @Inject(OrderProductSalesService) private readonly sales: OrderProductSalesService,
+    @Inject(ProductTagsService) private readonly tagService: ProductTagsService,
   ) {}
 
   create(
@@ -70,12 +72,12 @@ export class ProductsService {
     { showNegotiationPrices = false, source = 'manual' }: ProductCreateOptions = {},
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, ...details } = input;
-      const issue = productNegotiationIssue(input);
-      if (issue) throw productError(issue);
+      const { variants, tags, ...details } = input;
+      assertNegotiationTerms(input);
       await this.assertListsExist(storeId, details);
       const product = await this.repository.insert(storeId, details, source, this.clock.now());
       await this.saveVariants(storeId, product, variants, []);
+      if (tags.length) await this.tagService.setForProduct(storeId, product.id, tags);
       await this.publishUpdated(storeId, product.id);
       return this.getById(storeId, product.id, showNegotiationPrices);
     });
@@ -88,7 +90,7 @@ export class ProductsService {
     _actor: Actor,
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, expectedVersion, ...details } = input;
+      const { variants, expectedVersion, tags, ...details } = input;
       const [current] = await this.orderVariantRepository.lockProducts(storeId, [id]);
       assertProductVersion(current, expectedVersion);
       await this.assertListsExist(storeId, details);
@@ -97,11 +99,11 @@ export class ProductsService {
         variants || settings.negotiationEnabled
           ? await this.repository.findVariants(storeId, [id])
           : [];
-      const issue = productNegotiationIssue({ ...settings, variants: variants ?? currentVariants });
-      if (issue) throw productError(issue);
+      assertNegotiationTerms({ ...settings, variants: variants ?? currentVariants });
       const product = await this.repository.update(storeId, id, details, this.clock.now());
       if (!product) throw productError('PRODUCT_NOT_FOUND');
       if (variants) await this.saveVariants(storeId, product, variants, currentVariants);
+      if (tags) await this.tagService.setForProduct(storeId, id, tags);
       await this.publishUpdated(storeId, id);
       return this.getById(storeId, id, true);
     });
@@ -269,10 +271,7 @@ export class ProductsService {
 
   async orderVariantStock(storeId: string, variantIds: string[]): Promise<OrderCatalogueStock> {
     const rows = await this.orderVariantRepository.stock(storeId, variantIds);
-    return rows.map(({ variantId, onHand, reserved }) => ({
-      variantId,
-      available: onHand - reserved,
-    }));
+    return rows.map((row) => ({ variantId: row.variantId, available: row.onHand - row.reserved }));
   }
 
   async requestPhotoUpload(

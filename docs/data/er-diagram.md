@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0114_snapshot.json`: **111 tables, 1463 columns, 442 explicit indexes and 344 foreign keys**.
+Built from `packages/db/migrations/meta/0115_snapshot.json`: **113 tables, 1473 columns, 445 explicit indexes and 348 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -893,7 +893,7 @@ erDiagram
 
 ## Products, orders and payments
 
-Schema files: `products.ts`, `orders.ts`, `payments.ts`.
+Schema files: `products.ts`, `product-tags.ts`, `orders.ts`, `payments.ts`.
 
 ```mermaid
 erDiagram
@@ -923,6 +923,10 @@ erDiagram
     conversations |o..o{ restock_requests : "store_id, conversation_id"
     stores ||..o{ product_bulk_edits : "store_id"
     users |o..o{ product_bulk_edits : "actor_user_id"
+    stores ||..o{ product_tags : "store_id"
+    stores ||..o{ product_tag_links : "store_id"
+    products ||..o{ product_tag_links : "store_id, product_id"
+    product_tags ||..o{ product_tag_links : "store_id, tag_id"
     stores ||..o{ delivery_zones : "store_id"
     stores ||..o{ discount_codes : "store_id"
     contacts |o..o{ discount_codes : "contact_id"
@@ -991,6 +995,8 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         text name "NOT NULL; text"
         text description "NULL; text"
+        text short_description "NULL; text"
+        text barcode "NULL; text"
         uuid category_id FK "NULL; uuid"
         uuid brand_id FK "NULL; uuid"
         integer weight_grams "NULL; integer"
@@ -1003,6 +1009,7 @@ erDiagram
         uuid__ image_file_ids "NOT NULL; uuid[]"
         jsonb options "NOT NULL; jsonb"
         boolean is_stock_tracked "NOT NULL; boolean"
+        text stock_status "NOT NULL; text"
         boolean is_visible_in_chats "NOT NULL; boolean"
         boolean is_visible_in_order_link "NOT NULL; boolean"
         text status "NOT NULL; text"
@@ -1082,6 +1089,17 @@ erDiagram
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone undo_until "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone undone_at "NULL; timestamp with time zone"
+    }
+    product_tags {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text name "NOT NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    product_tag_links {
+        uuid store_id FK "NOT NULL; uuid"
+        uuid product_id PK,FK "NOT NULL; uuid"
+        uuid tag_id PK,FK "NOT NULL; uuid"
     }
     delivery_zones {
         uuid id PK "NOT NULL; uuid"
@@ -2386,6 +2404,10 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
 | `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
 | `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
+| `product_tag_links_store_id_stores_id_fk`                            | `product_tag_links(store_id)`                             | `stores(id)`                                | no action |
+| `product_tag_links_product_store_fk`                                 | `product_tag_links(store_id, product_id)`                 | `products(store_id, id)`                    | cascade   |
+| `product_tag_links_tag_store_fk`                                     | `product_tag_links(store_id, tag_id)`                     | `product_tags(store_id, id)`                | cascade   |
+| `product_tags_store_id_stores_id_fk`                                 | `product_tags(store_id)`                                  | `stores(id)`                                | no action |
 | `price_offers_store_id_stores_id_fk`                                 | `price_offers(store_id)`                                  | `stores(id)`                                | no action |
 | `price_offers_conversation_store_fk`                                 | `price_offers(store_id, conversation_id)`                 | `conversations(store_id, id)`               | cascade   |
 | `price_offers_contact_store_fk`                                      | `price_offers(store_id, contact_id)`                      | `contacts(store_id, id)`                    | cascade   |

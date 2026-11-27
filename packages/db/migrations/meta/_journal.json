@@ -806,6 +806,13 @@
       "when": 1795786956831,
       "tag": "0114_order_team_note",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1795788088850,
+      "tag": "0115_product_editor_fields",
+      "breakpoints": true
     }
   ]
 }

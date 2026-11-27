@@ -116,6 +116,8 @@ Each product with "Order link" on gets a URL. A buyer picks size and quantity, e
 | ORD-R7 | Cancelling or returning puts stock back and records the reason; returned orders update the customer's return risk at once.                                  |
 | ORD-R8 | Orders synced from Shopify or WooCommerce follow that store's status and are read-only in Dakly except courier details and notes.                           |
 
+ORD-R3 status: the tick is stored as `orders.is_oversell_allowed`, but no order create or edit input carries it yet. Until it does, only manual orders may include an untracked product marked out of stock, and other sources are refused with `ORDER_ITEM_OUT_OF_STOCK`.
+
 ### States and edge cases
 
 - Later release (D21): courier API error on booking: the order stays in To pack with "Booking failed: reason" and Retry.
