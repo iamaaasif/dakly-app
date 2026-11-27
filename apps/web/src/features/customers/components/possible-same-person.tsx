@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import { ChevronDown } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
-import type { MatchSuggestionReason } from '@dakly/contracts/contacts';
+import type { MatchSuggestionReason, MatchSuggestionResponse } from '@dakly/contracts/contacts';
 import { Button } from '@dakly/ui/button';
 
 import { useDismissMatchSuggestion } from '../api/dismiss-match-suggestion';
@@ -48,34 +48,15 @@ export function PossibleSamePerson({ contactId, canEdit }: PossibleSamePersonPro
       </div>
       {open ? (
         <ul className="space-y-3 pt-3">
-          {suggestions.data.map(({ id, otherContact, reason }) => (
-            <li key={id} className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm">
-                <Link
-                  href={`/customers/${otherContact.id}`}
-                  className="font-medium text-action hover:underline"
-                >
-                  {otherContact.name ?? 'No name'}
-                </Link>
-                <p className="text-text-muted tabular-nums">
-                  {customerPhone(otherContact)} · {reasonText[reason]}
-                </p>
-              </div>
-              {canEdit ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={() => setMerging(otherContact)}>
-                    Merge
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    loading={dismiss.isPending && dismiss.variables === id}
-                    onClick={() => dismiss.mutate(id)}
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              ) : null}
-            </li>
+          {suggestions.data.map((suggestion) => (
+            <MatchRow
+              key={suggestion.id}
+              suggestion={suggestion}
+              canEdit={canEdit}
+              dismissing={dismiss.isPending && dismiss.variables === suggestion.id}
+              onMerge={setMerging}
+              onDismiss={(id) => dismiss.mutate(id)}
+            />
           ))}
         </ul>
       ) : null}
@@ -92,5 +73,42 @@ export function PossibleSamePerson({ contactId, canEdit }: PossibleSamePersonPro
         </p>
       ) : null}
     </div>
+  );
+}
+
+type MatchRowProps = {
+  suggestion: MatchSuggestionResponse;
+  canEdit: boolean;
+  dismissing: boolean;
+  onMerge: (other: MatchSuggestionResponse['otherContact']) => void;
+  onDismiss: (id: string) => void;
+};
+
+function MatchRow({ suggestion, canEdit, dismissing, onMerge, onDismiss }: MatchRowProps) {
+  const { id, otherContact, reason } = suggestion;
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3">
+      <div className="text-sm">
+        <Link
+          href={`/customers/${otherContact.id}`}
+          className="font-medium text-action hover:underline"
+        >
+          {otherContact.name ?? 'No name'}
+        </Link>
+        <p className="text-text-muted tabular-nums">
+          {customerPhone(otherContact)} · {reasonText[reason]}
+        </p>
+      </div>
+      {canEdit ? (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => onMerge(otherContact)}>
+            Merge
+          </Button>
+          <Button variant="secondary" loading={dismissing} onClick={() => onDismiss(id)}>
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
+    </li>
   );
 }
