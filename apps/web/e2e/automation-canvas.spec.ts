@@ -239,6 +239,8 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await checks.getByRole('button', { name: 'Delete step' }).click();
     await expect(steps.getByText('Tag contact')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Start workflow' })).toBeEnabled();
+    // The canvas no longer scrolls, so a plus button off screen is reached by fitting the flow.
+    await page.getByRole('button', { name: 'Fit to screen' }).click();
     await page.getByRole('button', { name: 'Add a step here' }).first().click();
     await page.getByRole('menuitem', { name: 'Tag contact' }).click();
     await page.getByRole('button', { name: /Options for step 1/ }).click();
@@ -389,8 +391,10 @@ test('pans, zooms and fits the canvas like a design tool', async ({ page, contex
     await page.keyboard.down('Control');
     await page.mouse.wheel(0, -100);
     await page.keyboard.up('Control');
+    await expect
+      .poll(async () => (await trigger.boundingBox())!.width)
+      .toBeGreaterThan(panned.width);
     const zoomed = (await trigger.boundingBox())!;
-    expect(zoomed.width).toBeGreaterThan(panned.width);
     expect(Math.abs(cursorX - zoomed.x - share * zoomed.width)).toBeLessThan(2);
 
     // Fit to screen brings the whole flow back into view.

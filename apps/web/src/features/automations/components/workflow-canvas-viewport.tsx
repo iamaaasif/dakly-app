@@ -10,6 +10,7 @@ import {
   type CameraEngine,
   createCameraEngine,
   fitCamera,
+  keepFlowInView,
   MAX_ZOOM,
   MIN_ZOOM,
   openingCamera,
@@ -63,7 +64,12 @@ function useCanvasCamera(layout: CanvasLayout, storageKey: string) {
     });
     engine.current = camera;
     const saved = readSavedCamera(storageKey);
-    camera.set(saved ?? openingCamera(camera.view(), flow.current));
+    // A view saved on a bigger screen could leave the flow off a smaller one.
+    camera.set(
+      saved
+        ? keepFlowInView(saved, camera.view(), flow.current)
+        : openingCamera(camera.view(), flow.current),
+    );
     // Until the user moves, a resize or rotation re-opens the view at the new size. A restored
     // view is the user's own, and the observer's first call would otherwise reset it.
     const observer = new ResizeObserver(() => {
