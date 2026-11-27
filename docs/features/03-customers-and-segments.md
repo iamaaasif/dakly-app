@@ -141,7 +141,8 @@ The web app has two customer screens.
   purchase always show; the Columns menu turns Phone, WhatsApp, Email, Location, Source, Tags and
   Consent on or off, all but Consent on by default, as in the design. The choice is the `columns`
   value in the address (a comma list; absent means the defaults, empty means none). WhatsApp shows
-  the WhatsApp number, or the phone when none is set. Location is the district. Type is one
+  the WhatsApp number, or the phone when none is set. Location is the district, or for a customer
+  with none saved the area and district of their latest order sent to themselves. Type is one
   pill: VIP, else High-value, else the lifecycle stage. An empty cell says what is missing (No
   email, No location, No tags). There is no Add button here, because a customer comes from an
   order. The Contacts page (DSN-21) lists everyone and owns Add contact and Import. Scan your

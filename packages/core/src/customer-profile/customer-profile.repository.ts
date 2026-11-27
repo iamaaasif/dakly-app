@@ -83,7 +83,8 @@ export class CustomerProfileRepository {
   async fields(storeId: string, contactId: string): Promise<ProfileFields | undefined> {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<ProfileFields>(sql`
-        select c.whatsapp_phone as "whatsappPhone", c.email::text as email, c.address, c.district,
+        select c.whatsapp_phone as "whatsappPhone", c.email::text as email, c.address,
+               coalesce(c.district, order_place.location) as district,
                c.notes as "firstNote", ${utcText(sql`c.created_at`)} as "createdAt",
                c.source, s.favourite_category as "favouriteCategory",
                s.lifecycle_stage as "lifecycleStage", coalesce(s.orders_count, 0) as "ordersCount",
@@ -92,6 +93,15 @@ export class CustomerProfileRepository {
                ${utcText(sql`s.last_order_at`)} as "lastOrderAt"
         from contacts c
         left join contact_stats s on s.contact_id = c.id and s.store_id = c.store_id
+        left join lateral (
+          select concat_ws(', ', a.name, o.recipient_district) as location
+          from orders o
+          left join bd_areas a on a.id = o.recipient_bd_area_id
+          where o.store_id = c.store_id and o.buyer_contact_id = c.id and o.is_recipient_buyer
+            and o.recipient_district is not null
+          order by o.created_at desc
+          limit 1
+        ) order_place on true
         where c.store_id = ${storeId} and c.id = ${contactId} and c.deleted_at is null`),
     );
     return rows[0];

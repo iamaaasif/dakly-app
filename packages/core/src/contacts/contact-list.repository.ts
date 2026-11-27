@@ -68,7 +68,13 @@ export class ContactListRepository {
           ...contactColumns,
           whatsappPhone: contacts.whatsappPhone,
           email: contacts.email,
-          district: contacts.district,
+          // A customer with no saved district shows the place of their latest order to themselves.
+          district: sql<string | null>`coalesce(${contacts.district}, (
+            select concat_ws(', ', a.name, o.recipient_district)
+            from orders o left join bd_areas a on a.id = o.recipient_bd_area_id
+            where o.store_id = ${storeId} and o.buyer_contact_id = ${contacts.id}
+              and o.is_recipient_buyer and o.recipient_district is not null
+            order by o.created_at desc limit 1))`,
           source: contacts.source,
           consentedChannels: sql<ConsentChannel[]>`coalesce(array(
             select ${contactConsentCurrent.channel} from ${contactConsentCurrent}
