@@ -139,7 +139,10 @@ The web app has two customer screens.
   offers the tags on the rows on screen, because the API has no list of every tag yet. Import,
   Export and the Columns menu sit beside them. The table is the Customers table without Orders,
   Spent and Last purchase, with the same cards on a phone. Add contact opens the chooser (Add
-  manually, Import, Scan your khata); the redesigned chooser and form follow in the next DSN-21 PR. A new
+  manually, Add by voice as Coming soon, Import from Excel or CSV, Scan your khata). The Add contact
+  form has Full name, Mobile number, WhatsApp number with Same as mobile number (ticked, so the
+  WhatsApp number is left out), Email, Gender, Age, Address, Area, City, Segments (tags) and Notes.
+  The Area is added to the end of the address, because a contact keeps one address line. A new
   contact has no orders, so it shows here and not on Customers. Row checkboxes follow the
   Customers screen (DSN-12).
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
