@@ -1,9 +1,11 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import type { ProductResponse } from '@dakly/contracts/products';
+import { ApiError } from '@dakly/ui/api-client';
 import { Card } from '@dakly/ui/card';
+import { QueryError } from '@dakly/ui/query-error';
 
 import {
   ProductDeliveryFields,
@@ -26,6 +28,38 @@ export type ProductFormPage = {
   readOnly?: boolean;
 };
 
+type ProductSaveErrorProps = {
+  error?: { type?: string | number; message?: string } | Error | null;
+  onReload?: () => void;
+};
+
+export function ProductSaveError({ error, onReload }: ProductSaveErrorProps) {
+  if (!error?.message) return null;
+  const code = productSaveErrorCode(error);
+  return code === 'PRODUCT_CHANGED' && onReload ? (
+    <ProductVersionConflict message={error.message} onReload={onReload} />
+  ) : (
+    <p role="alert" className="text-danger">
+      {error.message}
+    </p>
+  );
+}
+
+function ProductVersionConflict({ message, onReload }: { message: string; onReload: () => void }) {
+  const notice = useRef<HTMLDivElement>(null);
+  useEffect(() => notice.current?.focus(), []);
+  return (
+    <div ref={notice} tabIndex={-1} className="scroll-mt-24">
+      <QueryError message={message} onRetry={onReload} retryLabel="Reload" />
+    </div>
+  );
+}
+
+function productSaveErrorCode(error: ProductSaveErrorProps['error']) {
+  if (error instanceof ApiError) return error.code;
+  return error && 'type' in error ? error.type : undefined;
+}
+
 function FieldCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Card className="space-y-3.5">
@@ -39,24 +73,21 @@ type ProductFormPageLayoutProps = {
   page: ProductFormPage;
   product?: ProductResponse;
   actions: ReactNode;
-  serverError: ReactNode;
+  saveError: ProductSaveErrorProps;
   onOptionDraftChange: (editing: boolean) => void;
 };
 
-export function ProductFormPageLayout({
-  page,
-  product,
-  actions,
-  serverError,
-  onOptionDraftChange,
-}: ProductFormPageLayoutProps) {
+export function ProductFormPageLayout(props: ProductFormPageLayoutProps) {
+  const { page, product, actions, saveError, onOptionDraftChange } = props;
   const productId = product?.id;
+  const conflict = productSaveErrorCode(saveError.error) === 'PRODUCT_CHANGED';
   return (
     <>
       <ProductPageHeader {...page} actions={actions} />
       <div className="grid min-w-0 items-start gap-4 px-4 pt-6 pb-24 md:px-8 md:pb-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_1fr]">
         <fieldset disabled={page.readOnly} className="min-w-0 space-y-4">
           {page.notice}
+          {conflict ? <ProductSaveError {...saveError} /> : null}
           <FieldCard title="Basics">
             <ProductNameFields productId={productId} onPage />
             <ProductDescriptionFields productId={productId} />
@@ -97,7 +128,7 @@ export function ProductFormPageLayout({
               onOptionDraftChange={onOptionDraftChange}
             />
           </Card>
-          {serverError}
+          {conflict ? null : <ProductSaveError {...saveError} />}
         </div>
       </div>
     </>

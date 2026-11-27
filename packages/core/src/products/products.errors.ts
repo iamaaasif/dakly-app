@@ -21,6 +21,7 @@ const PRODUCT_ERRORS = {
     status: 503,
     message: 'Photo tagging is not available right now',
   },
+  PRODUCT_CHANGED: { status: 409, message: 'This product changed since you opened it.' },
   PRODUCT_NOT_FOUND: { status: 404, message: 'Product not found' },
   PRODUCT_VARIANT_NOT_FOUND: { status: 404, message: 'Product variant not found' },
   PRODUCT_NEGOTIATION_VARIANT_PRICE: {
@@ -68,4 +69,14 @@ const PRODUCT_ERRORS = {
 
 export function productError(code: keyof typeof PRODUCT_ERRORS): AppError {
   return new AppError(code, PRODUCT_ERRORS[code]);
+}
+
+export function assertProductVersion<T extends { version: number; status: string }>(
+  product: T | null | undefined,
+  expectedVersion?: number,
+): asserts product is T {
+  if (!product) throw productError('PRODUCT_NOT_FOUND');
+  if (expectedVersion !== undefined && expectedVersion !== product.version)
+    throw productError('PRODUCT_CHANGED');
+  if (product.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
 }

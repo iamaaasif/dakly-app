@@ -262,6 +262,50 @@ describe('ProductsService with Postgres', () => {
     expect(edited.variants).toEqual(product.variants);
   });
 
+  it('refuses a stale save without changing the product, variants or events', async () => {
+    const input = createProductSchema.parse({ name: 'Versioned product', pricePoisha: 50000 });
+    const loaded = await service.create(f.a, input, actor);
+    expect(loaded.version).toBe(1);
+    const fresh = await service.edit(
+      f.a,
+      loaded.id,
+      { name: 'Saved elsewhere', expectedVersion: loaded.version },
+      actor,
+    );
+    expect(fresh).toMatchObject({ version: 2, name: 'Saved elsewhere', pricePoisha: 50000 });
+    const variant = loaded.variants[0]!;
+    await expect(
+      service.edit(
+        f.a,
+        loaded.id,
+        {
+          expectedVersion: loaded.version,
+          pricePoisha: 100,
+          options: [],
+          variants: [{ ...input.variants[0]!, id: variant.id, sku: 'STALE' }],
+        },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED', status: 409 });
+    expect(await service.getById(f.a, loaded.id, true)).toEqual(fresh);
+    const events = await f.connection.pool.query(
+      "select id from outbox_events where store_id=$1 and type='product.updated' and payload->>'productId'=$2",
+      [f.a, loaded.id],
+    );
+    expect(events.rows).toHaveLength(2);
+
+    await expect(
+      service.edit(f.a, loaded.id, { status: 'hidden', expectedVersion: loaded.version }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED', status: 409 });
+    const hidden = await service.edit(
+      f.a,
+      loaded.id,
+      { status: 'hidden', expectedVersion: fresh.version },
+      actor,
+    );
+    expect(hidden).toMatchObject({ status: 'hidden', version: 3 });
+  });
+
   it('keeps the default variant when details change without explicit variants', async () => {
     const input = createProductSchema.parse({ name: 'স্যান্ডেল' });
     const product = await service.create(f.a, input, actor);
@@ -334,7 +378,14 @@ describe('ProductsService with Postgres', () => {
       actor,
     );
     await service.remove(f.a, product.id, actor);
+    expect(await f.row('products', product.id)).toMatchObject({ version: product.version + 1 });
     await expect(service.getById(f.a, product.id)).rejects.toMatchObject({
+      code: 'PRODUCT_NOT_FOUND',
+    });
+    await expect(
+      service.edit(f.a, product.id, { name: 'Stale', expectedVersion: product.version }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED', status: 409 });
+    await expect(service.edit(f.a, product.id, { name: 'Archived' }, actor)).rejects.toMatchObject({
       code: 'PRODUCT_NOT_FOUND',
     });
     expect(await f.row('product_variants', product.variants[0]!.id)).toMatchObject({
@@ -550,9 +601,11 @@ describe('ProductsService with Postgres', () => {
       actor,
     );
     const repository = new ProductOrderVariantsRepository(f.tenant);
-    await expect(repository.lockArchiveVariants(f.a, product.id)).resolves.toEqual([
-      product.variants[0]!.id,
-    ]);
+    await expect(repository.lockArchiveVariants(f.a, product.id)).resolves.toEqual({
+      variantIds: [product.variants[0]!.id],
+      version: product.version,
+      status: product.status,
+    });
     await expect(repository.lockArchiveVariants(f.b, product.id)).resolves.toBeNull();
   });
 

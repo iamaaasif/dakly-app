@@ -122,6 +122,7 @@ export const products = pgTable(
     // Hash of the text the embedding was built from; a change queues a rebuild.
     searchTextHash: text('search_text_hash'),
     externalRef: text('external_ref'),
+    version: integer('version').notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
