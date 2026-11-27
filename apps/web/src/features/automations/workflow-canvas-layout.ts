@@ -6,23 +6,14 @@ import {
 
 import { conditionLabel } from './workflow-canvas-labels';
 
-const TRIGGER_WIDTH = 440;
-const STEP_WIDTH = 284;
+const TRIGGER_WIDTH = 328;
+const STEP_WIDTH = 260;
 const COLUMN_GAP = 40;
 const ROW_GAP = 56;
-// Rows that start with a labelled line or a merge get room for the bend, the pill and a plus.
-const BRANCH_GAP = 104;
-const MERGE_GAP = 150;
-const MERGE_BEND = 72;
-const LABEL_ABOVE = 62;
-const PLUS_ABOVE = 26;
-const PLUS_BELOW = 26;
 const PADDING = 16;
 // Cards show one truncated line per row, so heights are fixed and edges can be computed.
-// The trigger card lists five rows, plus one when it shows recent entries.
-const EXTRA_TRIGGER_ROW = 20;
 const heights = {
-  trigger: 190,
+  trigger: 232,
   wait: 44,
   send: 72,
   action: 72,
@@ -63,9 +54,6 @@ export type CanvasLayout = {
   height: number;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
-  // Where two or more lines join into one step.
-  // `pill` is false where a branch label already sits in the same place.
-  merges: { id: string; x: number; y: number; plusY: number; pill: boolean }[];
 };
 
 export const TRIGGER_KEY = 'trigger';
@@ -107,7 +95,6 @@ function rowOfEachStep(order: string[], steps: AutomationGraph['steps']) {
 }
 
 function branchLabels(step: AutomationStep, stepNumber: (key: string) => number) {
-  if (step.kind === 'condition' && step.paths.length === 1) return ['Yes', 'No'];
   if (step.kind === 'condition') {
     return [...step.paths.map((path) => conditionLabel(path.condition, stepNumber)), 'Else'];
   }
@@ -167,15 +154,14 @@ function arrangeRows(routes: string[][], rows: Map<string, number>) {
   return lanes;
 }
 
-function routePath(route: string[], spots: Map<string, Spot>, merging: boolean) {
+function routePath(route: string[], spots: Map<string, Spot>) {
   const start = spots.get(route[0]!)!;
   let path = `M${start.centerX} ${start.bottom}`;
   let from = start;
   for (const item of route.slice(1)) {
     const spot = spots.get(item)!;
     if (spot.centerX !== from.centerX) {
-      const bend = merging && item === route.at(-1) ? MERGE_BEND : ROW_GAP / 2;
-      path += `V${from.laneBottom + bend}H${spot.centerX}`;
+      path += `V${from.laneBottom + ROW_GAP / 2}H${spot.centerX}`;
     }
     path += `V${spot.top}`;
     if (isWaypoint(item)) path += `V${spot.bottom}`;
@@ -184,14 +170,7 @@ function routePath(route: string[], spots: Map<string, Spot>, merging: boolean) 
   return path;
 }
 
-type RowSizes = {
-  stepNumber: (key: string) => number;
-  gapBefore: Map<string, number>;
-  triggerHeight: number;
-};
-
-function placeRows(lanes: string[][], graph: AutomationGraph, sizes: RowSizes) {
-  const { stepNumber, gapBefore, triggerHeight } = sizes;
+function placeRows(lanes: string[][], graph: AutomationGraph, stepNumber: (key: string) => number) {
   const widthOf = (item: string) => {
     if (isWaypoint(item)) return 0;
     return item === TRIGGER_KEY ? TRIGGER_WIDTH : STEP_WIDTH;
@@ -199,15 +178,13 @@ function placeRows(lanes: string[][], graph: AutomationGraph, sizes: RowSizes) {
   const stepOf = (item: string) => (item === TRIGGER_KEY ? null : graph.steps[item]!);
   const laneWidth = (lane: string[]) =>
     lane.reduce((sum, item) => sum + widthOf(item), 0) + (lane.length - 1) * COLUMN_GAP;
-  const heightOf = (step: AutomationStep | null) => (step ? nodeHeight(step) : triggerHeight);
   const contentWidth = Math.max(...lanes.map(laneWidth));
   const nodes = new Map<string, CanvasNode>();
   const spots = new Map<string, Spot>();
   let y = PADDING;
-  for (const [row, lane] of lanes.entries()) {
-    if (row > 0) y += Math.max(ROW_GAP, ...lane.map((item) => gapBefore.get(item) ?? 0));
+  for (const lane of lanes) {
     const real = lane.filter((item) => !isWaypoint(item));
-    const laneBottom = y + Math.max(...real.map((item) => heightOf(stepOf(item))));
+    const laneBottom = y + Math.max(...real.map((item) => nodeHeight(stepOf(item))));
     let x = PADDING + (contentWidth - laneWidth(lane)) / 2;
     for (const item of lane) {
       const width = widthOf(item);
@@ -218,7 +195,7 @@ function placeRows(lanes: string[][], graph: AutomationGraph, sizes: RowSizes) {
         continue;
       }
       const step = stepOf(item);
-      const height = heightOf(step);
+      const height = nodeHeight(step);
       const number = step && step.kind !== 'exit' ? stepNumber(item) : null;
       const branches = step ? describeBranches(step, graph.steps, stepNumber) : [];
       nodes.set(item, {
@@ -233,9 +210,9 @@ function placeRows(lanes: string[][], graph: AutomationGraph, sizes: RowSizes) {
       });
       spots.set(item, { centerX, top: y, bottom: y + height, laneBottom });
     }
-    y = laneBottom;
+    y = laneBottom + ROW_GAP;
   }
-  return { nodes, spots, width: contentWidth + PADDING * 2, height: y + PADDING };
+  return { nodes, spots, width: contentWidth + PADDING * 2, height: y - ROW_GAP + PADDING };
 }
 
 // Two paths to the same step share one line and one label.
@@ -250,19 +227,7 @@ function mergeParallel(links: Link[]) {
   return [...merged.values()];
 }
 
-function mergeMarkers(links: Link[], mergeKeys: Set<string>, spots: Map<string, Spot>) {
-  return [...spots]
-    .filter(([key]) => mergeKeys.has(key))
-    .map(([key, spot]) => ({
-      id: key,
-      x: spot.centerX,
-      y: spot.top - LABEL_ABOVE,
-      plusY: spot.top - PLUS_ABOVE,
-      pill: !links.some((link) => link.to === key && link.label),
-    }));
-}
-
-export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false): CanvasLayout {
+export function layoutWorkflow(graph: AutomationGraph): CanvasLayout {
   const order = readingOrder(graph);
   const numbered = order.filter((key) => graph.steps[key]!.kind !== 'exit');
   const stepNumber = (key: string) => numbered.indexOf(key) + 1;
@@ -277,45 +242,25 @@ export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false):
   const routes = links.map((link, index) => routeOf(link, index, rows));
   const lanes = arrangeRows(routes, rows);
 
-  const mergeKeys = new Set(
-    links
-      .filter((link) => links.filter((other) => other.to === link.to).length > 1)
-      .map((link) => link.to),
-  );
-  const gapBefore = new Map<string, number>();
-  for (const link of links) {
-    if (link.label) gapBefore.set(link.to, BRANCH_GAP);
-    if (mergeKeys.has(link.to)) gapBefore.set(link.to, MERGE_GAP);
-  }
-  const triggerHeight = heights.trigger + (extraTriggerRow ? EXTRA_TRIGGER_ROW : 0);
-  const { nodes, spots, width, height } = placeRows(lanes, graph, {
-    stepNumber,
-    gapBefore,
-    triggerHeight,
-  });
+  const { nodes, spots, width, height } = placeRows(lanes, graph, stepNumber);
 
   const edges = links.map(({ from, to, label }, index) => {
     const target = spots.get(to)!;
-    const merging = mergeKeys.has(to);
-    const source = spots.get(from)!;
     return {
       id: `${index}:${from}:${to}`,
       from,
       to,
-      path: routePath(routes[index]!, spots, merging),
+      path: routePath(routes[index]!, spots),
       label,
       labelX: target.centerX,
-      labelY: target.top - LABEL_ABOVE,
-      // Where the add button of this line sits. Under a label it is just above the target; lines
-      // that join another path get it under their own card, so each branch has its own.
-      midX: merging ? source.centerX : target.centerX,
-      midY: merging ? source.bottom + PLUS_BELOW : target.top - (label ? PLUS_ABOVE : ROW_GAP / 2),
+      labelY: target.top - ROW_GAP / 4,
+      // Where the add button of this line sits: above the label, in the last gap before the target.
+      midX: target.centerX,
+      midY: target.top - (label ? (ROW_GAP * 3) / 4 : ROW_GAP / 2),
     };
   });
-  const merges = mergeMarkers(links, mergeKeys, spots);
   return {
     stepNumber,
-    merges,
     width,
     height,
     // The reading order is also the order a screen reader hears.

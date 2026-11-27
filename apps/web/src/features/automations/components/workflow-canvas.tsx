@@ -48,8 +48,6 @@ type Refresh = ReturnType<typeof useAutomation>['refetch'];
 // Only these triggers have stored events to count.
 const countedTriggers = ['consent_given', 'tag_added', 'birthday'];
 
-const hasRecentEntries = (graph: AutomationGraph) => countedTriggers.includes(graph.trigger.key);
-
 function recentEntriesLabel(preview: ReturnType<typeof useTriggerPreview>) {
   if (preview.isError) return 'Could not load';
   if (!preview.data) return '…';
@@ -78,10 +76,12 @@ function EditorActions({
   workflow,
   editor,
   blocked,
+  onOpenSettings,
 }: {
   workflow: Workflow;
   editor: Editor;
   blocked: boolean;
+  onOpenSettings: () => void;
 }) {
   const draft = workflow.status === 'draft';
   const publishLabel = workflow.status === 'paused' ? 'Publish and enable' : 'Publish changes';
@@ -92,6 +92,9 @@ function EditorActions({
           Saved
         </p>
       )}
+      <Button variant="secondary" onClick={onOpenSettings}>
+        Workflow settings
+      </Button>
       {draft && <SaveDraftButton editor={editor} />}
       <Button
         disabled={editor.pending || blocked}
@@ -166,7 +169,7 @@ function CanvasScreen({ workflow, refresh }: { workflow: Workflow; refresh: Refr
 
 function StatusBadge({ workflow }: { workflow: Workflow }) {
   return (
-    <Badge variant={workflow.status === 'active' ? 'success' : 'neutral'} className="rounded-full">
+    <Badge variant={workflow.status === 'active' ? 'success' : 'neutral'}>
       {statusLabels[workflow.status]}
     </Badge>
   );
@@ -197,10 +200,7 @@ function CanvasMain({ workflow, graph, layout, editing }: ViewportProps) {
 }
 
 function ReadOnlyViewport({ workflow }: { workflow: Workflow }) {
-  const layout = useMemo(
-    () => layoutWorkflow(workflow.graph, hasRecentEntries(workflow.graph)),
-    [workflow.graph],
-  );
+  const layout = useMemo(() => layoutWorkflow(workflow.graph), [workflow.graph]);
   return <CanvasMain workflow={workflow} graph={workflow.graph} layout={layout} />;
 }
 
@@ -232,7 +232,6 @@ function EditorTop({
       <WorkflowEditorHeader
         name={workflow.name}
         badge={<StatusBadge workflow={workflow} />}
-        onOpenSettings={onOpenSettings}
         onRename={(name) =>
           rename.mutateAsync(name).then(
             () => true,
@@ -244,6 +243,7 @@ function EditorTop({
           workflow={workflow}
           editor={editor}
           blocked={checks.some((check) => check.level === 'block')}
+          onOpenSettings={onOpenSettings}
         />
       </WorkflowEditorHeader>
       <EditorAlerts
@@ -259,10 +259,7 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
   const editor = useWorkflowEditor(workflow, refresh);
   const [stepKey, openStep] = useCanvasParam('step');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const layout = useMemo(
-    () => layoutWorkflow(editor.graph, hasRecentEntries(editor.graph)),
-    [editor.graph],
-  );
+  const layout = useMemo(() => layoutWorkflow(editor.graph), [editor.graph]);
   const checks = useMemo(
     () => checkWorkflow(editor.graph, layout.stepNumber),
     [editor.graph, layout],

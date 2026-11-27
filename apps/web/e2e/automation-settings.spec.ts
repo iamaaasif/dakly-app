@@ -41,8 +41,7 @@ test('publishes ready settings and keeps a refused draft saved', async ({
     await page.getByRole('button', { name: 'Move SMS up' }).click();
     await page.getByRole('button', { name: 'Move SMS up' }).click();
     await page.getByRole('button', { name: 'Done' }).click();
-    await page.getByRole('button', { name: 'Workflow options' }).click();
-    await page.getByRole('menuitem', { name: 'Workflow settings' }).click();
+    await page.getByRole('button', { name: 'Workflow settings' }).click();
     await page.getByRole('combobox', { name: 'Re-entry' }).click();
     await page.getByRole('option', { name: 'Once every few days' }).click();
     await page.getByLabel('Days between entries').fill('15');

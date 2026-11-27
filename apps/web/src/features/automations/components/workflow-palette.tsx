@@ -32,8 +32,8 @@ export function WorkflowPalette({ disabled, onAdd }: Props) {
                       onClick={() => onAdd(kind)}
                       onDragStart={(event) => event.dataTransfer.setData(dragType, kind)}
                       className={cn(
-                        'flex h-10 w-full items-center gap-2 rounded-md border border-border bg-surface px-3 whitespace-nowrap shadow-card transition-colors duration-150 ease-out',
-                        'enabled:hover:border-border-strong enabled:hover:bg-surface-muted disabled:text-text-muted',
+                        'shadow-sm flex h-10 w-full items-center gap-2 rounded-md border border-border bg-surface px-3 whitespace-nowrap',
+                        'enabled:hover:bg-surface-muted disabled:text-text-muted',
                         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
                       )}
                     >

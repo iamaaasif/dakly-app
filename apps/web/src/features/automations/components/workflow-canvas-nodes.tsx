@@ -5,8 +5,7 @@ import {
   Hand,
   ListTodo,
   type LucideIcon,
-  MessageCircle,
-  MessageSquareText,
+  MessageSquare,
   Shuffle,
   Split,
   Tag,
@@ -28,13 +27,7 @@ import {
 } from '@dakly/ui/dropdown-menu';
 
 import { channelLabels, triggerEntryLabels } from '../automation-labels';
-import {
-  actionDetail,
-  actionLabel,
-  conditionLabel,
-  triggerRows,
-  waitParts,
-} from '../workflow-canvas-labels';
+import { actionDetail, actionLabel, triggerRows, waitParts } from '../workflow-canvas-labels';
 import type { CanvasLayout, CanvasNode } from '../workflow-canvas-layout';
 import type { NewStepKind } from '../workflow-graph-edit';
 
@@ -50,29 +43,20 @@ const actionIcons: Record<
   give_coupon: Ticket,
 };
 
-function IconBox({ icon: Icon, tone = 'brand' }: { icon: LucideIcon; tone?: 'brand' | 'neutral' }) {
+function IconBox({ icon: Icon }: { icon: LucideIcon }) {
   return (
-    <span
-      className={cn(
-        'grid size-9 shrink-0 place-items-center rounded-md',
-        tone === 'brand'
-          ? 'bg-primary-soft text-action-hover'
-          : 'bg-neutral-soft text-text-secondary',
-      )}
-    >
+    <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary-soft text-action-hover">
       <Icon size={16} aria-hidden="true" />
     </span>
   );
 }
 
-type CardProps = { icon: LucideIcon; title: string; detail?: string; tone?: 'brand' | 'neutral' };
-
-function StepCard({ icon, title, detail, tone }: CardProps) {
+function StepCard({ icon, title, detail }: { icon: LucideIcon; title: string; detail?: string }) {
   return (
-    <div className="flex h-full items-center gap-3 rounded-lg border border-border bg-surface pr-9 pl-3 shadow-card transition-[border-color,transform] duration-150 ease-out group-hover/node:border-border-strong">
-      <IconBox icon={icon} tone={tone} />
+    <div className="shadow-sm flex h-full items-center gap-3 rounded-lg border border-border bg-surface pr-9 pl-3">
+      <IconBox icon={icon} />
       <div className="min-w-0">
-        <p className="truncate text-base font-semibold" title={title}>
+        <p className="truncate font-semibold" title={title}>
           {title}
         </p>
         {detail && (
@@ -85,21 +69,12 @@ function StepCard({ icon, title, detail, tone }: CardProps) {
   );
 }
 
-function splitDetail(
-  step: Extract<AutomationStep, { kind: 'condition' }>,
-  stepNumber: (key: string) => number,
-) {
-  return step.paths.length === 1
-    ? conditionLabel(step.paths[0]!.condition, stepNumber)
-    : `${step.paths.length + 1} paths`;
-}
-
-function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
+function stepBody(step: AutomationStep) {
   switch (step.kind) {
     case 'wait': {
       const [lead, amount] = waitParts(step.wait);
       return (
-        <p className="flex h-full items-center gap-2 rounded-full border border-border bg-surface pr-9 pl-4 shadow-card transition-colors duration-150 ease-out group-hover/node:border-border-strong">
+        <p className="shadow-sm flex h-full items-center gap-2 rounded-full border border-border bg-surface pr-9 pl-4">
           <Clock size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
           <span className="truncate">
             {lead} <strong>{amount}</strong>
@@ -110,7 +85,7 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
     case 'send':
       return (
         <StepCard
-          icon={step.channels[0] === 'sms' ? MessageSquareText : MessageCircle}
+          icon={MessageSquare}
           title={step.channels.map((channel) => channelLabels[channel]).join(' / ')}
           detail={step.message.text}
         />
@@ -121,7 +96,6 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
           icon={actionIcons[step.action.action]}
           title={actionLabel(step.action)}
           detail={actionDetail(step.action)}
-          tone="neutral"
         />
       );
     case 'condition':
@@ -129,19 +103,11 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
         <StepCard
           icon={Split}
           title="Conditional split"
-          detail={splitDetail(step, stepNumber)}
-          tone="neutral"
+          detail={`${step.paths.length + 1} paths`}
         />
       );
     case 'random_split':
-      return (
-        <StepCard
-          icon={Shuffle}
-          title="Random split"
-          detail={`${step.paths.length} paths`}
-          tone="neutral"
-        />
-      );
+      return <StepCard icon={Shuffle} title="Random split" detail={`${step.paths.length} paths`} />;
     case 'exit':
       return (
         <p className="flex h-full items-center justify-center gap-2 text-text-muted">
@@ -156,7 +122,6 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
 export type CanvasEditing = {
   canAdd: boolean;
   insert: (edge: { parent: string; target: string }, kind: NewStepKind) => void;
-  insertAfterMerge: (target: string, kind: NewStepKind) => void;
   remove: (key: string) => void;
   canMove: (key: string, direction: 'up' | 'down') => boolean;
   move: (key: string, direction: 'up' | 'down') => void;
@@ -176,7 +141,7 @@ function StepMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Options for step ${number}`}
-        className="absolute top-1/2 right-1 grid size-8 -translate-y-1/2 place-items-center rounded-md text-text-subtle transition-colors hover:bg-surface-muted hover:text-text-secondary focus-visible:outline-2 focus-visible:outline-focus"
+        className="absolute top-1/2 right-1 grid size-8 -translate-y-1/2 place-items-center rounded-md text-text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
       >
         <EllipsisVertical size={16} aria-hidden="true" />
       </DropdownMenuTrigger>
@@ -214,7 +179,7 @@ function StatsChip({
       ? [`${formatCount(counts.sent)} sent`, `${formatCount(counts.tapped)} tapped`]
       : [`${formatCount(counts.reached)} ${counts.reached === 1 ? 'entry' : 'entries'}`];
   return (
-    <p className="absolute -top-2.5 right-3 rounded-full border border-border bg-surface px-2 text-xs text-text-muted tabular-nums shadow-card">
+    <p className="shadow-sm absolute -top-2.5 right-3 rounded-full border border-border bg-surface px-2 text-xs text-text-muted tabular-nums">
       {parts.join(' · ')}
       <span className="sr-only">
         {`. ${formatCount(counts.reached)} ${counts.reached === 1 ? 'entry' : 'entries'} reached this step.`}
@@ -227,7 +192,7 @@ type TriggerCardProps = { graph: AutomationGraph; layout: CanvasLayout; recentEn
 
 function TriggerCard({ graph, layout, recentEntries }: TriggerCardProps) {
   return (
-    <div className="h-full space-y-2 rounded-lg border border-border bg-surface p-4 shadow-card transition-colors duration-150 ease-out group-hover/node:border-border-strong">
+    <div className="shadow-sm h-full space-y-2 rounded-lg border border-border bg-surface p-4">
       <div className="flex items-start gap-3">
         <IconBox icon={Zap} />
         <div className="min-w-0">
@@ -299,7 +264,12 @@ function NodeExtras({
           ))}
         </ul>
       )}
-      {number !== null && <span className="sr-only">Step {number}</span>}
+      {number !== null && (
+        <span className="absolute -top-2 -left-2 grid size-6 place-items-center rounded-full bg-inverse text-xs font-semibold text-on-primary tabular-nums">
+          <span className="sr-only">Step </span>
+          {number}
+        </span>
+      )}
     </>
   );
 }
@@ -315,14 +285,11 @@ export function CanvasNodeItem({
   const { step } = node;
   return (
     <li
-      className={cn(
-        'group/node absolute list-none',
-        step?.kind === 'exit' && 'pointer-events-none',
-      )}
+      className={cn('absolute list-none', step?.kind === 'exit' && 'pointer-events-none')}
       style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
     >
       {step ? (
-        stepBody(step, layout.stepNumber)
+        stepBody(step)
       ) : (
         <TriggerCard graph={graph} layout={layout} recentEntries={recentEntries} />
       )}

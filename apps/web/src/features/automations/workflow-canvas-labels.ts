@@ -39,7 +39,7 @@ export function waitParts(wait: WaitStep): [string, string] {
 
 export function actionLabel(action: ActionStep) {
   const labels = {
-    add_tag: 'Tag contact',
+    add_tag: 'Add tag',
     remove_tag: 'Remove tag',
     create_task: 'Create task',
     notify_team: 'Notify team',
@@ -50,8 +50,7 @@ export function actionLabel(action: ActionStep) {
 }
 
 export function actionDetail(action: ActionStep) {
-  if (action.action === 'add_tag') return `Add “${action.tag}”`;
-  if (action.action === 'remove_tag') return `Remove “${action.tag}”`;
+  if (action.action === 'add_tag' || action.action === 'remove_tag') return action.tag;
   if (action.action === 'create_task') return action.title;
   if (action.action === 'notify_team') return action.text;
   if (action.action !== 'give_coupon') return undefined;
@@ -152,9 +151,7 @@ function channelConsentLabels(steps: AutomationGraph['steps']) {
 
 export function triggerRows(graph: AutomationGraph, stepNumber: (key: string) => number) {
   const { trigger, workflowFilters, goal, exitConditions, reEntry, steps } = graph;
-  const exits = [
-    ...new Set([goal, ...exitConditions].filter((exit) => exit !== null).map(exitLabel)),
-  ];
+  const exits = [goal, ...exitConditions].filter((exit) => exit !== null).map(exitLabel);
   return [
     ['Trigger filters', trigger.filters.map(triggerFilterLabel).join(' · ') || 'None'],
     [

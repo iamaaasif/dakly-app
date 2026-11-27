@@ -84,8 +84,14 @@ describe('layoutWorkflow', () => {
     expect(byKey.get('tagged')!.y).toBe(byKey.get('pause')!.y);
     expect(byKey.get('tagged')!.x).toBeLessThan(byKey.get('pause')!.x);
     expect(byKey.get('end')!.y).toBeGreaterThan(byKey.get('tagged')!.y);
-    expect(edges.flatMap(({ label }) => label ?? [])).toEqual(['Yes', 'No']);
-    expect(byKey.get('split')!.branches).toEqual(['Yes: step 3', 'No: step 4']);
+    expect(edges.flatMap(({ label }) => label ?? [])).toEqual([
+      'Tapped the link in step 1',
+      'Else',
+    ]);
+    expect(byKey.get('split')!.branches).toEqual([
+      'Tapped the link in step 1: step 3',
+      'Else: step 4',
+    ]);
   });
 
   it.each(Object.entries(automationTemplates))('draws every step of %s once', (_, template) => {
@@ -118,7 +124,7 @@ describe('layoutWorkflow', () => {
       },
     };
     const { nodes, edges } = layoutWorkflow(graph);
-    const skipping = edges.find(({ label }) => label === 'No')!;
+    const skipping = edges.find(({ label }) => label === 'Else')!;
     const lines = verticalLines(skipping.path);
     expect(lines.length).toBeGreaterThan(2);
     for (const node of nodes) {

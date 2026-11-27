@@ -12,7 +12,6 @@ import { usePublishAutomation, useSaveAutomation } from './api/automation-settin
 import type { useAutomation } from './api/automations';
 import {
   appendStep,
-  insertAfterMerge,
   canAddStep,
   insertStep,
   moveStep,
@@ -29,8 +28,6 @@ function graphEdits(graph: AutomationGraph, change: (next: AutomationGraph) => v
     insert: (edge: { parent: string; target: string }, kind: NewStepKind) =>
       change(insertStep(graph, edge, kind)),
     append: (kind: NewStepKind) => change(appendStep(graph, kind)),
-    insertAfterMerge: (target: string, kind: NewStepKind) =>
-      change(insertAfterMerge(graph, target, kind)),
     remove: (key: string) => change(removeStep(graph, key)),
     update: (key: string, step: AutomationStep) => change(replaceStep(graph, key, step)),
     canMove: (key: string, direction: 'up' | 'down') =>

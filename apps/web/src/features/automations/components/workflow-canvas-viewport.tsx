@@ -54,7 +54,7 @@ type ZoomProps = {
 
 function ZoomControls({ scale, onChange, onFit, extra }: ZoomProps) {
   return (
-    <div className="absolute bottom-4 left-4 flex items-center overflow-hidden rounded-lg border border-border bg-surface shadow-card">
+    <div className="shadow-sm absolute bottom-4 left-4 flex items-center overflow-hidden rounded-lg border border-border bg-surface">
       <Button
         variant="secondary"
         className="rounded-r-none border-0"
