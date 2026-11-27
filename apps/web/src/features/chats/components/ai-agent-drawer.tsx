@@ -6,6 +6,7 @@ import { Sheet } from '@dakly/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { agentTabs, type AgentTab } from '../agent-tabs';
+import { useLeaveGuard } from '../hooks/use-leave-guard';
 import { AdsTab } from './ads-tab';
 import { AgentSettingsTab } from './agent-settings-tab';
 import { FeedbackTab } from './feedback-tab';
@@ -37,33 +38,34 @@ export function AiAgentDrawer({
   onTabChange,
   onClose,
 }: AiAgentDrawerProps) {
-  const { data } = useSessionContext();
-  const canEdit = Boolean(data?.currentStore?.canEditStoreSettings);
-  const canEditProducts = Boolean(data?.currentStore?.canEditProducts);
-  const canEditChats = Boolean(data?.currentStore?.canEditChats);
+  const store = useSessionContext().data?.currentStore;
+  const { dirty: settingsDirty, setDirty, guard, leave } = useLeaveGuard();
+  const canEdit = Boolean(store?.canEditStoreSettings);
+  const canEditProducts = Boolean(store?.canEditProducts);
+  const canEditChats = Boolean(store?.canEditChats);
   return (
     <Sheet
       open={tab !== undefined}
-      onClose={onClose}
+      onClose={() => guard(onClose)}
       width="wide"
       title="Dakly AI agent"
       description="Answers Messenger, Instagram and WhatsApp day and night, takes orders, and calls your team when a person is needed."
-      icon={
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-inverse text-on-primary">
-          <Sparkles aria-hidden="true" size={18} strokeWidth={1.75} />
-        </span>
-      }
+      icon={<AgentIcon />}
     >
-      <Tabs value={tab ?? 'settings'} onValueChange={(next) => onTabChange(next as AgentTab)}>
+      <Tabs
+        value={tab ?? 'settings'}
+        onValueChange={(next) => guard(() => onTabChange(next as AgentTab))}
+      >
         <TabsList aria-label="AI agent sections" className="-mx-6 px-6">
           {agentTabs.map((name) => (
             <TabsTrigger key={name} value={name}>
               {tabLabels[name]}
+              {name === 'settings' && settingsDirty ? <UnsavedDot /> : null}
             </TabsTrigger>
           ))}
         </TabsList>
         <TabsContent value="settings">
-          <AgentSettingsTab canEdit={canEdit} />
+          <AgentSettingsTab canEdit={canEdit} onDirtyChange={setDirty} leave={leave} />
           <GoLivePanel canEdit={canEdit} />
         </TabsContent>
         <TabsContent value="knowledge">
@@ -84,5 +86,22 @@ export function AiAgentDrawer({
         </TabsContent>
       </Tabs>
     </Sheet>
+  );
+}
+
+function UnsavedDot() {
+  return (
+    <>
+      <span aria-hidden="true" className="ml-1.5 size-2 rounded-full bg-warning" />
+      <span className="sr-only"> (unsaved changes)</span>
+    </>
+  );
+}
+
+function AgentIcon() {
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-inverse text-on-primary">
+      <Sparkles aria-hidden="true" size={18} strokeWidth={1.75} />
+    </span>
   );
 }

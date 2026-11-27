@@ -67,3 +67,6 @@ export type SaveAgentSettingsInput = z.infer<typeof saveAgentSettingsSchema>;
 // Version 0 means the shop never saved: the response then holds the defaults and
 // handoverRulesSaved is false, which Go live treats as "hand-over rules not set".
 export type AgentSettingsResponse = SaveAgentSettingsInput & { handoverRulesSaved: boolean };
+
+// What the plan allows for AI replies this period. Zero means the plan has none, so no chat is answered.
+export type AgentUsageResponse = { allowance: number; remaining: number; periodEnd: string };

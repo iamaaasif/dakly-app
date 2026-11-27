@@ -355,3 +355,62 @@ it('checks a bare amount named as a price after the offer tool returns', () => {
     failure: 'amount',
   });
 });
+
+describe('checkReplyFacts numbers inside ids', () => {
+  // Ids are random, so a digit run in one must never make an invented price look known.
+  const withIds = [
+    {
+      products: [
+        {
+          productId: '3f2a999b-0998-4c1d-8e5f-a1b2c3d4e5f6',
+          name: 'কটন পাঞ্জাবি',
+          variants: [{ variantId: 'b4d7500a-1234-4abc-9def-0123456789ab', priceTaka: 1200 }],
+        },
+      ],
+    },
+  ];
+
+  it('rejects a price that only appears as a digit run inside an id', () => {
+    for (const price of ['999', '998', '500', '1234'])
+      expect(check(`দাম ৳${price} only`, withIds), price).toEqual({
+        isSafe: false,
+        failure: 'amount',
+      });
+  });
+
+  it('still accepts the price the tool returned', () => {
+    expect(check('পাঞ্জাবির দাম ৳1,200।', withIds)).toEqual({ isSafe: true });
+  });
+});
+
+describe('checkReplyFacts amounts from money fields only', () => {
+  const colliding = [
+    {
+      products: [
+        {
+          name: 'কটন পাঞ্জাবি',
+          sku: 'SKU-777',
+          restockedOn: '2026-11-20',
+          supplierPhone: '01712345999',
+          variants: [{ priceTaka: 1200, stock: 45, pricePoisha: 120000 }],
+        },
+      ],
+    },
+  ];
+  const rejects = (reply: string) =>
+    expect(check(reply, colliding), reply).toEqual({ isSafe: false, failure: 'amount' });
+
+  it('rejects a price equal to a stock count', () => rejects('দাম ৳45 only'));
+  it('rejects a price equal to a day or year in a date', () => {
+    rejects('দাম ৳20 only');
+    rejects('দাম ৳2026 only');
+  });
+  it('rejects a price equal to digits of a phone number or SKU', () => {
+    rejects('দাম ৳999 only');
+    rejects('দাম ৳777 only');
+  });
+  it('still accepts the price from a money field, in poisha too', () => {
+    expect(check('দাম ৳1200', colliding)).toEqual({ isSafe: true });
+    expect(check('Stock e 45 pcs ache, ৳1,200', colliding)).toEqual({ isSafe: true });
+  });
+});

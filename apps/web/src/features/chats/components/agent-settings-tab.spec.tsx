@@ -35,7 +35,7 @@ function respond(puts: () => Response) {
   });
 }
 
-function show(canEdit = true) {
+function show(canEdit = true, leave: { discard: () => void; keep: () => void } | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
     user: { id: 'member', name: 'Member' },
@@ -43,13 +43,16 @@ function show(canEdit = true) {
     contextTag: 'verified',
     hasMemberships: true,
   } as SessionContext);
-  const view = render(<AgentSettingsTab canEdit={canEdit} />, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>
-        <ToastProvider>{children}</ToastProvider>
-      </QueryClientProvider>
-    ),
-  });
+  const view = render(
+    <AgentSettingsTab canEdit={canEdit} onDirtyChange={() => {}} leave={leave} />,
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      ),
+    },
+  );
   return { ...view, client };
 }
 
@@ -60,6 +63,31 @@ afterEach(() => {
 });
 
 describe('AI agent settings tab', () => {
+  it('marks unsaved changes, reports them, and discards them from the save bar', async () => {
+    respond(() => Response.json(saved, { headers }));
+    show();
+    fireEvent.click(await screen.findByRole('switch', { name: /Take orders/ }));
+    expect(screen.getByText('Unsaved changes')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(screen.getByText('All changes saved')).toBeTruthy();
+    expect(screen.getByRole('switch', { name: /Take orders/ }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+  });
+
+  it('asks before leaving with unsaved changes and drops them on Discard', async () => {
+    respond(() => Response.json(saved, { headers }));
+    const discard = vi.fn();
+    const keep = vi.fn();
+    show(true, { discard, keep });
+    fireEvent.click(await screen.findByRole('switch', { name: /Take orders/ }));
+    expect(screen.getByText('Discard your unsaved changes?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(keep).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(discard).toHaveBeenCalled();
+  });
+
   it('keeps unsaved edits when the saved version moves because test questions changed', async () => {
     respond(() => Response.json(saved, { headers }));
     const { client } = show();
