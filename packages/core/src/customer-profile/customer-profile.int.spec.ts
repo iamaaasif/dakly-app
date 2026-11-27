@@ -180,6 +180,22 @@ describe('Customer profile (Postgres)', () => {
     expect(summary.whatsappPhone).not.toBe('01710000006');
   });
 
+  it('shows the place of the latest order for a customer with no saved district', async () => {
+    const areaId = (await sql(`select id from bd_areas where kind = 'upazila' limit 1`)).rows[0].id;
+    const areaName = (await sql(`select name from bd_areas where id = $1`, [areaId])).rows[0].name;
+    await sql(
+      `insert into orders(id,store_id,number,buyer_contact_id,source,created_by_type,stage,
+         recipient_name,recipient_district,recipient_bd_area_id,items_subtotal_poisha,
+         order_discount_poisha,delivery_charge_poisha,cod_amount_poisha,created_at)
+       values ($1,$2,9001,$3,'messenger','user','to_confirm','করিম','Khulna',null,1000,0,0,1000,'2026-11-01T04:00:00Z'),
+              ($4,$2,9002,$3,'messenger','user','to_confirm','করিম','Dhaka',$5,1000,0,0,1000,'2026-11-02T04:00:00Z')`,
+      [randomUUID(), fixture.a, otherContactId, randomUUID(), areaId],
+    );
+    const summary = await service.summary(fixture.a, otherContactId, fullAccess);
+    expect(summary.district).toBe(`${areaName}, Dhaka`);
+    await sql(`delete from orders where number in (9001, 9002) and store_id = $1`, [fixture.a]);
+  });
+
   it('has no average or lifetime value for a customer with no orders', async () => {
     expect(await service.summary(fixture.a, otherContactId, fullAccess)).toMatchObject({
       ordersCount: 0,
