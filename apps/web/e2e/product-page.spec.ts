@@ -57,7 +57,7 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     await page.getByRole('button', { name: /More details/ }).click();
     await expect(page).toHaveURL(/\/products\/new$/);
     await expect(page.getByRole('heading', { name: 'New product', exact: true })).toBeVisible();
-    await expect(page.getByText('Create the product to add photos.')).toBeVisible();
+    await expect(page.getByLabel('Add photos')).toBeAttached();
     await expect(page.getByRole('combobox', { name: 'Status' })).toHaveText('Hidden');
     await page.getByLabel('Product name', { exact: true }).fill(name);
     await page.getByLabel('Regular price ৳', { exact: true }).fill('600');
