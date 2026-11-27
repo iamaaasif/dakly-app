@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { toAsciiDigits } from '@dakly/contracts/digits';
 import { orderChatFillModelSchema, type OrderChatFill } from '@dakly/contracts/order-entry';
 import { bdMobileSchema } from '@dakly/contracts/phone';
 
@@ -7,10 +8,6 @@ import { AiService } from '../ai/ai.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { orderError } from './orders.errors';
 import { fillOrderFromChat } from './prompts/fill-order-from-chat.v1';
-
-const banglaDigits = /[০-৯]/g;
-const toAsciiDigits = (text: string) =>
-  text.replace(banglaDigits, (digit) => String(digit.charCodeAt(0) - '০'.charCodeAt(0)));
 
 @Injectable()
 export class OrderChatFillService {
@@ -45,10 +42,12 @@ export class OrderChatFillService {
     for (const candidate of new Set([place.trim(), ...parts])) {
       if (candidate.length < 2) continue;
       const { items } = await this.delivery.searchAreas(storeId, { search: candidate, limit: 2 });
-      const [first, second] = items;
-      const isExact =
-        first?.name.toLowerCase() === candidate.toLowerCase() || first?.nameBn === candidate;
-      if (first && (!second || isExact)) return first;
+      const exact = items.find(
+        ({ name, nameBn }) =>
+          name.toLowerCase() === candidate.toLowerCase() || nameBn === candidate,
+      );
+      const found = exact ?? (items.length === 1 ? items[0] : undefined);
+      if (found) return found;
     }
     return undefined;
   }
