@@ -54,7 +54,7 @@ describe('ContactTagsRepository (Postgres)', () => {
         tags: ['deleted only'],
         deletedAt: new Date(),
       },
-      { storeId, name: 'Plain', phone: '01711000004', kind: 'customer' },
+      { storeId, name: 'Plain', phone: '01711000004', kind: 'customer', source: 'manual' },
       {
         storeId: otherStoreId,
         name: 'Stranger',
