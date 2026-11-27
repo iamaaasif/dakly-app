@@ -17,6 +17,8 @@ import { ProductBulkEditsRepository } from './product-bulk-edits.repository';
 import { ProductBulkEditsService } from './product-bulk-edits.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductCollectionsRepository } from './product-collections.repository';
+import { ProductCollectionsService } from './product-collections.service';
 import { ProductDuplicateService } from './product-duplicate.service';
 import { ProductExportController } from './product-export.controller';
 import { ProductExportService } from './product-export.service';
@@ -29,6 +31,7 @@ import { ProductMediaService } from './product-media.service';
 import { ProductOptionSuggestionsController } from './product-option-suggestions.controller';
 import { ProductOptionSuggestionsService } from './product-option-suggestions.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductOrganisationService } from './product-organisation.service';
 import { ProductPhotoTagsRepository } from './product-photo-tags.repository';
 import { ProductPhotosController } from './product-photos.controller';
 import { ProductSearchSourceService } from './product-search-source.service';
@@ -78,6 +81,9 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductBulkEditsService,
     ProductBrandsRepository,
     ProductBrandsService,
+    ProductCollectionsRepository,
+    ProductCollectionsService,
+    ProductOrganisationService,
     ProductTagsRepository,
     ProductTagsService,
     ProductCategoriesRepository,

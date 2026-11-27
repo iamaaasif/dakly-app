@@ -143,6 +143,64 @@ describe('product media uploaded before the product exists', () => {
     ).toThrow();
   });
 
+  it('gives a size one photo: a waiting upload is attached, a product photo is reused, null clears it', async () => {
+    const cover = await uploaded();
+    const sizePhoto = await uploaded();
+    const sizes = createProductSchema.parse({
+      name: 'Sized fixture',
+      imageFileIds: [cover],
+      options: [{ name: 'Size', values: ['S', 'M'] }],
+      variants: [
+        { optionValues: { Size: 'S' }, imageFileId: sizePhoto },
+        { optionValues: { Size: 'M' }, imageFileId: cover },
+      ],
+    });
+    const item = await service.create(f.a, sizes, actor);
+    const [small, medium] = item.variants;
+    expect(small).toMatchObject({ imageFileId: sizePhoto, imageFileIds: [sizePhoto] });
+    expect(medium).toMatchObject({ imageFileId: cover });
+    expect((await f.row('files', sizePhoto))!.expires_at).toBeNull();
+
+    const kept = await service.edit(f.a, item.id, { name: 'Sized fixture 2' }, actor);
+    expect(kept.variants.map((variant) => variant.imageFileId)).toEqual([sizePhoto, cover]);
+
+    const cleared = await service.edit(
+      f.a,
+      item.id,
+      {
+        options: item.options,
+        variants: item.variants.map(({ id, optionValues }, index) => ({
+          id,
+          optionValues,
+          imageFileId: index === 0 ? null : undefined,
+        })),
+      },
+      actor,
+    );
+    expect(cleared.variants.map((variant) => variant.imageFileId)).toEqual([null, cover]);
+    expect((await f.row('files', sizePhoto))!.expires_at).not.toBeNull();
+    expect((await f.row('files', cover))!.expires_at).toBeNull();
+  });
+
+  it('refuses a size photo that is not a waiting upload or a photo of the product', async () => {
+    const used = await uploaded();
+    await create([used]);
+    const withPhoto = (imageFileId: string) =>
+      service.create(
+        f.a,
+        createProductSchema.parse({
+          name: 'Bad size photo',
+          options: [{ name: 'Size', values: ['S'] }],
+          variants: [{ optionValues: { Size: 'S' }, imageFileId }],
+        }),
+        actor,
+      );
+    await expect(withPhoto(used)).rejects.toMatchObject({ code: 'PRODUCT_PHOTO_NOT_FOUND' });
+    await expect(withPhoto(randomUUID())).rejects.toMatchObject({
+      code: 'PRODUCT_PHOTO_NOT_FOUND',
+    });
+  });
+
   it('rejects a confirm that does not match the stored object and limits waiting photos', async () => {
     const { fileId } = await media.requestUpload(f.a, upload);
     await expect(media.confirm(f.a, f.userA, { ...upload, fileId })).rejects.toMatchObject({

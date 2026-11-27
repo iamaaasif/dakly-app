@@ -71,6 +71,7 @@ const variantColumns = {
   onHand: productVariants.onHand,
   reserved: productVariants.reserved,
   isDefault: productVariants.isDefault,
+  imageFileIds: productVariants.imageFileIds,
 };
 export type CatalogueProduct = Omit<Product, keyof typeof negotiationColumns> & {
   variants: CatalogueVariant[];
@@ -85,12 +86,26 @@ type PhotoWrite = ConfirmProductPhotoInput & {
   expiresAt?: Date;
 };
 
-type ProductDetails = Omit<CreateProductInput, 'variants' | 'tags'>;
+type ProductDetails = Omit<CreateProductInput, 'variants' | 'tags' | 'collections'>;
 export type { CatalogueVariant, Product, Variant };
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
   position: number;
 };
+
+const variantUpdate = (now: Date) => ({
+  title: sql`excluded.title`,
+  optionValues: sql`excluded.option_values`,
+  sku: sql`excluded.sku`,
+  priceOverridePoisha: sql`excluded.price_override_poisha`,
+  costPoisha: sql`excluded.cost_poisha`,
+  lowStockThreshold: sql`excluded.low_stock_threshold`,
+  imageFileIds: sql`excluded.image_file_ids`,
+  isDefault: sql`excluded.is_default`,
+  position: sql`excluded.position`,
+  status: 'active' as const,
+  updatedAt: now,
+});
 
 @Injectable()
 export class ProductsRepository {
@@ -302,18 +317,7 @@ export class ProductsRepository {
           )
           .onConflictDoUpdate({
             target: productVariants.id,
-            set: {
-              title: sql`excluded.title`,
-              optionValues: sql`excluded.option_values`,
-              sku: sql`excluded.sku`,
-              priceOverridePoisha: sql`excluded.price_override_poisha`,
-              costPoisha: sql`excluded.cost_poisha`,
-              lowStockThreshold: sql`excluded.low_stock_threshold`,
-              isDefault: sql`excluded.is_default`,
-              position: sql`excluded.position`,
-              status: 'active',
-              updatedAt: now,
-            },
+            set: variantUpdate(now),
             setWhere: and(
               eq(productVariants.storeId, storeId),
               eq(productVariants.productId, productId),

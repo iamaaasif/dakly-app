@@ -19,9 +19,12 @@ import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductCollectionsRepository } from './product-collections.repository';
+import { ProductCollectionsService } from './product-collections.service';
 import { ProductDuplicateService } from './product-duplicate.service';
 import { ProductListService } from './product-list.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductOrganisationService } from './product-organisation.service';
 import { ProductTagsRepository } from './product-tags.repository';
 import { ProductTagsService } from './product-tags.service';
 import { ProductsController } from './products.controller';
@@ -50,6 +53,8 @@ describe('ProductsService with Postgres', () => {
   );
   const brands = new ProductBrandsService(new ProductBrandsRepository(tenant), transaction);
   const tags = new ProductTagsService(new ProductTagsRepository(tenant));
+  const collections = new ProductCollectionsService(new ProductCollectionsRepository(tenant));
+  const organisation = new ProductOrganisationService(tags, collections);
   const stores = {
     settings: async (storeId: string) => ({
       id: storeId,
@@ -85,7 +90,7 @@ describe('ProductsService with Postgres', () => {
     categories,
     brands,
     sales,
-    tags,
+    organisation,
     { attach: async () => undefined } as never,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
@@ -97,6 +102,8 @@ describe('ProductsService with Postgres', () => {
   afterAll(async () => {
     for (const table of [
       'outbox_events',
+      'product_collection_links',
+      'product_collections',
       'product_tag_links',
       'product_tags',
       'product_variants',
@@ -870,5 +877,35 @@ describe('ProductsService with Postgres', () => {
     ]);
     expect((await tags.list(f.b)).items).toEqual([]);
     expect((await service.edit(f.a, second.id, { tags: [] }, actor)).tags).toEqual([]);
+  });
+
+  it('saves collections by name per shop and lists the most used first', async () => {
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Panjabi',
+        pricePoisha: 9000,
+        collections: ['Eid 2026', 'eid 2026', 'Winter'],
+      }),
+      actor,
+    );
+    expect(product.collections).toEqual(['Eid 2026', 'Winter']);
+    expect(await service.edit(f.a, product.id, { barcode: '123' }, actor)).toMatchObject({
+      collections: ['Eid 2026', 'Winter'],
+    });
+    const second = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Fatua', pricePoisha: 9000, collections: ['winter'] }),
+      actor,
+    );
+    expect(second.collections).toEqual(['Winter']);
+    expect((await collections.list(f.a)).items).toMatchObject([
+      { name: 'Winter', productCount: 2 },
+      { name: 'Eid 2026', productCount: 1 },
+    ]);
+    expect((await collections.list(f.b)).items).toEqual([]);
+    expect((await service.edit(f.a, second.id, { collections: [] }, actor)).collections).toEqual(
+      [],
+    );
   });
 });

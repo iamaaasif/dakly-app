@@ -34,6 +34,9 @@ const variantSchema = z.strictObject({
   costPoisha: money.nullable().default(null),
   // Null uses the shop's warning level from the stock settings.
   lowStockThreshold: z.number().int().min(0).max(MAX_STOCK_QUANTITY).nullable().default(null),
+  // One photo for this size: a product photo or a photo uploaded to /product-media that no
+  // product has used yet. Left out on a change it keeps the variant's photos; null clears them.
+  imageFileId: z.uuid().nullable().optional(),
 });
 
 const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });

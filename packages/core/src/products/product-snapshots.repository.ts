@@ -21,6 +21,7 @@ export type Variant = CreateProductInput['variants'][number] & {
   isDefault: boolean;
   onHand: number;
   reserved: number;
+  imageFileIds: string[];
 };
 export type PhotoRef = {
   id: string;
@@ -30,7 +31,7 @@ export type PhotoRef = {
   description: string | null;
   tags: string[];
 };
-export type CatalogueVariant = Variant & { imageFileIds: string[]; photos: PhotoRef[] };
+export type CatalogueVariant = Variant & { photos: PhotoRef[] };
 
 // Drizzle strips qualifiers in SELECT expressions; these must refer to the outer product.
 const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
@@ -59,9 +60,12 @@ export function photoSnapshot(storeId: string) {
     and f.purpose = 'product_image' and f.status = 'ready')`;
 }
 
-// The tag names a product carries, read with it so a list needs no second query.
+// The tag and collection names a product carries, read with it so a list needs no second query.
 export const tagColumns = {
   tags: sql<
     string[]
   >`(select coalesce(array_agg(t.name order by lower(t.name)), '{}') from product_tag_links l join product_tags t on t.store_id = l.store_id and t.id = l.tag_id where l.product_id = ${productIdColumn})`,
+  collections: sql<
+    string[]
+  >`(select coalesce(array_agg(c.name order by lower(c.name)), '{}') from product_collection_links l join product_collections c on c.store_id = l.store_id and c.id = l.collection_id where l.product_id = ${productIdColumn})`,
 };
