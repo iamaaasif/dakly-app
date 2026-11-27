@@ -393,9 +393,14 @@ test('pans, zooms and fits the canvas like a design tool', async ({ page, contex
     await page.mouse.down();
     await page.mouse.move(startX + 80, startY + 40, { steps: 6 });
     await page.mouse.up();
+    // The page handles the last moves a moment after the mouse is released, so poll.
+    await expect
+      .poll(async () => {
+        const box = (await trigger.boundingBox())!;
+        return Math.hypot(box.x - before.x - 80, box.y - before.y - 40);
+      })
+      .toBeLessThan(2);
     const panned = (await trigger.boundingBox())!;
-    expect(Math.abs(panned.x - before.x - 80)).toBeLessThan(2);
-    expect(Math.abs(panned.y - before.y - 40)).toBeLessThan(2);
 
     // Ctrl + wheel zooms around the pointer: the spot under it stays put.
     const cursorX = panned.x + 20;
@@ -463,7 +468,9 @@ test('keeps the view after a reload and pans from a step', async ({ page, contex
     await page.mouse.down();
     await page.mouse.move(box.x + 120, box.y + 10, { steps: 6 });
     await page.mouse.up();
-    expect(Math.abs((await trigger.boundingBox())!.x - start.x - 100)).toBeLessThan(2);
+    await expect
+      .poll(async () => Math.abs((await trigger.boundingBox())!.x - start.x - 100))
+      .toBeLessThan(2);
     await expect(page).not.toHaveURL(/step=/);
 
     // Space + drag pans even while a step has focus, as it does after a panel closes.
@@ -478,7 +485,9 @@ test('keeps the view after a reload and pans from a step', async ({ page, contex
     await page.mouse.move(point.x + 20, point.y + 70, { steps: 4 });
     await page.mouse.up();
     await page.keyboard.up('Space');
-    expect(Math.abs((await trigger.boundingBox())!.y - before.y - 60)).toBeLessThan(2);
+    await expect
+      .poll(async () => Math.abs((await trigger.boundingBox())!.y - before.y - 60))
+      .toBeLessThan(2);
 
     // The moved view comes back after a reload.
     await page.waitForTimeout(400);
