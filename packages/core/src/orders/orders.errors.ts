@@ -39,6 +39,10 @@ const ORDER_ERRORS = {
     message: 'Too many order lines to download at once. Narrow the filters',
   },
   ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
+  ORDER_FILL_UNAVAILABLE: {
+    status: 503,
+    message: 'Dakly AI could not read this chat right now. Type the details instead',
+  },
   ORDER_CONFIRMATION_RATE_LIMITED: {
     status: 429,
     message: 'Too many taps. Try again in a minute',

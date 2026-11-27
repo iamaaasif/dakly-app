@@ -27,6 +27,7 @@ export const aiRunPurposes = [
   'tag_product_photo',
   'suggest_product_options',
   'khata_scan',
+  'order_fill',
 ] as const;
 export const aiRunOutcomes = [
   'completed',
