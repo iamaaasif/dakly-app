@@ -1,16 +1,18 @@
 'use client';
 
-import { useRef, useState, type RefObject } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import type { OrderAlerts, OrderListQuery } from '@dakly/contracts/orders';
-import { Button } from '@dakly/ui/button';
+import { buttonVariants } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 
 import { useOrderTabCounts } from '../api/order-tabs';
 import { ordersSearch, useOrders } from '../api/orders';
 import { parseOrdersScreen } from '../orders-url';
 import { OrderAlertStrip } from './order-alert-strip';
 import { OrderDetailSheet } from './order-detail-sheet';
-import { NewOrderDialog } from './order-editor-dialog';
 import { OrderExportMenu } from './order-export-menu';
 import { OrderTabs } from './order-tabs';
 import { OrdersResults } from './orders-results';
@@ -39,13 +41,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
   return (
     <StorePage permission="canViewOrders">
       <main className="space-y-4 p-4 md:p-8">
-        <OrdersHeader
-          heading={heading}
-          query={query}
-          onSaved={(id) =>
-            router.replace(`/orders?${ordersSearch({ ...navigationQuery, selected: id })}`)
-          }
-        />
+        <OrdersHeader heading={heading} query={query} />
         <OrderAlertStrip alerts={alerts} query={navigationQuery} />
         <OrderTabs query={navigationQuery} counts={counts}>
           <OrdersResults
@@ -81,14 +77,26 @@ function useRememberedAlerts(latest: OrderAlerts | undefined) {
 type OrdersHeaderProps = {
   heading: RefObject<HTMLHeadingElement | null>;
   query: OrderListQuery;
-  onSaved: (id: string) => void;
 };
 
-function OrdersHeader({ heading, query, onSaved }: OrdersHeaderProps) {
+function OrdersHeader({ heading, query }: OrdersHeaderProps) {
   const { data } = useSessionContext();
-  const [open, setOpen] = useState(false);
+  const router = useRouter();
   const store = data?.currentStore;
   const canCreate = store?.canEditOrders;
+  // n opens a new order, as on Products and Contacts. It never fires while typing in a field.
+  useEffect(() => {
+    if (!canCreate) return;
+    const open = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      const typing = target.closest('input, textarea, select, [contenteditable="true"]');
+      if (event.key !== 'n' || event.ctrlKey || event.metaKey || event.altKey || typing) return;
+      event.preventDefault();
+      router.push('/orders/new');
+    };
+    window.addEventListener('keydown', open);
+    return () => window.removeEventListener('keydown', open);
+  }, [canCreate, router]);
   return (
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
@@ -107,20 +115,11 @@ function OrdersHeader({ heading, query, onSaved }: OrdersHeaderProps) {
       <div className="flex flex-wrap items-start gap-2">
         {store?.canExportOrders ? <OrderExportMenu query={query} /> : null}
         {canCreate ? (
-          <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
+          <Link href="/orders/new" className={cn(buttonVariants(), 'min-h-11 sm:min-h-10')}>
             <span aria-hidden="true">+ </span>New order
-          </Button>
+          </Link>
         ) : null}
       </div>
-      {open && (
-        <NewOrderDialog
-          onClose={() => setOpen(false)}
-          onSaved={(id) => {
-            setOpen(false);
-            onSaved(id);
-          }}
-        />
-      )}
     </header>
   );
 }
