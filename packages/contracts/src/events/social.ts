@@ -22,3 +22,10 @@ export const postFailedEventSchema = postScheduledEventSchema.extend({
   type: z.literal('post.failed'),
   payload: postResult.extend({ errorCode: z.string().min(1) }),
 });
+
+export const commentReceivedEventSchema = z.strictObject({
+  type: z.literal('comment.received'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ commentId: z.uuid() }),
+});

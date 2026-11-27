@@ -109,6 +109,8 @@ type FilterLabels = {
 
 const filterLabels: FilterLabels = {
   channel: (filter) => `Channel: ${filter.channels.map(words).join(', ')}`,
+  intent: (filter) => `Intent: ${filter.intents.map(words).join(', ')}`,
+  keywords: (filter) => `Keywords: ${filter.keywords.join(', ')}`,
   consent_source: (filter) => `Source: ${filter.sources.map(words).join(', ')}`,
   tag: (filter) => `Tag: ${filter.tag}`,
   segment: () => 'In a segment',
