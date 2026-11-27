@@ -98,7 +98,7 @@ test('creates a product on its page, manages photos, edits it and changes stock'
       );
       await expect(page.getByLabel('Add photo')).toBeEnabled();
       const choosing = page.waitForEvent('filechooser');
-      await page.getByText('Add', { exact: true }).click();
+      await page.getByLabel('Product photos').getByText('Add', { exact: true }).click();
       await (await choosing).setFiles(png);
       const withPhoto = (await (await confirmed).json()) as ProductResponse;
       fileIds.push(withPhoto.photos[count - 1]!.id);
