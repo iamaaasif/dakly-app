@@ -131,6 +131,10 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByRole('button', { name: 'Cancel option changes' }).click();
 
     const moveSize = page.getByRole('button', { name: 'Move Size' });
+    // A drag only works while both rows are on screen, so centre the list first.
+    await page
+      .getByRole('list', { name: 'Product options' })
+      .evaluate((list) => list.scrollIntoView({ block: 'center' }));
     await moveSize.dragTo(page.getByRole('button', { name: 'Move Color' }));
     await expectStock('S / Black', '12');
     await moveSize.press('ArrowDown');
