@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders';
 
@@ -18,14 +18,36 @@ export function ordersSearch({
   return params.toString();
 }
 
+// Part of the key, so a page of another tab is never shown while this tab loads.
+function listedTab({ stage, paymentStatus, alert }: OrderListQuery) {
+  return [stage, paymentStatus, alert].join('|');
+}
+
 export function useOrders(query: OrderListQuery) {
   const { request, contextTag } = useStoreRequest();
   const { data } = useSessionContext();
   return useQuery({
-    queryKey: [...ordersKey, contextTag, query],
+    queryKey: [...ordersKey, contextTag, listedTab(query), query],
     queryFn: ({ signal }) =>
       request<OrderListResponse>(`/orders?${ordersSearch(query)}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewOrders),
-    placeholderData: keepPreviousData,
+    // Paging and searching inside a tab dim the rows in place; another tab shows its skeleton.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === listedTab(query) ? previous : undefined,
   });
+}
+
+// Pointing at a tab loads its first page, so opening it is instant.
+export function usePrefetchOrders() {
+  const { request, contextTag } = useStoreRequest();
+  const client = useQueryClient();
+  return (query: OrderListQuery) => {
+    if (!contextTag) return;
+    void client.prefetchQuery({
+      queryKey: [...ordersKey, contextTag, listedTab(query), query],
+      queryFn: ({ signal }) =>
+        request<OrderListResponse>(`/orders?${ordersSearch(query)}`, { signal }),
+      staleTime: 30_000,
+    });
+  };
 }
