@@ -176,6 +176,47 @@ describe('ProductImportService with Postgres', () => {
     expect((await movements(row.id)).map(({ quantity }) => quantity)).toEqual([5, 3]);
   });
 
+  it('rejects an editor save loaded before a cost-only import', async () => {
+    const loaded = await products.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Scarf',
+        pricePoisha: 100000,
+        variants: [{ sku: 'COST-1' }],
+      }),
+      actor,
+    );
+    const update = product([variant('COST-1', { costPoisha: 70000 })]);
+    await importer.importBatch(f.a, [{ ...update, pricePoisha: 0, status: undefined }], context);
+
+    await expect(
+      products.edit(f.a, loaded.id, { name: 'Stale name', expectedVersion: loaded.version }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED' });
+    expect(await repository.findById(f.a, loaded.id)).toMatchObject({
+      name: 'Scarf',
+      pricePoisha: 100000,
+      version: loaded.version + 1,
+    });
+    expect(await stored(f.a, 'COST-1')).toMatchObject({ cost_poisha: 70000 });
+  });
+
+  it('adjusts stock without advancing the version when an import leaves seller fields blank', async () => {
+    const loaded = await products.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Scarf',
+        pricePoisha: 100000,
+        variants: [{ sku: 'STOCK-1' }],
+      }),
+      actor,
+    );
+    const update = product([variant('STOCK-1', { onHand: 5 })]);
+    await importer.importBatch(f.a, [{ ...update, pricePoisha: 0, status: undefined }], context);
+
+    expect(await repository.findById(f.a, loaded.id)).toMatchObject({ version: loaded.version });
+    expect(await stored(f.a, 'STOCK-1')).toMatchObject({ on_hand: 5 });
+  });
+
   it('skips a matching sku in skip mode and leaves its stock and prices', async () => {
     await importer.importBatch(f.a, [product([variant('SKP-1', { onHand: 2 })])], context);
     const result = await importer.importBatch(

@@ -1,52 +1,27 @@
 'use client';
 
 import { Printer } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useOrderInvoice } from '../api/get-order-invoice';
 import { OrderInvoiceDocument } from './order-invoice';
-import { SessionVerificationStatus } from '@/components/session-verification-status';
-import { useSessionBoundary } from '@/lib/use-session-boundary';
+import { OrderPrintSession, usePrintWhenReady } from './order-print';
 
 export function OrderInvoiceScreen({ orderId }: { orderId: string }) {
-  const boundary = useSessionBoundary();
-  const { error, isPending } = boundary.session;
-  if (isPending)
-    return (
-      <p role="status" className="p-6">
-        Loading invoice…
-      </p>
-    );
-  if (boundary.blocked || error)
-    return (
-      <SessionVerificationStatus
-        expired={boundary.expired}
-        failure={boundary.failure}
-        error={error}
-        onRetry={boundary.verify}
-      />
-    );
-  return <VerifiedOrderInvoice orderId={orderId} />;
+  return (
+    <OrderPrintSession loadingMessage="Loading invoice…">
+      <VerifiedOrderInvoice orderId={orderId} />
+    </OrderPrintSession>
+  );
 }
 
 function VerifiedOrderInvoice({ orderId }: { orderId: string }) {
   const printed = useRef(false);
   const query = useOrderInvoice(orderId);
-  useEffect(() => {
-    if (!query.isSuccess || printed.current || window.location.hash !== '#print') return;
-    let cancelled = false;
-    void document.fonts.ready.then(() => {
-      if (cancelled || printed.current) return;
-      printed.current = true;
-      window.print();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [query.isSuccess]);
+  usePrintWhenReady(query.isSuccess, printed);
   if (query.error)
     return (
       <main className="p-6">

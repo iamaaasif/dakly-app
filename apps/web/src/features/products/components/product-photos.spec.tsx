@@ -54,6 +54,7 @@ const context: SessionContext = {
 };
 const empty: ProductResponse = {
   ...createProductSchema.parse({ name: 'Silk scarf', pricePoisha: 45000 }),
+  version: 1,
   id: productId,
   category: null,
   brand: null,

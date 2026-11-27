@@ -105,6 +105,7 @@ function validateVariants(
 
 export const changeProductSchema = z
   .strictObject({
+    expectedVersion: z.int().positive().max(2147483647).optional(),
     name: text.optional(),
     description: z.string().trim().max(10000).nullable().optional(),
     categoryId: z.uuid().nullable().optional(),
@@ -123,7 +124,7 @@ export const changeProductSchema = z
     isVisibleInOrderLink: z.boolean().optional(),
     status: z.enum(['active', 'hidden']).optional(),
   })
-  .superRefine((change, context) => {
+  .superRefine(({ expectedVersion: _expectedVersion, ...change }, context) => {
     if (!Object.keys(change).length)
       context.addIssue({ code: 'custom', message: 'Nothing to change' });
     if ((change.options === undefined) !== (change.variants === undefined))
@@ -336,6 +337,7 @@ export type ProductResponse = Omit<
   'variants' | 'negotiationOpeningPoisha' | 'negotiationFloorPoisha'
 > & {
   id: string;
+  version: number;
   negotiationOpeningPoisha?: number | null;
   negotiationFloorPoisha?: number | null;
   // The category's name, with its parent first ("Clothing > T-shirts"), and the brand's name.

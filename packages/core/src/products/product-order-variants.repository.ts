@@ -14,6 +14,7 @@ export class ProductOrderVariantsRepository {
       tx
         .select({
           id: products.id,
+          version: products.version,
           pricePoisha: products.pricePoisha,
           status: products.status,
           isVisibleInChats: products.isVisibleInChats,
@@ -22,13 +23,7 @@ export class ProductOrderVariantsRepository {
           negotiationFloorPoisha: products.negotiationFloorPoisha,
         })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            inArray(products.id, productIds),
-            ne(products.status, 'archived'),
-          ),
-        )
+        .where(and(eq(products.storeId, storeId), inArray(products.id, productIds)))
         .orderBy(products.id)
         .for('no key update'),
     );
@@ -39,13 +34,19 @@ export class ProductOrderVariantsRepository {
       // Product edits already lock the product before changing its variants.
       const [product] = await this.lockProducts(storeId, [productId]);
       if (!product) return null;
+      if (product.status === 'archived')
+        return { version: product.version, status: product.status, variantIds: [] };
       const variants = await tx
         .select({ id: productVariants.id })
         .from(productVariants)
         .where(and(eq(productVariants.storeId, storeId), eq(productVariants.productId, productId)))
         .orderBy(productVariants.id)
         .for('no key update');
-      return variants.map(({ id }) => id);
+      return {
+        variantIds: variants.map(({ id }) => id),
+        version: product.version,
+        status: product.status,
+      };
     });
   }
 

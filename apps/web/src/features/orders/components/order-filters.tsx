@@ -17,6 +17,7 @@ import { Input } from '@dakly/ui/input';
 
 import { ordersSearch } from '../api/orders';
 import { courierLabels, orderSourceLabels } from '../order-labels';
+import type { OrdersNavigationQuery } from '../orders-url';
 import { OrderSearch } from './order-search';
 import { useUrlRouter } from '@/lib/use-url-query';
 
@@ -24,7 +25,7 @@ const filterFormSchema = orderListQuerySchema.safeExtend({ onlyCancelled: z.bool
 type FilterFormValues = z.input<typeof filterFormSchema>;
 type FilterFormInput = z.output<typeof filterFormSchema>;
 
-export type OrderFiltersProps = { query: OrderListQuery };
+export type OrderFiltersProps = { query: OrdersNavigationQuery };
 
 export function OrderFilters({ query }: OrderFiltersProps) {
   const trigger = useRef<HTMLButtonElement>(null);
@@ -70,7 +71,7 @@ function hasOrderFilters({ source, courier, createdFrom, createdThrough, stage }
 }
 
 type FilterFormProps = {
-  query: OrderListQuery;
+  query: OrdersNavigationQuery;
   applied: boolean;
   closeFilters: () => void;
 };
@@ -89,7 +90,7 @@ function FilterForm({ query, applied, closeFilters }: FilterFormProps) {
     resolver: zodResolver(filterFormSchema),
     values: { source, courier, createdFrom, createdThrough, onlyCancelled },
   });
-  const navigate = (next: OrderListQuery) => {
+  const navigate = (next: OrdersNavigationQuery) => {
     if (applied && !hasOrderFilters(next)) closeFilters();
     startTransition(() => router.push(`/orders?${ordersSearch(next)}`));
   };
