@@ -59,8 +59,10 @@ const defaults = chatScreenQuerySchema.parse({});
 
 let paths: string[] = [];
 
-let connectionKinds: string[] = [];
+// One channel keeps the channel filter hidden and the inbox open.
+let connectionKinds: string[] = ['whatsapp'];
 let connectionsForbidden = false;
+let connectionStatus = 'active';
 
 function respond(list: () => Response) {
   vi.stubGlobal('fetch', async (path: string) => {
@@ -72,7 +74,10 @@ function respond(list: () => Response) {
       );
     if (path.startsWith('/api/channel-connections'))
       return Response.json(
-        { items: connectionKinds.map((kind) => ({ kind, status: 'active' })), nextCursor: null },
+        {
+          items: connectionKinds.map((kind) => ({ kind, status: connectionStatus })),
+          nextCursor: null,
+        },
         { headers: { 'x-session-context': 'verified' } },
       );
     return sidebarResponse(path) ?? list();
@@ -171,8 +176,9 @@ afterEach(() => {
   wideScreen = true;
   setNavigationCollapsed = vi.fn();
   paths = [];
-  connectionKinds = [];
+  connectionKinds = ['whatsapp'];
   connectionsForbidden = false;
+  connectionStatus = 'active';
   pastOrders = [];
   autoReplyOn = true;
 });
@@ -397,6 +403,26 @@ describe('Chat list', () => {
     expect(await screen.findByRole('link', { name: 'Instagram' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'WhatsApp' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Comments' })).toBeTruthy();
+  });
+
+  it('asks the shop to connect a channel when none is connected', async () => {
+    connectionKinds = [];
+    respond(() => ok([]));
+    show();
+    expect(await screen.findByRole('heading', { name: 'Connect your channel' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Connect with Channel' }).getAttribute('href')).toBe(
+      '/integrations',
+    );
+    expect(screen.queryByText('No chats here yet.')).toBeNull();
+  });
+
+  it('keeps the inbox when the only channel is disconnected', async () => {
+    connectionKinds = ['whatsapp'];
+    connectionStatus = 'disconnected';
+    respond(() => ok([]));
+    show();
+    expect(await screen.findByText('No chats here yet.')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Connect your channel' })).toBeNull();
   });
 
   it('hides the channel filter when only one channel is connected', async () => {

@@ -1,10 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, getTableName, inArray, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import type {
   CreateProductInput,
   ProductListQuery,
   ProductOption,
+  ProductSource,
   ConfirmProductPhotoInput,
 } from '@dakly/contracts/products';
 import { files } from '@dakly/db/schema/platform';
@@ -12,6 +13,7 @@ import { products, productVariants } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { listFilters } from './product-list-filters.repository';
 import { brandNameSql, categoryPathSql } from './product-list-names.repository';
 import { productListRank } from './product-list-rank.repository';
 import {
@@ -22,15 +24,12 @@ import {
   type Variant,
   variantSnapshot,
 } from './product-snapshots.repository';
-import { stockReadinessFilter } from './product-stock-readiness-filter.repository';
 import { type SkuMatch, skuMatchColumns } from './sku-match.repository';
-
-// Drizzle strips qualifiers in SELECT expressions; this must refer to the outer product.
-const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
 
 const productColumns = {
   id: products.id,
   version: products.version,
+  source: sql<ProductSource>`${products.source}`,
   name: products.name,
   description: products.description,
   shortDescription: products.shortDescription,
@@ -131,31 +130,20 @@ export class ProductsRepository {
         })
         .from(products);
       return (rank.join ? list.leftJoin(rank.join, sql`sales.product_id = ${products.id}`) : list)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            ne(products.status, 'archived'),
-            query.search
-              ? sql`${products.name} ilike ${`%${query.search.replace(/[\\%_]/g, '\\$&')}%`}`
-              : undefined,
-            query.readiness === 'hidden' ? eq(products.status, 'hidden') : undefined,
-            query.readiness === 'needs_photo'
-              ? sql`cardinality(${products.imageFileIds}) = 0`
-              : undefined,
-            query.readiness === 'needs_price'
-              ? sql`exists (select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived' and coalesce(v.price_override_poisha, ${products.pricePoisha}) = 0)`
-              : undefined,
-            stockReadinessFilter(storeId, query.readiness, lowStockThreshold),
-            query.categoryId
-              ? sql`(${products.categoryId} = ${query.categoryId} or ${products.categoryId} in (select id from product_categories where store_id = ${storeId} and parent_id = ${query.categoryId}))`
-              : undefined,
-            query.brandId ? eq(products.brandId, query.brandId) : undefined,
-            rank.after,
-          ),
-        )
+        .where(and(...listFilters(storeId, query, lowStockThreshold), rank.after))
         .orderBy(...rank.order)
         .limit(query.limit + 1);
     });
+  }
+
+  async count(storeId: string, query: ProductListQuery, lowStockThreshold: number) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ total: sql<number>`count(*)`.mapWith(Number) })
+        .from(products)
+        .where(and(...listFilters(storeId, query, lowStockThreshold))),
+    );
+    return row?.total ?? 0;
   }
 
   // The AI agent may only offer active products the shop shows in chats.
@@ -242,11 +230,16 @@ export class ProductsRepository {
     );
   }
 
-  async insert(storeId: string, input: ProductDetails, now: Date): Promise<Product> {
+  async insert(
+    storeId: string,
+    input: ProductDetails,
+    source: ProductSource,
+    now: Date,
+  ): Promise<Product> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .insert(products)
-        .values({ storeId, ...input, createdAt: now, updatedAt: now })
+        .values({ storeId, ...input, source, createdAt: now, updatedAt: now })
         .returning({ ...productColumns, ...negotiationColumns }),
     );
     return rows[0]!;

@@ -118,6 +118,7 @@ export function productResponse(
     readiness.push('running_low');
   return {
     ...product,
+    code: productCode(variants),
     ...(showNegotiationPrices ? { negotiationOpeningPoisha, negotiationFloorPoisha } : {}),
     status: product.status,
     photos: product.photos.map((photo) => ({
@@ -129,4 +130,8 @@ export function productResponse(
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };
+}
+
+function productCode(variants: { sku: string | null }[]): string | null {
+  return variants.find((variant) => variant.sku)?.sku ?? null;
 }

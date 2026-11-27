@@ -18,6 +18,7 @@ import {
 import type { ProductBulkEditChange } from '@dakly/contracts/product-bulk-edits';
 import { productStockStatuses } from '@dakly/contracts/product-editor-fields';
 import {
+  productSources,
   productStatuses,
   restockRequestStatuses,
   stockMovementKinds,
@@ -119,6 +120,8 @@ export const products = pgTable(
     isVisibleInChats: boolean('is_visible_in_chats').notNull().default(true),
     isVisibleInOrderLink: boolean('is_visible_in_order_link').notNull().default(true),
     status: text('status', { enum: productStatuses }).notNull().default('active'),
+    // Where the product came from: typed by the shop, a spreadsheet import, or found in chats.
+    source: text('source', { enum: productSources }).notNull().default('manual'),
     askCount: integer('ask_count').notNull().default(0),
     searchEmbedding: vector('search_embedding', { dimensions: 512 }),
     // The main photo, described by the vision tier and embedded with the same model as the text,
@@ -155,6 +158,7 @@ export const products = pgTable(
       .on(table.storeId, table.externalRef)
       .where(sql`${table.externalRef} is not null`),
     check('products_status', isOneOf(table.status, productStatuses)),
+    check('products_source', isOneOf(table.source, productSources)),
     check('products_stock_status', isOneOf(table.stockStatus, productStockStatuses)),
     check(
       'products_short_description_length',

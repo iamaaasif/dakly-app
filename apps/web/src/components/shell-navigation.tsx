@@ -30,6 +30,7 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 import { cn } from '@dakly/ui/cn';
 
 import { CollapseNavigation } from './collapse-navigation';
+import { StoreSwitcher } from './store-switcher';
 
 type NavigationLink = {
   href: string;
@@ -44,6 +45,8 @@ type NavigationGroup = { heading: string; links: NavigationLink[] };
 
 type ShellNavigationProps = {
   session: SessionContext;
+  // The phone drawer leaves it out: the phone header carries the switcher.
+  onSwitch?: (id: string) => Promise<void>;
   onSignOut: () => Promise<void>;
   collapsed?: boolean;
   onCollapse?: () => void;
@@ -51,6 +54,7 @@ type ShellNavigationProps = {
 };
 export function ShellNavigation({
   session,
+  onSwitch,
   onSignOut,
   collapsed,
   onCollapse,
@@ -68,7 +72,11 @@ export function ShellNavigation({
   const linkProps = { collapsed, onNavigate };
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <NavigationLogo collapsed={collapsed} />
+      {onSwitch ? (
+        <div className={cn('shrink-0 p-3 pb-0', collapsed && 'flex justify-center p-2')}>
+          <StoreSwitcher session={session} onSwitch={onSwitch} compact={collapsed} />
+        </div>
+      ) : null}
       <nav aria-label="Main navigation" className="flex min-h-0 flex-1 flex-col">
         <NavigationGroups groups={groups} {...linkProps} />
         <div className="shrink-0 space-y-1 border-t border-border p-3">
@@ -111,7 +119,7 @@ function NavigationItem({
       title={collapsed ? label : undefined}
       aria-current={current}
       className={cn(
-        'flex min-h-10 min-w-10 items-center gap-3 rounded-md p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+        'flex min-h-10 min-w-10 items-center gap-3 rounded-md p-2 text-text-secondary hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         current === 'page' && 'bg-primary-soft font-semibold text-action-hover',
         current === 'location' && 'font-semibold text-action-hover hover:bg-surface-muted',
         !current && 'hover:bg-surface-muted',
@@ -270,25 +278,6 @@ function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[
       ],
     },
   ];
-}
-
-function NavigationLogo({ collapsed }: Pick<ShellNavigationProps, 'collapsed'>) {
-  return (
-    <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-3.5 max-md:pr-16">
-      <span
-        aria-hidden="true"
-        className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-md font-bold text-on-primary"
-      >
-        D
-      </span>
-      <div className={cn('min-w-0', collapsed && 'sr-only')}>
-        <p className="text-md leading-5 font-bold">
-          Dakly <span className="text-primary">AI</span>
-        </p>
-        <p className="truncate text-xs text-text-muted">Call customers. Grow sales.</p>
-      </div>
-    </div>
-  );
 }
 
 function NavigationGroups({

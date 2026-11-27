@@ -11,8 +11,9 @@ import type {
   CreateProductInput,
   ChangeProductInput,
   ProductListQuery,
-  ProductListResponse,
+  ProductPage,
   ProductResponse,
+  ProductSource,
   ProductPhotoUploadInput,
   ProductPhotoUploadResponse,
   ConfirmProductPhotoInput,
@@ -43,6 +44,7 @@ import { type Product, ProductsRepository, type Variant } from './products.repos
 
 export type { ChatProduct };
 type Actor = AuditEntry['actor'];
+type ProductCreateOptions = { showNegotiationPrices?: boolean; source?: ProductSource };
 
 @Injectable()
 export class ProductsService {
@@ -65,14 +67,14 @@ export class ProductsService {
     storeId: string,
     input: CreateProductInput,
     _actor: Actor,
-    showNegotiationPrices = false,
+    { showNegotiationPrices = false, source = 'manual' }: ProductCreateOptions = {},
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
       const { variants, ...details } = input;
       const issue = productNegotiationIssue(input);
       if (issue) throw productError(issue);
       await this.assertListsExist(storeId, details);
-      const product = await this.repository.insert(storeId, details, this.clock.now());
+      const product = await this.repository.insert(storeId, details, source, this.clock.now());
       await this.saveVariants(storeId, product, variants, []);
       await this.publishUpdated(storeId, product.id);
       return this.getById(storeId, product.id, showNegotiationPrices);
@@ -132,7 +134,7 @@ export class ProductsService {
     storeId: string,
     query: ProductListQuery,
     showNegotiationPrices = false,
-  ): Promise<ProductListResponse> {
+  ): Promise<ProductPage> {
     const { stock } = await this.stores.settings(storeId);
     const sales = query.sort === 'best_selling' ? await this.sales.recentUnits(storeId) : undefined;
     const rows = await this.repository.list(storeId, query, stock.lowStockThreshold, sales);

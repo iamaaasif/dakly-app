@@ -1,6 +1,6 @@
 {
-  "id": "78b8e28f-67c5-488e-8884-37adf141660e",
-  "prevId": "c35ed0eb-5611-49ab-ad6e-4749cf8be947",
+  "id": "115c425e-4ccb-4520-bc9f-df43368667d2",
+  "prevId": "ecfcb683-f617-4b78-b616-eee13feb353d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -22130,6 +22130,13 @@
           "notNull": true,
           "default": "'active'"
         },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
         "ask_count": {
           "name": "ask_count",
           "type": "integer",
@@ -22385,6 +22392,10 @@
         "products_status": {
           "name": "products_status",
           "value": "\"products\".\"status\" in ('active', 'hidden', 'archived')"
+        },
+        "products_source": {
+          "name": "products_source",
+          "value": "\"products\".\"source\" in ('manual', 'import', 'chat')"
         },
         "products_stock_status": {
           "name": "products_stock_status",

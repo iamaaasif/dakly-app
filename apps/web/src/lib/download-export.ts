@@ -4,11 +4,12 @@ import { ApiError, apiFetch } from '@dakly/ui/api-client';
 // download. Returns how many rows the file holds.
 export async function downloadExport(
   { path, fallbackName, contextTag }: { path: string; fallbackName: string; contextTag?: string },
-  query: Record<string, string | undefined>,
+  query: Record<string, string | number | undefined>,
 ): Promise<number> {
   if (!contextTag) throw new ApiError('STORE_REQUIRED', 'Choose a shop to continue.');
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) if (value) params.set(key, value);
+  for (const [key, value] of Object.entries(query))
+    if (value !== undefined && value !== '') params.set(key, String(value));
   const response = await apiFetch(`/api/${path}/export?${params.toString()}`, {
     context: { header: 'X-Session-Context', tag: contextTag },
   });

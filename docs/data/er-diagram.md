@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0115_snapshot.json`: **111 tables, 1465 columns, 442 explicit indexes and 344 foreign keys**.
+Built from `packages/db/migrations/meta/0115_snapshot.json`: **111 tables, 1466 columns, 442 explicit indexes and 344 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1010,6 +1010,7 @@ erDiagram
         boolean is_visible_in_chats "NOT NULL; boolean"
         boolean is_visible_in_order_link "NOT NULL; boolean"
         text status "NOT NULL; text"
+        text source "NOT NULL; text"
         integer ask_count "NOT NULL; integer"
         vector_512_ search_embedding "NULL; vector(512)"
         vector_512_ image_embedding "NULL; vector(512)"

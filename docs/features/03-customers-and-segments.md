@@ -29,16 +29,31 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 `contacts` with the same id (source `manual`, kind `customer`), and 0031 dropped the
 `customers` table.
 
-- `POST /contacts` (`customers.edit`) adds a contact with a name and phone. A staff
-  add is an intentional customer, so it saves with source `manual` and kind `customer`.
+- `POST /contacts` (`customers.edit`) adds a contact with a name and phone, and optionally
+  `whatsappPhone`, `email`, `gender`, `age`, `address`, `district` (the Area field), `tags` and
+  `notes`. `age` is saved as a birth year (this year minus the age); `notes` is the contact's
+  first note. A staff add is an intentional customer, so it saves with source `manual` and kind `customer`.
   The create publishes `contact.created` (the contact id only) in the same store
   transaction, so the event and the contact commit or roll back together.
-- `GET /contacts` (`customers.view`) lists the store's contacts, newest first, with
-  `cursor` and `limit` (default 50, at most 100). Filters: `kind`, one `tag`, and
-  `search`. Deleted contacts are never listed. Each row also carries `whatsappPhone` (masked
-  like `phone`), `email`, `district`, `source` and `consentedChannels`, the channels whose
-  latest consent answer is granted, for the Columns picker. The profile and the other routes
-  keep the short contact shape.
+- `GET /contacts` (`customers.view`) lists the store's contacts with `cursor` and `limit`
+  (default 50, at most 100). `sort` is `newest` (default), `last_purchase`, `highest_spend`,
+  `most_orders` or `name`; the cursor is the last row's id, and its sort key is read back from
+  the database. Filters: `kind`, one `tag`, `source`, `type`, `minSpendPoisha`,
+  `maxSpendPoisha`, `lastPurchase` (`7_days`, `30_days`, `90_days`, `over_90_days`, `never`) and
+  `search`, which finds a name, an email or an area (3 letters or more) or a phone as before.
+  `type` is a customer list tab: `new`, `returning` (regulars), `vip` (best), `inactive`
+  (stopped buying), `at_risk` (slipping away) or `high_value`, the top 10% of customers by net
+  spend whatever their stage (at least one customer). The response carries `total`, the
+  number of contacts the filters match, not just this page. Deleted contacts are never listed.
+  Each row also carries `whatsappPhone` (masked like `phone`), `email`, `district`, `source`
+  and `consentedChannels`, the channels whose latest consent answer is granted, and from
+  `contact_stats` `ordersCount`, `netSpendPoisha`, `lastOrderAt`, `lifecycleStage` and
+  `isHighValue` (zero, null and `none` for a contact with no stats row). The profile and the
+  other routes keep the short contact shape.
+- `GET /contacts/counts` (`customers.view`) returns the tab counts `all`, `new`, `returning`,
+  `vip`, `inactive`, `highValue`, `atRisk`, plus `boughtMoreThanOnce` and `canReceiveMarketing`
+  (consent granted on any channel) for the page subtitle. It counts the whole shop, not the
+  current filters.
 - `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
   identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.
@@ -303,7 +318,8 @@ undo the contacts it added and the consent grants it recorded.
 - Not built yet: upload scanning (OPS-4).
 
 Customer export (CUS-16, CUS-R3): `GET /contacts/export` returns the customers the list filters
-match (`kind`, `tag`, `search`, no page or limit) as an Excel (.xlsx) file named
+match (`kind`, `tag`, `search`, `type`, `source`, the spend range and `lastPurchase`; no page,
+limit or sort) as an Excel (.xlsx) file named
 `dakly-customers-<date>.xlsx`.
 
 - It needs View Customers and the Download customer lists switch (`exportLists`); without the

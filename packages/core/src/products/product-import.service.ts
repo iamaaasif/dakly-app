@@ -133,6 +133,7 @@ export class ProductImportService {
         })),
       },
       context.actor,
+      { source: 'import' },
     );
     // The created variants keep the order of the file's rows.
     for (const [index, variant] of variants.entries())
