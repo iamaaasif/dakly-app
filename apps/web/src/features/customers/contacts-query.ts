@@ -6,7 +6,7 @@ import {
   customerColumnsParam,
   parseCustomerColumns,
 } from './customer-columns';
-import type { ListFilterChange } from './customers-query';
+import type { CustomerFilterChange } from './customers-query';
 
 const defaultContactSort = 'newest';
 
@@ -25,7 +25,7 @@ export type ContactsScreenState = NonNullable<ReturnType<typeof parseContactsAdd
 export function contactsHref(
   query: ContactListQuery,
   columns: CustomerColumn[],
-  change: ListFilterChange = {},
+  change: CustomerFilterChange = {},
 ) {
   const next = { ...query, cursor: undefined, ...change };
   const search = customersSearch({
