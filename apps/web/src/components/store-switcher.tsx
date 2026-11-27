@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
+import { useId } from 'react';
 
 import type { UserStorePage, SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
@@ -17,12 +18,13 @@ type StoreSwitcherProps = {
 };
 export function StoreSwitcher({ session, onSwitch, compact }: StoreSwitcherProps) {
   const { shops, options } = useStoreOptions(session);
+  const selectId = useId();
   const current = session.currentStore;
   if (!session.hasMemberships)
     return <p className={compact ? 'sr-only' : 'px-2 text-text-muted'}>No shop yet</p>;
   return (
     <div className="w-full min-w-0 space-y-2">
-      <div className="relative flex min-h-11 items-center gap-2.5 rounded-lg border border-border bg-surface-muted/60 px-1.5 hover:border-border-strong has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus">
+      <div className="relative flex min-h-10 items-center gap-2.5 rounded-lg border border-border bg-surface-muted/60 px-1.5 hover:border-border-strong has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus">
         <span
           aria-hidden="true"
           className="grid size-7 shrink-0 place-items-center rounded-md bg-inverse text-xs font-semibold text-on-primary"
@@ -30,7 +32,7 @@ export function StoreSwitcher({ session, onSwitch, compact }: StoreSwitcherProps
           {current ? initialsOf(current.name) : ''}
         </span>
         <div className={cn('min-w-0 flex-1', compact && 'sr-only')}>
-          <label htmlFor="active-shop" className="block text-xs leading-4 text-text-muted">
+          <label htmlFor={selectId} className="block text-xs leading-4 text-text-muted">
             Current shop
           </label>
           <p aria-hidden="true" className="text-sm leading-5 font-semibold break-words">
@@ -43,7 +45,7 @@ export function StoreSwitcher({ session, onSwitch, compact }: StoreSwitcherProps
           className={cn('shrink-0 text-text-muted', compact && 'hidden')}
         />
         <select
-          id="active-shop"
+          id={selectId}
           value={session.currentStore?.storeId ?? ''}
           onChange={(event) => void onSwitch(event.target.value)}
           className="absolute inset-0 size-full cursor-pointer opacity-0"

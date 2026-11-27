@@ -45,7 +45,8 @@ type NavigationGroup = { heading: string; links: NavigationLink[] };
 
 type ShellNavigationProps = {
   session: SessionContext;
-  onSwitch: (id: string) => Promise<void>;
+  // The phone drawer leaves it out: the phone header carries the switcher.
+  onSwitch?: (id: string) => Promise<void>;
   onSignOut: () => Promise<void>;
   collapsed?: boolean;
   onCollapse?: () => void;
@@ -71,9 +72,11 @@ export function ShellNavigation({
   const linkProps = { collapsed, onNavigate };
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className={cn('shrink-0 p-3 pb-0', collapsed && 'flex justify-center p-2')}>
-        <StoreSwitcher session={session} onSwitch={onSwitch} compact={collapsed} />
-      </div>
+      {onSwitch ? (
+        <div className={cn('shrink-0 p-3 pb-0', collapsed && 'flex justify-center p-2')}>
+          <StoreSwitcher session={session} onSwitch={onSwitch} compact={collapsed} />
+        </div>
+      ) : null}
       <nav aria-label="Main navigation" className="flex min-h-0 flex-1 flex-col">
         <NavigationGroups groups={groups} {...linkProps} />
         <div className="shrink-0 space-y-1 border-t border-border p-3">

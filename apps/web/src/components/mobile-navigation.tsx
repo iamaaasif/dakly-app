@@ -10,10 +10,9 @@ import { ShellNavigation } from './shell-navigation';
 type MobileNavigationProps = {
   session: SessionContext;
   blocked: boolean;
-  onSwitch: (id: string) => Promise<void>;
   onSignOut: () => Promise<void>;
 };
-export function MobileNavigation({ session, blocked, onSwitch, onSignOut }: MobileNavigationProps) {
+export function MobileNavigation({ session, blocked, onSignOut }: MobileNavigationProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -58,7 +57,6 @@ export function MobileNavigation({ session, blocked, onSwitch, onSignOut }: Mobi
         </Button>
         <ShellNavigation
           session={session}
-          onSwitch={onSwitch}
           onSignOut={onSignOut}
           onNavigate={() => dialog.current?.close()}
         />

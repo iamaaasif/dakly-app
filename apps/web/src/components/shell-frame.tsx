@@ -10,6 +10,7 @@ import { MobileNavigation } from './mobile-navigation';
 import { ShellNavigation } from './shell-navigation';
 import { ShellNavigationCollapse } from './shell-navigation-collapse';
 import { StoreRequired } from './store-required';
+import { StoreSwitcher } from './store-switcher';
 
 type ShellFrameProps = {
   data: SessionContext;
@@ -77,17 +78,15 @@ type ShellHeaderProps = Pick<
 >;
 function ShellHeader({ data, blocked, actions, onSwitch, onSignOut }: ShellHeaderProps) {
   return (
-    <header className="relative z-30 flex h-[3.5625rem] shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:gap-3 md:px-3.5">
-      <MobileNavigation
-        session={data}
-        blocked={blocked}
-        onSwitch={onSwitch}
-        onSignOut={onSignOut}
-      />
+    <header className="relative z-30 flex min-h-[3.5625rem] shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 md:h-[3.5625rem] md:flex-nowrap md:gap-3 md:px-3.5 md:py-0">
+      <MobileNavigation session={data} blocked={blocked} onSignOut={onSignOut} />
       <ShellLogo />
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {actions}
         <AccountMenu user={data.user} onSignOut={onSignOut} />
+      </div>
+      <div className="order-last w-full md:hidden">
+        <StoreSwitcher session={data} onSwitch={onSwitch} />
       </div>
     </header>
   );
