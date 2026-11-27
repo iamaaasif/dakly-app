@@ -25,7 +25,9 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
+import { isChatChannel, MESSENGER_WINDOW_MS, type SendStep } from './automation-step-rules';
 import { matchesAnyKeyword } from './message-keywords';
 
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
@@ -73,6 +75,7 @@ export class AutomationEntryService {
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(ConversationIntentService) private readonly conversations: ConversationIntentService,
+    @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -145,7 +148,29 @@ export class AutomationEntryService {
     } as const;
     for (const { id } of await this.repository.activeWorkflows(storeId, 'message_received')) {
       const version = await this.enteringVersion(storeId, id, event);
-      if (version?.graph.steps[version.graph.firstStepKey]?.kind === 'send') return true;
+      const first = version?.graph.steps[version.graph.firstStepKey];
+      if (first?.kind === 'send' && (await this.canReach(storeId, event.payload.contactId, first)))
+        return true;
+    }
+    return false;
+  }
+
+  // A first send the policy will skip (no consent, blocked contact, frequency cap) answers nobody,
+  // so the AI must reply. This only reads; the real send checks again under its locks.
+  private async canReach(storeId: string, contactId: string, step: SendStep) {
+    const at = this.clock.now();
+    for (const channel of step.channels) {
+      const windowClosesAtOf = isChatChannel(channel)
+        ? new Map([[contactId, new Date(at.getTime() + MESSENGER_WINDOW_MS)]])
+        : undefined;
+      const [checked] = await this.sendPolicy.checkAudience(storeId, {
+        contactIds: [contactId],
+        channel,
+        category: step.category,
+        at,
+        windowClosesAtOf,
+      });
+      if (checked?.decision.action !== 'skip') return true;
     }
     return false;
   }

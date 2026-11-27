@@ -18,6 +18,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DAY_MS } from '../platform/time';
 import { SegmentsModule } from '../segments/segments.module';
+import { SendingModule } from '../sending/sending.module';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 import { StartAutomationOnBirthday } from './jobs/start-automation-on-birthday.job';
@@ -91,7 +92,7 @@ describe('AutomationEntryService (Postgres)', () => {
     );
     class TestModule {}
     Module({
-      imports: [DatabaseModule, ContactsModule, OrdersModule, SegmentsModule],
+      imports: [DatabaseModule, ContactsModule, OrdersModule, SegmentsModule, SendingModule],
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,
@@ -298,6 +299,18 @@ describe('AutomationEntryService (Postgres)', () => {
         await workflow({ rule: 'every_time' }, { key: 'message_received', filters: [] });
         now = new Date(firstDay.getTime() + 71 * DAY_MS);
         expect(await burst('hi', 'greeting')).toBe(false);
+      });
+
+      it('leaves the reply to the AI when the first send is marketing to a contact without consent', async () => {
+        const marketing = {
+          firstStepKey: 'send',
+          steps: {
+            send: { ...sendFirst.steps.send, category: 'marketing', channels: ['messenger'] },
+          },
+        } as typeof sendFirst;
+        await workflow({ rule: 'every_time' }, { key: 'message_received', filters: [] }, marketing);
+        now = new Date(firstDay.getTime() + 71.5 * DAY_MS);
+        expect(await burst('size 12 ache?', 'size_or_stock')).toBe(false);
       });
 
       it('keeps claiming a burst after its run started, and releases the next one while that run is active', async () => {
