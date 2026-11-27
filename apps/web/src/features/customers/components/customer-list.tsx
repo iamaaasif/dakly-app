@@ -27,17 +27,15 @@ type CustomerListProps = {
   customers: ContactListItemResponse[];
   columns: CustomerColumn[];
   onSelectionChange: (count: number) => void;
+  // The Contacts page lists people who may never have ordered, so it leaves the order columns out.
+  withOrders?: boolean;
 };
 
-export function CustomerList({ customers, columns, onSelectionChange }: CustomerListProps) {
+export function CustomerList(props: CustomerListProps) {
   return (
     <>
-      <CustomerMobileList customers={customers} columns={columns} />
-      <CustomerTable
-        customers={customers}
-        columns={columns}
-        onSelectionChange={onSelectionChange}
-      />
+      <CustomerMobileList {...props} />
+      <CustomerTable {...props} />
     </>
   );
 }
@@ -54,7 +52,36 @@ function selectAllState(customers: ContactListItemResponse[], selected: Readonly
   return selected.size ? 'indeterminate' : false;
 }
 
-function CustomerTable({ customers, columns, onSelectionChange }: CustomerListProps) {
+function ColumnHeads({
+  columns,
+  list,
+}: {
+  columns: CustomerColumn[];
+  list: readonly CustomerColumn[];
+}) {
+  return shownColumns(columns, list).map((column) => (
+    <TableHead key={column} className={headClass}>
+      {customerColumnLabels[column]}
+    </TableHead>
+  ));
+}
+
+function OrderHeads() {
+  return (
+    <>
+      <TableHead className={`${headClass} text-right`}>Orders</TableHead>
+      <TableHead className={`${headClass} text-right`}>Spent</TableHead>
+      <TableHead className={`${headClass} whitespace-normal`}>Last purchase</TableHead>
+    </>
+  );
+}
+
+function CustomerTable({
+  customers,
+  columns,
+  onSelectionChange,
+  withOrders = true,
+}: CustomerListProps) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const choose = (next: Set<string>) => {
     setSelected(next);
@@ -81,20 +108,10 @@ function CustomerTable({ customers, columns, onSelectionChange }: CustomerListPr
               />
             </TableHead>
             <TableHead className={headClass}>Customer</TableHead>
-            {shownColumns(columns, leadingColumns).map((column) => (
-              <TableHead key={column} className={headClass}>
-                {customerColumnLabels[column]}
-              </TableHead>
-            ))}
+            <ColumnHeads columns={columns} list={leadingColumns} />
             <TableHead className={headClass}>Type</TableHead>
-            <TableHead className={`${headClass} text-right`}>Orders</TableHead>
-            <TableHead className={`${headClass} text-right`}>Spent</TableHead>
-            <TableHead className={`${headClass} whitespace-normal`}>Last purchase</TableHead>
-            {shownColumns(columns, trailingColumns).map((column) => (
-              <TableHead key={column} className={headClass}>
-                {customerColumnLabels[column]}
-              </TableHead>
-            ))}
+            {withOrders ? <OrderHeads /> : null}
+            <ColumnHeads columns={columns} list={trailingColumns} />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -103,6 +120,7 @@ function CustomerTable({ customers, columns, onSelectionChange }: CustomerListPr
               key={customer.id}
               customer={customer}
               columns={columns}
+              withOrders={withOrders}
               selected={selected.has(customer.id)}
               onToggle={(on) => toggle(customer.id, on)}
             />
@@ -117,10 +135,17 @@ type CustomerTableRowProps = {
   customer: ContactListItemResponse;
   columns: CustomerColumn[];
   selected: boolean;
+  withOrders: boolean;
   onToggle: (on: boolean) => void;
 };
 
-function CustomerTableRow({ customer, columns, selected, onToggle }: CustomerTableRowProps) {
+function CustomerTableRow({
+  customer,
+  columns,
+  selected,
+  withOrders,
+  onToggle,
+}: CustomerTableRowProps) {
   return (
     <TableRow data-state={selected ? 'selected' : undefined}>
       <TableCell className="pr-0 pl-3">
@@ -147,13 +172,17 @@ function CustomerTableRow({ customer, columns, selected, onToggle }: CustomerTab
       <TableCell className="px-1.5">
         <TypePill customer={customer} />
       </TableCell>
-      <TableCell className="px-1.5 text-right">{customer.ordersCount}</TableCell>
-      <TableCell className="px-1.5 text-right font-medium whitespace-nowrap">
-        {formatMoney(customer.netSpendPoisha)}
-      </TableCell>
-      <TableCell className="px-1.5 whitespace-nowrap">
-        <LastPurchase customer={customer} />
-      </TableCell>
+      {withOrders ? (
+        <>
+          <TableCell className="px-1.5 text-right">{customer.ordersCount}</TableCell>
+          <TableCell className="px-1.5 text-right font-medium whitespace-nowrap">
+            {formatMoney(customer.netSpendPoisha)}
+          </TableCell>
+          <TableCell className="px-1.5 whitespace-nowrap">
+            <LastPurchase customer={customer} />
+          </TableCell>
+        </>
+      ) : null}
       {shownColumns(columns, trailingColumns).map((column) => (
         <TableCell
           key={column}
@@ -166,7 +195,11 @@ function CustomerTableRow({ customer, columns, selected, onToggle }: CustomerTab
   );
 }
 
-function CustomerMobileList({ customers, columns }: Omit<CustomerListProps, 'onSelectionChange'>) {
+function CustomerMobileList({
+  customers,
+  columns,
+  withOrders = true,
+}: Omit<CustomerListProps, 'onSelectionChange'>) {
   return (
     <ul className="divide-y divide-border md:hidden">
       {customers.map((customer) => (
@@ -181,11 +214,13 @@ function CustomerMobileList({ customers, columns }: Omit<CustomerListProps, 'onS
             </div>
             <TypePill customer={customer} />
           </div>
-          <p className="text-sm text-text-muted tabular-nums">
-            {customer.ordersCount} {customer.ordersCount === 1 ? 'order' : 'orders'} ·{' '}
-            <span className="font-medium text-text">{formatMoney(customer.netSpendPoisha)}</span> ·
-            Last purchase <LastPurchase customer={customer} />
-          </p>
+          {withOrders ? (
+            <p className="text-sm text-text-muted tabular-nums">
+              {customer.ordersCount} {customer.ordersCount === 1 ? 'order' : 'orders'} ·{' '}
+              <span className="font-medium text-text">{formatMoney(customer.netSpendPoisha)}</span>{' '}
+              · Last purchase <LastPurchase customer={customer} />
+            </p>
+          ) : null}
           <dl className="space-y-1 text-sm">
             {columns
               .filter((column) => column !== 'phone')

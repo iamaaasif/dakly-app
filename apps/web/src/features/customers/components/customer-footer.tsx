@@ -9,6 +9,7 @@ type CustomerFooterProps = {
   shown: number;
   total: number;
   selected: number;
+  noun: 'customers' | 'contacts';
   firstHref?: string;
   nextHref?: string;
 };
@@ -18,16 +19,20 @@ export function CustomerFooter({
   shown,
   total,
   selected,
+  noun,
   firstHref,
   nextHref,
 }: CustomerFooterProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 text-sm text-text-muted">
       <p className="tabular-nums">
-        Showing {formatCount(shown)} of {formatCount(total)} customers
+        Showing {formatCount(shown)} of {formatCount(total)} {noun}
         {selected ? ` · ${formatCount(selected)} selected` : ''}
       </p>
-      <nav aria-label="Customer pages" className="flex items-center gap-2">
+      <nav
+        aria-label={`${noun === 'contacts' ? 'Contact' : 'Customer'} pages`}
+        className="flex items-center gap-2"
+      >
         {firstHref ? (
           <UrlLink href={firstHref} className={pagerButton}>
             First page

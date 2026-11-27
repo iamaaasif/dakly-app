@@ -16,7 +16,7 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 import { ToastProvider } from '@dakly/ui/toast';
 
 import { defaultCustomerColumns } from '../customer-columns';
-import { AddContactsFlow } from './add-contacts-flow';
+import { ContactsScreen } from './contacts-screen';
 import { CustomerProfile } from './customer-profile';
 import { CustomersScreen } from './customers-screen';
 import { ImportResultStep } from './import-result-step';
@@ -149,6 +149,7 @@ afterEach(() => {
 });
 
 const ordered = { limit: 50, sort: 'last_purchase', hasOrdered: true } as const;
+const everyone = { limit: 50, sort: 'newest' } as const;
 const counts = {
   all: 2486,
   customers: 2486,
@@ -380,6 +381,64 @@ describe('All customers', () => {
     await user.click(screen.getByRole('combobox', { name: 'Sort' }));
     await user.click(await screen.findByRole('option', { name: 'Highest spend' }));
     expect(push).toHaveBeenLastCalledWith('/customers?sort=highest_spend');
+  });
+});
+
+describe('All contacts', () => {
+  beforeEach(() => {
+    // The form's checkbox and selects measure themselves; jsdom has no ResizeObserver.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+  });
+
+  const columns = defaultCustomerColumns;
+
+  it('asks for everyone and shows no order columns, with the counts and tabs', async () => {
+    respondWithList([{ ...rahimaInList, tags: ['eid'] }]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    await screen.findByRole('table');
+    expect(sent.find((request) => request.path.startsWith('/api/contacts?'))?.path).toBe(
+      '/api/contacts?limit=50&sort=newest',
+    );
+    expect(screen.queryByRole('columnheader', { name: 'Orders' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Spent' })).toBeNull();
+    expect(
+      await screen.findByText(
+        '2,486 contacts · 1,124 bought more than once · 2,203 can receive marketing messages',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /^VIP\s*42$/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /^At-risk\s*96$/ })).toBeTruthy();
+  });
+
+  it('selects rows and counts them in the footer', async () => {
+    respondWithList([rahimaInList]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    expect(screen.getByText(/1 selected/)).toBeTruthy();
+  });
+
+  it('says there are no contacts yet and offers to add one', async () => {
+    respondWithList([]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    expect(await screen.findByText("You don't have any contact yet")).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Add contact' })).toHaveLength(2);
+    expect(screen.queryByRole('tablist')).toBeNull();
+  });
+
+  it('puts a tab choice in the address', async () => {
+    respondWithList([rahimaInList]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: /^VIP/ }));
+    expect(push).toHaveBeenCalledWith('/contacts?type=vip');
   });
 });
 
@@ -689,9 +748,9 @@ describe('Import customers', () => {
       if (path === `/api/imports/${importId}`) return { body: done('done') };
       return { body: { items: [], nextCursor: null } };
     });
-    show(<AddContactsFlow />);
+    show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), file);
     expect((await screen.findByRole('status')).textContent).toContain('2 rows · 2 columns');
@@ -727,9 +786,9 @@ describe('Import customers', () => {
         ? { body: { importId, uploadUrl: 'https://files.example.test/up' } }
         : { body: { items: [], nextCursor: null } },
     );
-    show(<AddContactsFlow />);
+    show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(
       screen.getByLabelText('Customer file'),
@@ -790,9 +849,9 @@ describe('Import customers', () => {
 
   it('refuses a file that is not Excel or CSV before uploading it', async () => {
     respond(() => ({ body: { items: [], nextCursor: null } }));
-    show(<AddContactsFlow />);
+    show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.pdf'));
     expect((await screen.findByRole('alert')).textContent).toContain('Only Excel (.xlsx) or CSV');
@@ -801,9 +860,9 @@ describe('Import customers', () => {
 
   it('refuses an .xlsx file that is not a spreadsheet', async () => {
     respond(() => ({ body: { items: [], nextCursor: null } }));
-    show(<AddContactsFlow />);
+    show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
     expect((await screen.findByRole('alert')).textContent).toContain('could not be read');
@@ -816,9 +875,9 @@ describe('Import customers', () => {
         ? { body: { importId, uploadUrl: 'https://files.example.test/up' } }
         : { status: 200, body: { items: [], nextCursor: null } },
     );
-    show(<AddContactsFlow />);
+    show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup({ applyAccept: false });
-    await user.click(await screen.findByRole('button', { name: 'Add customers' }));
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
     await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     const bytes = readFileSync('src/lib/fixtures/customers.xlsx');
     await user.upload(screen.getByLabelText('Customer file'), new File([bytes], 'shop-list.xlsx'));
