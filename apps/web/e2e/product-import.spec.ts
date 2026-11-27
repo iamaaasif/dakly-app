@@ -67,7 +67,7 @@ test('imports products from a CSV, sets stock through the ledger and reports the
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/products');
-    await page.getByRole('button', { name: 'Import from Excel or CSV' }).click();
+    await page.getByRole('button', { name: 'Import', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Import products' })).toBeVisible();
     await capture('upload');
     await page.getByLabel('Product file').setInputFiles({

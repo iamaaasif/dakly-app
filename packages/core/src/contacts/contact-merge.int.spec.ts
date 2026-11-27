@@ -54,6 +54,7 @@ afterAll(async () => {
       'contact_merges',
       'orders',
       'messages',
+      'contact_notes',
       'contact_memories',
       'conversations',
       'contact_identities',
@@ -144,6 +145,15 @@ async function memory(storeId: string, contactId: string, facts: object[], summa
 
 const one = async (sql: string, params: unknown[]) => (await admin.pool.query(sql, params)).rows[0];
 
+async function note(storeId: string, contactId: string, body: string) {
+  const id = randomUUID();
+  await admin.pool.query(
+    'insert into contact_notes (id, store_id, contact_id, body) values ($1, $2, $3, $4)',
+    [id, storeId, contactId, body],
+  );
+  return id;
+}
+
 async function pair() {
   const storeId = await shop();
   const older = await contact(storeId, {
@@ -166,6 +176,7 @@ describe('contact merge (Postgres)', () => {
     const olderChat = await chat(storeId, older);
     const newerChat = await chat(storeId, newer);
     const newerOrder = await order(storeId, newer, 1);
+    const newerNote = await note(storeId, newer, 'শুক্রবারে ডেলিভারি চান');
     const staffFact = fact('size', 'M', 'staff');
     await memory(storeId, older, [fact('colour', 'red', 'customer_message')], 'Likes red.');
     await memory(storeId, newer, [staffFact, fact('style', 'plain', 'own_order')], 'Likes plain.');
@@ -186,6 +197,10 @@ describe('contact merge (Postgres)', () => {
       newerOrder,
     ]);
     expect(movedOrder.c).toBe(older);
+    const movedNote = await one('select contact_id as c from contact_notes where id = $1', [
+      newerNote,
+    ]);
+    expect(movedNote.c).toBe(older);
     const movedChat = await one('select contact_id as c from conversations where id = $1', [
       newerChat.conversationId,
     ]);
@@ -233,6 +248,7 @@ describe('contact merge (Postgres)', () => {
     const { storeId, older, newer } = await pair();
     const newerChat = await chat(storeId, newer);
     const newerOrder = await order(storeId, newer, 1);
+    const newerNote = await note(storeId, newer, 'বড় সাইজ লাগে');
     const staffFact = fact('size', 'L', 'staff');
     await memory(storeId, newer, [staffFact], '');
     await admin.pool.query("update contacts set phone = '01710000002' where id = $1", [newer]);
@@ -273,6 +289,10 @@ describe('contact merge (Postgres)', () => {
       one('select buyer_contact_id as c from orders where id = $1', [id]);
     expect((await owner(newerOrder)).c).toBe(newer);
     expect((await owner(lateOrder)).c).toBe(older);
+    const noteOwner = await one('select contact_id as c from contact_notes where id = $1', [
+      newerNote,
+    ]);
+    expect(noteOwner.c).toBe(newer);
     const chatOwner = await one('select contact_id as c from conversations where id = $1', [
       newerChat.conversationId,
     ]);

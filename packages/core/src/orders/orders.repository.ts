@@ -100,6 +100,8 @@ export type StageWrite = Partial<
 
 export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
   stages?: OrderStage[];
+  // To confirm leaves out orders waiting for an advance; they show in Pending.
+  withoutAdvanceRequest?: boolean;
   timeZone: string | null;
   phone?: string;
   overdueBefore: Date;
@@ -132,7 +134,7 @@ export class OrdersRepository {
       tx
         .select({ stage: orders.stage, count: count() })
         .from(orders)
-        .where(eq(orders.storeId, storeId))
+        .where(and(eq(orders.storeId, storeId), notAwaitingAdvanceInToConfirm))
         .groupBy(orders.stage),
     );
   }
@@ -358,11 +360,14 @@ export function orderMatchingConditions(tx: Transaction, storeId: string, filter
   return and(
     eq(orders.storeId, storeId),
     filter.stages ? inArray(orders.stage, filter.stages) : undefined,
+    filter.withoutAdvanceRequest ? ne(orders.paymentStatus, 'advance_requested') : undefined,
     orderSearch(filter.search, filter.phone),
     orderFilters(filter),
     filter.alert ? orderAlertFilter(tx, storeId, filter.alert, filter.overdueBefore) : undefined,
   );
 }
+
+const notAwaitingAdvanceInToConfirm = sql`not (${orders.stage} = 'to_confirm' and ${orders.paymentStatus} = 'advance_requested')`;
 
 const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
 

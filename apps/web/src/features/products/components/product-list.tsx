@@ -1,13 +1,21 @@
+import { Pencil, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 
 import { formatMoney } from '@dakly/contracts/money';
-import type { ProductResponse } from '@dakly/contracts/products';
+import type { ProductListItem, ProductResponse, ProductReadiness } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@dakly/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
+import type { ProductColumn } from '../product-columns';
 import { readinessLabels } from '../product-labels';
 import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
 import { ProductActionsMenu } from './product-actions-menu';
@@ -20,37 +28,125 @@ export type ProductSelection = {
   onProductChanged: (productId: string, saved: ProductResponse | null) => void;
 };
 type ProductListProps = {
-  products: ProductResponse[];
+  products: ProductListItem[];
+  columns: ProductColumn[];
+  readiness?: ProductReadiness;
+  onReadiness: (readiness: ProductReadiness | undefined) => void;
   onAdjust?: (variantId: string) => void;
   onChangeStock?: (productId: string) => void;
   selection?: ProductSelection;
 };
+type RowProps = Omit<ProductListProps, 'products' | 'readiness' | 'onReadiness'> & {
+  product: ProductListItem;
+};
 
-export function ProductList({ products, onAdjust, onChangeStock, selection }: ProductListProps) {
+const readinessFilters: ProductReadiness[] = [
+  'running_low',
+  'out_of_stock',
+  'needs_price',
+  'needs_photo',
+  'hidden',
+];
+
+export function ProductList(props: ProductListProps) {
+  const { products } = props;
   return (
     <>
-      <div className="hidden md:block [&>div]:rounded-t-none [&>div]:border-t-0">
-        <ProductTable
-          products={products}
-          onAdjust={onAdjust}
-          onChangeStock={onChangeStock}
-          selection={selection}
-        />
+      <div className="hidden md:block">
+        <Table bare aria-label="Products">
+          <ProductTableHead {...props} />
+          <TableBody>
+            {products.map((product) => (
+              <ProductRow key={product.id} product={product} {...props} />
+            ))}
+          </TableBody>
+        </Table>
       </div>
-      <ProductCards
-        products={products}
-        onAdjust={onAdjust}
-        onChangeStock={onChangeStock}
-        selection={selection}
-      />
+      <ul aria-label="Products" className="divide-y divide-border md:hidden">
+        {products.map((product) => (
+          <ProductCard key={product.id} product={product} {...props} />
+        ))}
+      </ul>
     </>
   );
 }
 
-function SelectProduct({
-  product,
+function ProductTableHead({
+  products,
+  columns,
+  readiness,
+  onReadiness,
+  onAdjust,
   selection,
-}: { product: ProductResponse } & Pick<ProductListProps, 'selection'>) {
+}: ProductListProps) {
+  const allSelected = products.every((product) => selection?.selectedIds.has(product.id));
+  return (
+    <TableHeader>
+      <TableRow>
+        {selection ? (
+          <TableHead className="w-12 pl-4">
+            <Checkbox
+              aria-label="Select all products on this page"
+              checked={allSelected}
+              onCheckedChange={(checked) => selection.onTogglePage(products, checked === true)}
+            />
+          </TableHead>
+        ) : null}
+        <TableHead>Product</TableHead>
+        {columns.includes('price') ? <TableHead>Price</TableHead> : null}
+        {columns.includes('stock') ? <TableHead>Stock</TableHead> : null}
+        {columns.includes('status') ? (
+          <TableHead>
+            <ReadinessFilter readiness={readiness} onReadiness={onReadiness} />
+          </TableHead>
+        ) : null}
+        {onAdjust ? (
+          <TableHead className="pr-4 text-right whitespace-nowrap">Actions</TableHead>
+        ) : null}
+      </TableRow>
+    </TableHeader>
+  );
+}
+
+// The readiness chips moved here from the page: the column the person already reads as "state".
+function ReadinessFilter({
+  readiness,
+  onReadiness,
+}: Pick<ProductListProps, 'readiness' | 'onReadiness'>) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Filter products by status"
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          readiness && 'text-action',
+        )}
+      >
+        Status
+        <SlidersHorizontal aria-hidden="true" size={12} strokeWidth={2} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuCheckboxItem
+          checked={!readiness}
+          onCheckedChange={() => onReadiness(undefined)}
+        >
+          All products
+        </DropdownMenuCheckboxItem>
+        {readinessFilters.map((each) => (
+          <DropdownMenuCheckboxItem
+            key={each}
+            checked={readiness === each}
+            onCheckedChange={() => onReadiness(each)}
+          >
+            {readinessLabels[each]}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SelectProduct({ product, selection }: Pick<RowProps, 'product' | 'selection'>) {
   if (!selection) return null;
   return (
     <Checkbox
@@ -61,208 +157,145 @@ function SelectProduct({
   );
 }
 
+function ProductRow({ product, columns, onAdjust, onChangeStock, selection }: RowProps) {
+  return (
+    <TableRow className="h-[72px]">
+      {selection ? (
+        <TableCell className="w-12 pl-4">
+          <SelectProduct product={product} selection={selection} />
+        </TableCell>
+      ) : null}
+      <TableCell>
+        <ProductIdentity product={product} />
+      </TableCell>
+      {columns.includes('price') ? (
+        <TableCell>
+          <ProductPrice product={product} />
+        </TableCell>
+      ) : null}
+      {columns.includes('stock') ? (
+        <TableCell>
+          <ProductStock product={product} onAdjust={onAdjust} />
+        </TableCell>
+      ) : null}
+      {columns.includes('status') ? (
+        <TableCell>
+          <ProductVisibility product={product} />
+        </TableCell>
+      ) : null}
+      {onAdjust ? (
+        <TableCell className="pr-4">
+          <ProductRowActions
+            product={product}
+            onAdjust={onAdjust}
+            onChangeStock={onChangeStock}
+            selection={selection}
+          />
+        </TableCell>
+      ) : null}
+    </TableRow>
+  );
+}
+
+function ProductCard({ product, onAdjust, onChangeStock, selection }: RowProps) {
+  return (
+    <li className="space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        <SelectProduct product={product} selection={selection} />
+        <ProductIdentity product={product} />
+        <div className="ml-auto shrink-0 text-right">
+          <ProductPrice product={product} />
+        </div>
+      </div>
+      <ProductStock product={product} onAdjust={onAdjust} />
+      <div className="flex items-center justify-between gap-2">
+        <ProductVisibility product={product} />
+        {onAdjust ? (
+          <ProductRowActions
+            product={product}
+            onAdjust={onAdjust}
+            onChangeStock={onChangeStock}
+            selection={selection}
+          />
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 function lowestStockVariant(variants: ProductResponse['variants']) {
   const first = variants[0];
   if (!first) return undefined;
   return variants.reduce((lowest, v) => (v.available < lowest.available ? v : lowest), first);
 }
 
-type ProductRestockButtonProps = {
-  product: ProductResponse;
-  onAdjust?: (variantId: string) => void;
-  onChangeStock?: (productId: string) => void;
-  className?: string;
-};
-
-function ProductRestockButton({
+function ProductRowActions({
   product,
   onAdjust,
   onChangeStock,
-  className,
-}: ProductRestockButtonProps) {
-  if (!onAdjust || !product.isStockTracked) return null;
-  const variant = lowestStockVariant(product.variants);
-  if (!variant) return null;
+  selection,
+}: Pick<RowProps, 'product' | 'onAdjust' | 'onChangeStock' | 'selection'>) {
+  const variant = product.isStockTracked ? lowestStockVariant(product.variants) : undefined;
   return (
-    <div className="flex flex-wrap justify-end gap-2 md:flex-nowrap">
-      <Button
-        variant="secondary"
-        className={className}
-        aria-label={`Restock ${product.name}`}
-        onClick={() => onAdjust(variant.id)}
-      >
-        + Restock
-      </Button>
-      {onChangeStock ? (
+    <div className="flex items-center justify-end gap-3">
+      {variant && onAdjust ? (
         <Button
           variant="secondary"
-          className={className}
-          aria-label={`Change stock for ${product.name}`}
-          onClick={() => onChangeStock(product.id)}
+          size="sm"
+          className="gap-1 px-3 font-semibold whitespace-nowrap"
+          aria-label={`Restock ${product.name}`}
+          onClick={() => onAdjust(variant.id)}
         >
-          Change stock
+          <Plus aria-hidden="true" size={12} strokeWidth={2.5} />
+          Restock
         </Button>
       ) : null}
-    </div>
-  );
-}
-
-function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
-  const allSelected = products.every((product) => selection?.selectedIds.has(product.id));
-  return (
-    <TableHeader>
-      <TableRow>
-        {selection ? (
-          <TableHead className="w-10">
-            <Checkbox
-              aria-label="Select all products on this page"
-              checked={allSelected}
-              onCheckedChange={(checked) => selection.onTogglePage(products, checked === true)}
-            />
-          </TableHead>
-        ) : null}
-        <TableHead>Product</TableHead>
-        <TableHead className="text-right">Price</TableHead>
-        <TableHead>Stock</TableHead>
-        <TableHead>Status</TableHead>
-        {onAdjust ? (
-          <TableHead className="w-px text-right whitespace-nowrap">Actions</TableHead>
-        ) : null}
-      </TableRow>
-    </TableHeader>
-  );
-}
-
-function ProductTable({ products, onAdjust, onChangeStock, selection }: ProductListProps) {
-  return (
-    <Table aria-label="Products">
-      <ProductTableHead products={products} onAdjust={onAdjust} selection={selection} />
-      <TableBody>
-        {products.map((product) => (
-          <TableRow key={product.id}>
-            {selection ? (
-              <TableCell>
-                <SelectProduct product={product} selection={selection} />
-              </TableCell>
-            ) : null}
-            <TableCell>
-              <div className="space-y-2">
-                <ProductIdentity product={product} />
-                <ListReadiness product={product} />
-              </div>
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              <ProductPrice product={product} />
-            </TableCell>
-            <TableCell>
-              <ProductStock product={product} onAdjust={onAdjust} />
-            </TableCell>
-            <TableCell>
-              <ProductVisibility product={product} />
-            </TableCell>
-            {onAdjust ? (
-              <TableCell className="text-right">
-                <ProductRowActions
-                  product={product}
-                  onAdjust={onAdjust}
-                  onChangeStock={onChangeStock}
-                  selection={selection}
-                  className="h-8 min-h-8 rounded-md px-3 text-xs font-medium whitespace-nowrap"
-                />
-              </TableCell>
-            ) : null}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-function ProductCards({ products, onAdjust, onChangeStock, selection }: ProductListProps) {
-  return (
-    <ul aria-label="Products" className="space-y-3 md:hidden">
-      {products.map((product) => (
-        <li key={product.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
-          <div className="flex items-start justify-between gap-3">
-            <SelectProduct product={product} selection={selection} />
-            <ProductIdentity product={product} />
-            <div className="shrink-0 text-right tabular-nums">
-              <ProductPrice product={product} />
-            </div>
-          </div>
-          <ProductStock product={product} onAdjust={onAdjust} />
-          <div className="flex flex-wrap items-center gap-2">
-            <ProductVisibility product={product} />
-            <ListReadiness product={product} />
-          </div>
-          <ProductRowActions
-            product={product}
-            onAdjust={onAdjust}
-            onChangeStock={onChangeStock}
-            selection={selection}
-            className="min-h-11 rounded-md px-4 text-sm font-medium"
-          />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ProductRowActions({
-  selection,
-  ...restock
-}: ProductRestockButtonProps & Pick<ProductListProps, 'selection'>) {
-  if (!restock.onAdjust) return null;
-  return (
-    <div className="flex items-center justify-end gap-2">
-      <ProductRestockButton {...restock} />
+      <Link
+        href={`/products/${product.id}`}
+        aria-label={`Edit ${product.name}`}
+        className="inline-grid size-8 place-items-center rounded-md text-text-secondary hover:bg-neutral-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      >
+        <Pencil aria-hidden="true" size={15} strokeWidth={1.75} />
+      </Link>
       <ProductActionsMenu
-        product={restock.product}
-        onArchived={() => selection?.onProductChanged(restock.product.id, null)}
+        product={product}
+        onChangeStock={onChangeStock}
+        onArchived={() => selection?.onProductChanged(product.id, null)}
         onHidden={(saved) => selection?.onProductChanged(saved.id, saved)}
       />
     </div>
   );
 }
 
-type ProductPartProps = { product: ProductResponse };
+type ProductPartProps = { product: ProductListItem };
 
 function ProductVisibility({ product }: ProductPartProps) {
   const active = product.status === 'active';
   return (
-    <Badge variant={active ? 'success' : 'neutral'} className="rounded-full">
-      {active ? 'Active' : 'Hidden'}
+    <Badge variant={active ? 'success' : 'neutral'} className="rounded-full px-2.5">
+      {active ? 'Active' : 'Draft'}
     </Badge>
   );
 }
 
-function ListReadiness({ product }: ProductPartProps) {
-  const readiness = product.readiness.filter((label) => label !== 'hidden');
-  if (!readiness.length) return null;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {readiness.map((label) => (
-        <Badge
-          key={label}
-          variant={label === 'needs_price' || label === 'out_of_stock' ? 'danger' : 'warning'}
-          className="rounded-full"
-        >
-          {readinessLabels[label]}
-        </Badge>
-      ))}
-    </div>
-  );
-}
-
 function ProductIdentity({ product }: ProductPartProps) {
-  const href = `/products/${product.id}`;
-  const code = product.variants.find((v) => v.sku)?.sku;
-  const subtitle = [product.category, code].filter(Boolean).join(' · ');
+  const subtitle = [product.category, product.code].filter(Boolean).join(' · ');
   return (
-    <Link href={href} aria-label={product.name} className="flex min-w-0 items-center gap-3">
+    <Link
+      href={`/products/${product.id}`}
+      aria-label={product.name}
+      className="flex min-w-0 items-center gap-3"
+    >
       <ProductThumbnail product={product} />
       <div className="min-w-0">
-        <p className="font-semibold break-words text-text hover:text-action">{product.name}</p>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-text">
+          <span className="break-words">{product.name}</span>
+          {product.source === 'chat' ? (
+            <Badge variant="info" size="sm" className="rounded-sm whitespace-nowrap">
+              Found in chats
+            </Badge>
+          ) : null}
+        </p>
         {subtitle ? <p className="text-xs break-words text-text-muted">{subtitle}</p> : null}
       </div>
     </Link>
@@ -271,65 +304,72 @@ function ProductIdentity({ product }: ProductPartProps) {
 
 function ProductPrice({ product }: ProductPartProps) {
   const price = productPriceRange(product);
-  if (!price) return <span className="font-medium text-danger">No price</span>;
+  if (!price) return <span className="font-semibold text-danger">No price</span>;
   const profit = firstVariantProfitPercent(product);
   return (
-    <div className="space-y-0.5">
-      <span className="font-semibold text-text">{price}</span>
+    <div className="space-y-0.5 tabular-nums">
+      <p className="font-semibold text-text">{price}</p>
       {product.compareAtPricePoisha !== null ? (
         <del className="block text-xs text-text-muted">
           {formatMoney(product.compareAtPricePoisha)}
         </del>
       ) : null}
-      {profit ? <span className="block text-xs font-medium text-success">{profit}</span> : null}
+      {profit ? <p className="text-xs font-medium text-success">{profit}</p> : null}
     </div>
   );
 }
 
-function stockBadgeVariant(available: number): 'danger' | 'neutral' {
-  if (available <= 0) return 'danger';
-  return 'neutral';
+// A product with no options has one default variant, which the design shows as "Stock N".
+function stockChipName(product: ProductListItem, variant: ProductResponse['variants'][number]) {
+  return product.variants.length === 1 && variant.isDefault ? 'Stock' : variant.title;
 }
 
-function variantStockColorClass(available: number) {
-  if (available <= 0) return 'bg-danger-soft text-danger border-border hover:bg-danger-soft/80';
-  return 'bg-surface-muted text-text border-border hover:bg-surface-muted/80';
+function stockTone(variant: ProductResponse['variants'][number]) {
+  if (variant.available <= 0) return 'bg-danger-soft text-danger';
+  const low = variant.lowStockThreshold !== null && variant.available <= variant.lowStockThreshold;
+  return low ? 'bg-warning-soft text-warning' : 'bg-neutral-soft text-text';
 }
 
-type ProductStockProps = ProductPartProps & Pick<ProductListProps, 'onAdjust'>;
-
-function ProductStock({ product, onAdjust }: ProductStockProps) {
-  if (!product.isStockTracked) {
-    return <p className="text-sm text-text-muted">Not tracked</p>;
-  }
-
+function ProductStock({
+  product,
+  onAdjust,
+}: ProductPartProps & Pick<ProductListProps, 'onAdjust'>) {
+  const waiting = product.waitingToConfirmCount;
+  const chipClass =
+    'inline-flex min-h-6 max-w-full items-center rounded-sm px-2 text-xs font-medium wrap-anywhere tabular-nums';
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {product.variants.map((variant) => {
-        const label = `${variant.title} ${variant.available}`;
-        return onAdjust ? (
-          <Button
-            key={variant.id}
-            variant="secondary"
-            className={cn(
-              'min-h-11 max-w-full rounded-md border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs',
-              variantStockColorClass(variant.available),
-            )}
-            aria-label={`Adjust stock for ${product.name}, ${variant.title}`}
-            onClick={() => onAdjust(variant.id)}
-          >
-            {label}
-          </Button>
-        ) : (
-          <Badge
-            key={variant.id}
-            variant={stockBadgeVariant(variant.available)}
-            className="min-h-11 max-w-full rounded-md border border-border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs"
-          >
-            {label}
-          </Badge>
-        );
-      })}
+    <div className="space-y-1.5">
+      {product.isStockTracked ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {product.variants.map((variant) => {
+            const label = `${stockChipName(product, variant)} ${variant.available}`;
+            return onAdjust ? (
+              <button
+                key={variant.id}
+                type="button"
+                className={cn(
+                  chipClass,
+                  stockTone(variant),
+                  'hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+                )}
+                aria-label={`Adjust stock for ${product.name}, ${variant.title}`}
+                onClick={() => onAdjust(variant.id)}
+              >
+                {label}
+              </button>
+            ) : (
+              <span key={variant.id} className={cn(chipClass, stockTone(variant))}>
+                {label}
+              </span>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-text-muted">Not tracked</p>
+      )}
+      {waiting > 0 ? (
+        <p className="text-xs text-text-muted tabular-nums">{waiting} waiting to confirm</p>
+      ) : null}
     </div>
   );
 }

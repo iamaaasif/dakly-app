@@ -21,6 +21,8 @@ export type EvalProduct = {
   aliases: string[];
   variants: EvalVariant[];
   photos: EvalPhoto[];
+  // Not stock tracked, and the owner marked it out of stock.
+  untrackedSoldOut?: true;
 };
 
 type ProductInput = Omit<EvalProduct, 'productId' | 'variants' | 'photos'> & {
@@ -104,6 +106,15 @@ export const evalProducts: EvalProduct[] = [
       ['L', 650, 9],
       ['XL', 650, 0],
     ],
+  }),
+  // Sold by the owner's say-so, with no counted stock: the owner switched it to out of stock.
+  product({
+    name: 'স্যান্ডেল',
+    category: 'জুতা',
+    description: 'হালকা চামড়ার স্যান্ডেল',
+    aliases: ['sandal', 'sandel'],
+    untrackedSoldOut: true,
+    variants: [['41', 900, 0]],
   }),
   product({
     name: 'ক্যানভাস জুতা',
@@ -237,7 +248,8 @@ export const evalSearchDocuments: SearchDocument[] = evalProducts.map((item) => 
 export const evalChatProducts: ChatProduct[] = evalProducts.map((item) => ({
   id: item.productId,
   name: item.name,
-  isStockTracked: true,
+  isStockTracked: !item.untrackedSoldOut,
+  stockStatus: item.untrackedSoldOut ? 'out_of_stock' : 'in_stock',
   description: item.description,
   category: item.category,
   photos: item.photos.map(({ photoId, variantId, description, tags }) => ({

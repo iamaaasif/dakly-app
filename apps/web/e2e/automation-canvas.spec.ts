@@ -301,7 +301,9 @@ test('shows how many entries reached each step', async ({ page, context, baseURL
     const steps = page.getByRole('list', { name: 'Workflow steps' });
     await expect(steps.getByText('Trigger', { exact: true })).toBeVisible();
     await expect(steps.getByText(/entry|entries|tapped/)).toHaveCount(0);
-    await page.getByRole('button', { name: 'Show stats' }).click();
+    await page.getByRole('button', { name: 'Workflow options' }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Show stats' }).click();
+    await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/stats=1/);
     await page.reload();
     await expect(steps.getByText(/^1 sent · 1 tapped/)).toBeVisible();
