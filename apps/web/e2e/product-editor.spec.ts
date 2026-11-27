@@ -159,9 +159,10 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
     await page.goBack();
     await page
-      .getByRole('button', { name: `Change stock for ${name}`, exact: true })
+      .getByRole('button', { name: `More actions for ${name}`, exact: true })
       .filter({ visible: true })
       .click();
+    await page.getByRole('menuitem', { name: 'Change stock', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: /Adjust stock/ });
     await dialog.getByLabel('Change in stock').fill('2');
     await dialog.getByLabel('Reason').fill('Recount');

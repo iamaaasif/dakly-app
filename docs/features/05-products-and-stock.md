@@ -127,6 +127,8 @@ Members who can edit products have a More actions menu on each desktop row and p
 
 Products list API (DSN-2): `GET /products` also returns `totalCount` (every product that matches the filters, for the "Showing 12 of 2,486" footer) and, on each item, `code` (the SKU of its first variant that has one), `source` (`manual`, `import` or `chat`) and `waitingToConfirmCount` (units on orders in To confirm). Search matches the name or the SKU of any variant. `POST /products/:productId/duplicate` creates the copy described above on the server: hidden, name plus " (copy)", the same price, options, negotiation terms and variant costs, and no stock, photos or SKUs. Archive stays `DELETE /products/:productId`. Nothing sets source `chat` yet; the "Found in chats" badge waits for the task that creates products from chats.
 
+Products list rows (DSN-4): each row shows a checkbox, a photo or a tinted letter tile, the name with "Category · code" and a Found in chats badge, the price with the old price struck through and the profit percent, stock chips (neutral, amber at or under the low stock threshold, red at zero) with "N waiting to confirm" or Not tracked, a Draft or Active pill, Restock, an Edit pencil and a menu with Duplicate, Change stock and Archive. A hidden product shows as Draft. Duplicate creates the copy on the server and opens it.
+
 When the catalogue has no products, it says “No products yet” and offers Add product to members who can edit. Add product opens the quick add. Empty search and filter results offer Clear filters.
 
 ### Full page for add and edit (PROD-11)
