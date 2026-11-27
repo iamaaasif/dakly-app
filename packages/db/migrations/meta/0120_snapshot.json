@@ -1,5 +1,5 @@
 {
-  "id": "e0445db9-96fb-4c44-b5fa-9d8a4775aa15",
+  "id": "05e7a05a-10c2-4808-845a-ff4147f4e2a4",
   "prevId": "5fb86e4d-4a0e-43ef-b3cf-577e9f0ba579",
   "version": "7",
   "dialect": "postgresql",
@@ -3618,7 +3618,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan', 'order_fill')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -5341,12 +5341,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "trigger_comment_id": {
-          "name": "trigger_comment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "current_step_key": {
           "name": "current_step_key",
           "type": "text",
@@ -5658,19 +5652,6 @@
           "tableTo": "orders",
           "columnsFrom": [
             "trigger_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "automation_runs_trigger_comment_id_social_comments_id_fk": {
-          "name": "automation_runs_trigger_comment_id_social_comments_id_fk",
-          "tableFrom": "automation_runs",
-          "tableTo": "social_comments",
-          "columnsFrom": [
-            "trigger_comment_id"
           ],
           "columnsTo": [
             "id"

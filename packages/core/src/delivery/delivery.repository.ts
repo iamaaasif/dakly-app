@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, arrayOverlaps, asc, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import type {
   AreaListQuery,
   AreaResponse,
+  AreaSearchResult,
   ChangeDeliveryZoneInput,
   CreateDeliveryZoneInput,
   DeliveryZoneListQuery,
@@ -216,6 +218,30 @@ export class DeliveryRepository {
           ),
         )
         .orderBy(sql`lower(${bdAreas.name}) = lower(${name}) desc`, asc(bdAreas.id))
+        .limit(limit),
+    );
+  }
+
+  // Matches the start of the name in English or Bangla. An upazila also carries its district.
+  searchAreas(storeId: string, term: string, limit: number): Promise<AreaSearchResult[]> {
+    const pattern = `${term.replace(/[\\%_]/g, '\\$&')}%`;
+    const district = alias(bdAreas, 'district');
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...areaColumns,
+          districtId: sql<number>`coalesce(${district.id}, ${bdAreas.id})`,
+          districtName: sql<string>`coalesce(${district.name}, ${bdAreas.name})`,
+        })
+        .from(bdAreas)
+        .leftJoin(district, and(eq(district.id, bdAreas.parentId), eq(district.kind, 'district')))
+        .where(
+          and(
+            ne(bdAreas.kind, 'division'),
+            or(sql`${bdAreas.name} ilike ${pattern}`, sql`${bdAreas.nameBn} ilike ${pattern}`),
+          ),
+        )
+        .orderBy(sql`lower(${bdAreas.name}) = lower(${term}) desc`, asc(bdAreas.name))
         .limit(limit),
     );
   }
