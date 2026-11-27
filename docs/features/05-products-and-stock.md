@@ -227,6 +227,16 @@ A shop keeps its own list of categories (two levels, such as `Clothing > T-shirt
 - **Manage lists.** `/products/lists` shows both lists with product counts. Members who can edit products rename an item, move a category under another top-level category (`PATCH /products/categories/:id`, `PATCH /products/brands/:id`) and delete an item (`DELETE` on the same paths). A delete is refused with `PRODUCT_CATEGORY_IN_USE` or `PRODUCT_BRAND_IN_USE` while products use it, and a category with sub-categories cannot be deleted or moved under another. A category moves only when it has no sub-categories, so the list stays two levels.
 - **Filters.** The product list has Category and Brand filters in the address (`categoryId`, `brandId`); a parent category also shows its sub-categories.
 
+### Editor fields (DSN-3)
+
+The product editor design adds these fields. All of them are optional on create and kept as they are when a PATCH leaves them out.
+
+- **Short description and barcode.** `shortDescription` (up to 300 characters) and `barcode` (up to 64), both text on the product.
+- **Stock status for untracked products.** `stockStatus` is `in_stock` or `out_of_stock` and is read only when "Track stock" is off. A tracked product follows its available count. The list's Out of stock filter and readiness chip include an untracked product set to out of stock.
+- **Out of stock is never offered.** Chats, the AI, photo matches and the order link never offer an out-of-stock product. An untracked product set to out of stock is refused on every order that does not come from staff typing it (`ORDER_ITEM_OUT_OF_STOCK`). Selling a tracked item past its stock stays the per-order choice in ORD-R3, not a product setting.
+- **Option value colour.** An option may carry `colors`, a map from a value to a `#RRGGBB` swatch, for example `{ "Red": "#D32F2F" }`. A colour must belong to one of the option's values.
+- **Product-level SKU.** A product with no options uses its one variant's `sku`. Generate is a client helper.
+
 ### Export products (PROD-14)
 
 The Export to Excel and Export to CSV buttons on the products list download the products the search and readiness filter show, for anyone who can view products. `GET /products/export?format=xlsx|csv&search=&readiness=` writes one row per variant with the import's columns (Name, Price, Category, Brand, Description, Status, SKU, Cost, On hand) and one column per option name, so an export edited in a spreadsheet imports again. Prices are plain taka text, the CSV starts with a byte order mark so Excel reads Bangla, and a CSV cell that starts with `=`, `+`, `-` or `@` gets a leading quote. A name starting with `=`, `+`, `-` or `@` comes back unchanged only through Excel export, because CSV adds a leading apostrophe. Brand is blank for a product without a brand. On hand is blank for a product that does not track stock. Each download is saved in the audit log with its row count.

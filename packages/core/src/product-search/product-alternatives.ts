@@ -1,3 +1,5 @@
+import { isInStock } from '@dakly/contracts/product-editor-fields';
+
 import type { ChatProduct } from '../products/products.service';
 import { isSellable } from './product-photo-match';
 
@@ -46,6 +48,8 @@ export function pickAlternatives(
 
 // A listing that shows a size with no stock invites the model to offer it.
 export function inStockOnly(product: ChatProduct): ChatProduct {
-  if (!product.isStockTracked) return product;
-  return { ...product, variants: product.variants.filter((variant) => variant.available > 0) };
+  return {
+    ...product,
+    variants: product.variants.filter((variant) => isInStock(product, variant.available)),
+  };
 }

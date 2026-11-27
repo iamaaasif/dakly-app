@@ -32,6 +32,8 @@ import { ProductSearchSourceService } from './product-search-source.service';
 import { ProductSearchRepository } from './product-search.repository';
 import { ProductStockRepository } from './product-stock.repository';
 import { ProductStockService } from './product-stock.service';
+import { ProductTagsRepository } from './product-tags.repository';
+import { ProductTagsService } from './product-tags.service';
 import { ProductVariantPhotosController } from './product-variant-photos.controller';
 import { ProductVariantPhotosRepository } from './product-variant-photos.repository';
 import { ProductVariantPhotosService } from './product-variant-photos.service';
@@ -72,6 +74,8 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductBulkEditsService,
     ProductBrandsRepository,
     ProductBrandsService,
+    ProductTagsRepository,
+    ProductTagsService,
     ProductCategoriesRepository,
     ProductCategoriesService,
     ProductsRepository,
