@@ -26,8 +26,17 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 
 List behaviour on All customers, Contacts and Products (DSN-25): a click anywhere on a row opens the
 profile (Ctrl or Cmd opens a new tab); search runs 250 ms after the last key from three letters, Enter
-runs it at once, and the x button clears it; ticking rows shows a bar with "N selected" and Clear;
+runs it at once, and the x button clears it; ticking rows shows a bar with "N selected", Add tag,
+Export selected and Clear;
 the header and the name column stay in view when the table scrolls; Back undoes one tab change.
+
+Bulk actions on ticked customers (CUS-18): Add tag sends up to 100 ids and one tag to
+`POST /contacts/bulk-tags`, which appends the tag to each customer's current list in one statement
+and returns the ids it changed; customers that have the tag, already have 50 tags or are deleted are
+left alone and counted as unchanged. Each change emits `contact.tag_added`. The toast offers Undo for
+5 seconds, which posts those ids to `POST /contacts/bulk-tags/remove`. Export selected posts the ids
+to `POST /contacts/export-selected` and returns the same file as the list export, with the same
+download permission, phone masking and audit entry.
 
 The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 `customers` example moved into it: migration 0030 copied each `customers` row into

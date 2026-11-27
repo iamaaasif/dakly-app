@@ -1,4 +1,16 @@
-import { arrayContains, eq, gte, ilike, isNull, like, lte, or, type SQL, sql } from 'drizzle-orm';
+import {
+  arrayContains,
+  eq,
+  gte,
+  inArray,
+  ilike,
+  isNull,
+  like,
+  lte,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 
 import type {
   ContactKind,
@@ -13,6 +25,8 @@ import { escapeLike } from '../platform/database/escape-like';
 // What the list and the export both filter by.
 export type MatchFilter = {
   kind?: ContactKind;
+  // A hand-picked group, which the export takes instead of the list's filters.
+  ids?: string[];
   tag?: string;
   source?: ContactSource;
   name?: string;
@@ -42,6 +56,7 @@ export function matchingConditions(storeId: string, filter: MatchFilter) {
   return [
     eq(contacts.storeId, storeId),
     isNull(contacts.deletedAt),
+    filter.ids ? inArray(contacts.id, filter.ids) : undefined,
     filter.kind ? eq(contacts.kind, filter.kind) : undefined,
     filter.source ? eq(contacts.source, filter.source) : undefined,
     filter.tag ? arrayContains(contacts.tags, [filter.tag]) : undefined,

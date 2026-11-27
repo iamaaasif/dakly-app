@@ -15,6 +15,11 @@ import {
 import type { FastifyReply } from 'fastify';
 
 import {
+  type BulkExportInput,
+  type BulkTagInput,
+  type BulkTagResponse,
+  bulkExportSchema,
+  bulkTagSchema,
   type ContactCountsQuery,
   type ContactCountsResponse,
   type ContactDetailResponse,
@@ -42,6 +47,21 @@ import { ContactExportService } from './contact-export.service';
 import { ContactListService } from './contact-list.service';
 import { ContactTagsService } from './contact-tags.service';
 import { ContactsService } from './contacts.service';
+
+function sendSpreadsheet(
+  reply: FastifyReply,
+  { filename, type, body, rowCount }: Awaited<ReturnType<ContactExportService['export']>>,
+) {
+  return (
+    reply
+      .header('Cache-Control', 'no-store')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      // The screen says how many customers are in the file.
+      .header('X-Row-Count', String(rowCount))
+      .type(type)
+      .send(body)
+  );
+}
 
 @Controller('contacts')
 export class ContactsController {
@@ -101,19 +121,52 @@ export class ContactsController {
     @Query(new ZodValidationPipe(contactExportQuerySchema)) query: ContactExportQuery,
     @Res() reply: FastifyReply,
   ) {
-    const { filename, type, body, rowCount } = await this.exports.export(storeId, query, access, {
+    const file = await this.exports.export(storeId, query, access, { kind: 'user', userId });
+    return sendSpreadsheet(reply, file);
+  }
+
+  // A hand-picked group is up to 100 ids, which is too long for a query string.
+  @Post('export-selected')
+  @RequirePermission('customers.view')
+  async exportSelected(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Body(new ZodValidationPipe(bulkExportSchema)) input: BulkExportInput,
+    @Res() reply: FastifyReply,
+  ) {
+    const file = await this.exports.exportSelected(storeId, input, access, {
       kind: 'user',
       userId,
     });
-    return (
-      reply
-        .header('Cache-Control', 'no-store')
-        .header('Content-Disposition', `attachment; filename="${filename}"`)
-        // The screen says how many customers are in the file.
-        .header('X-Row-Count', String(rowCount))
-        .type(type)
-        .send(body)
-    );
+    return sendSpreadsheet(reply, file);
+  }
+
+  @Post('bulk-tags')
+  @HttpCode(200)
+  @RequirePermission('customers.edit')
+  addTag(
+    @CurrentStore() storeId: string,
+    @Body(new ZodValidationPipe(bulkTagSchema)) input: BulkTagInput,
+  ): Promise<BulkTagResponse> {
+    return this.tags.changeForMany(storeId, input.contactIds, {
+      tag: input.tag,
+      change: 'add',
+    });
+  }
+
+  // Undo of Add tag, sent with only the customers the tag was added to.
+  @Post('bulk-tags/remove')
+  @HttpCode(200)
+  @RequirePermission('customers.edit')
+  removeTag(
+    @CurrentStore() storeId: string,
+    @Body(new ZodValidationPipe(bulkTagSchema)) input: BulkTagInput,
+  ): Promise<BulkTagResponse> {
+    return this.tags.changeForMany(storeId, input.contactIds, {
+      tag: input.tag,
+      change: 'remove',
+    });
   }
 
   @Get(':contactId')
