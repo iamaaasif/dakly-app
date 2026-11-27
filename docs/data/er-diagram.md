@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0117_snapshot.json`: **114 tables, 1480 columns, 447 explicit indexes and 351 foreign keys**.
+Built from `packages/db/migrations/meta/0118_snapshot.json`: **114 tables, 1482 columns, 447 explicit indexes and 351 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -799,9 +799,11 @@ erDiagram
         text external_comment_id "NOT NULL; text"
         text parent_external_comment_id "NULL; text"
         uuid contact_id FK "NULL; uuid"
+        text author_external_id "NULL; text"
         text author_name "NULL; text"
         text body "NULL; text"
         text classification "NULL; text"
+        timestamp_with_time_zone automation_claimed_at "NULL; timestamp with time zone"
         text status "NOT NULL; text"
         text public_reply_external_id "NULL; text"
         timestamp_with_time_zone private_replied_at "NULL; timestamp with time zone"
