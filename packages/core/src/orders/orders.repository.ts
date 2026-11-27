@@ -20,7 +20,7 @@ import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { itemPreview } from './order-item-preview';
+import { itemPreview } from './order-item-preview.repository';
 
 const summaryColumns = {
   id: orders.id,
