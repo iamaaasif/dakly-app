@@ -33,10 +33,10 @@ export function ProductDescriptionToolbar({ target, onChange }: ProductDescripti
         <ListOrdered aria-hidden="true" size={16} />
       </ToolbarButton>
       <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
-      <ToolbarButton label="Undo" onClick={run(() => document.execCommand('undo'))}>
+      <ToolbarButton label="Undo description edit" onClick={run(() => document.execCommand('undo'))}>
         <Undo2 aria-hidden="true" size={16} />
       </ToolbarButton>
-      <ToolbarButton label="Redo" onClick={run(() => document.execCommand('redo'))}>
+      <ToolbarButton label="Redo description edit" onClick={run(() => document.execCommand('redo'))}>
         <Redo2 aria-hidden="true" size={16} />
       </ToolbarButton>
     </div>

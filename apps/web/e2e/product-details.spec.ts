@@ -59,7 +59,7 @@ test('adds a short description, tags, a barcode and a bulleted description, then
     await page.getByRole('button', { name: 'Bullet list' }).click();
     await expect(description).toHaveValue('• Soft cotton\n• Side pockets');
 
-    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await page.getByRole('button', { name: 'Add short description' }).click();
     await page.getByLabel('Short description').fill('Eid special, ready to ship');
     await page.getByLabel('Barcode').fill('8901234567890');
     await capture('details', () => description.scrollIntoViewIfNeeded());
@@ -76,11 +76,8 @@ test('adds a short description, tags, a barcode and a bulleted description, then
     await expect(page.getByRole('button', { name: 'Remove eid' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await expect(page).toHaveURL(/\/products(\/|\?|$)/);
-    await page
-      .getByRole('link', { name: /Eid panjabi/ })
-      .first()
-      .click();
+    await expect(page).toHaveURL(/\/products\/[0-9a-f-]{36}$/);
+    await page.reload();
     await expect(page.getByLabel('Short description')).toHaveValue('Eid special, ready to ship');
     await expect(page.getByLabel('Barcode')).toHaveValue('8901234567890');
     await expect(page.getByRole('button', { name: 'Remove panjabi' })).toBeVisible();

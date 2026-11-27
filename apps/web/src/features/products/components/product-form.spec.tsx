@@ -284,7 +284,7 @@ describe('Product form on a full page', () => {
     fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '300' } });
     await userEvent.type(screen.getByLabelText('Description'), 'Soft cotton');
     await userEvent.click(screen.getByRole('button', { name: 'Bullet list' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add short description' }));
     await userEvent.type(screen.getByLabelText('Short description'), 'Eid special');
     await userEvent.type(screen.getByLabelText(/Barcode/), '8901234567890');
     await userEvent.click(screen.getByRole('button', { name: 'Add tags' }));

@@ -46,6 +46,7 @@ export function ProductShortDescriptionField() {
           <span className="text-sm font-medium text-text">Short description</span>
           <button
             type="button"
+            aria-label="Add short description"
             onClick={() => setOpen(true)}
             className="rounded-md border border-border bg-surface-muted px-3 py-1 text-sm font-medium text-text hover:border-primary focus-visible:outline-2 focus-visible:outline-focus"
           >
