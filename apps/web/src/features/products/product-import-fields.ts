@@ -21,6 +21,7 @@ export const productImportFields: {
     required: true,
   },
   { field: 'category', label: 'Category', names: ['category'] },
+  { field: 'brand', label: 'Brand', names: ['brand'] },
   { field: 'description', label: 'Description', names: ['description', 'details'] },
   { field: 'status', label: 'Status', names: ['status', 'visibility'] },
   { field: 'sku', label: 'SKU', names: ['sku', 'code', 'productcode'] },

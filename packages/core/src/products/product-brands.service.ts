@@ -55,6 +55,24 @@ export class ProductBrandsService {
     if (!(await this.repository.find(storeId, id))) throw productError('PRODUCT_BRAND_NOT_FOUND');
   }
 
+  resolveName(storeId: string, name: string): Promise<string> {
+    return this.transaction.run(storeId, async () => {
+      const existing = await this.repository.findByName(storeId, name);
+      if (existing) return existing.id;
+      const id = newId();
+      if (await this.repository.insert(storeId, { id, name })) return id;
+      const concurrent = await this.repository.findByName(storeId, name);
+      if (!concurrent) throw productError('PRODUCT_BRAND_NOT_FOUND');
+      return concurrent.id;
+    });
+  }
+
+  async matchNames(storeId: string, names: string[]): Promise<Map<string, string>> {
+    const distinct = [...new Set(names)];
+    const matches = distinct.length ? await this.repository.findNames(storeId, distinct) : [];
+    return new Map(matches.map(({ entered, name }) => [entered, name]));
+  }
+
   private async insertBrand(storeId: string, name: string): Promise<string> {
     if (await this.repository.findByName(storeId, name))
       throw productError('PRODUCT_BRAND_NAME_TAKEN');

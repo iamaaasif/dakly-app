@@ -74,6 +74,7 @@ function otherFieldsChanged(
     stock ||
     differs(variant.costPoisha, current.costPoisha) ||
     differs(product.category, current.category) ||
+    differs(product.brand, current.brand) ||
     differs(product.description, current.description) ||
     differs(product.status, current.status)
   );

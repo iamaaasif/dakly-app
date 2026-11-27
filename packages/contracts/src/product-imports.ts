@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { importDuplicateModes, MAX_IMPORT_COLUMNS } from './contacts';
+import { productBrandSchema } from './product-lists';
 import { MAX_STOCK_QUANTITY, productListBaseQuerySchema, takaInput } from './products';
 
 const column = z
@@ -15,6 +16,7 @@ export const productImportMappingSchema = z
     name: column,
     price: column,
     category: column.optional(),
+    brand: column.optional(),
     description: column.optional(),
     status: column.optional(),
     sku: column.optional(),
@@ -57,6 +59,7 @@ export const productImportRowSchema = z.object({
         )
         .nullable(),
     ),
+  brand: z.string().transform(blankAsNull).pipe(productBrandSchema.shape.name.nullable()),
   description: z.string().transform(blankAsNull).pipe(z.string().max(10000).nullable()),
   status: z.preprocess(
     (value) => (typeof value === 'string' ? value.trim().toLowerCase() || undefined : value),

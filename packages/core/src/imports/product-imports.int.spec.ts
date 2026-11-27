@@ -72,6 +72,7 @@ describe('ProductImportsService (Postgres and SeaweedFS)', () => {
         'stock_movements',
         'product_variants',
         'products',
+        'product_brands',
         'imports',
         'files',
       ])
@@ -135,5 +136,49 @@ describe('ProductImportsService (Postgres and SeaweedFS)', () => {
       ['CAP-1'],
     );
     expect(moves.rows[0].moves).toBe(1);
+  });
+
+  it('uses the shop spelling for a brand, adds new brands, and keeps a brand when omitted', async () => {
+    const brandId = randomUUID();
+    await admin.pool.query('insert into product_brands(id,store_id,name) values($1,$2,$3)', [
+      brandId,
+      storeId,
+      'Aarong',
+    ]);
+    const oldMapping = { name: 0, price: 1, sku: 2, options: [] };
+    const withBrand = { ...oldMapping, brand: 3 };
+    const header = 'Name,Price,SKU,Brand\n';
+    const brandFor = async (sku: string) => {
+      const { rows } = await admin.pool.query<{ id: string; name: string }>(
+        `select b.id, b.name from product_variants v
+         join products p on p.store_id=v.store_id and p.id=v.product_id
+         join product_brands b on b.store_id=p.store_id and b.id=p.brand_id
+         where v.store_id=$1 and v.sku=$2`,
+        [storeId, sku],
+      );
+      return rows[0];
+    };
+
+    await runImport(`${header}Panjabi,900,BRAND-1,  aarong  \nScarf,450,BRAND-2,Nakshi\n`, {
+      mapping: withBrand,
+    });
+    expect(await brandFor('BRAND-1')).toEqual({ id: brandId, name: 'Aarong' });
+    expect(await brandFor('BRAND-2')).toMatchObject({ name: 'Nakshi' });
+
+    const renamed = await runImport(`${header}Panjabi,900,BRAND-1,NAKSHI\n`, {
+      mapping: withBrand,
+    });
+    expect(renamed.result).toMatchObject({ rowsUpdated: 1 });
+    const saved = await brandFor('BRAND-2');
+    expect(await brandFor('BRAND-1')).toEqual(saved);
+    await runImport(`${header}Panjabi,900,BRAND-1, \n`, { mapping: withBrand });
+    expect(await brandFor('BRAND-1')).toEqual(saved);
+
+    const old = await runImport('Name,Price,SKU\nPanjabi,950,BRAND-1\nShirt,700,BRAND-3\n', {
+      mapping: oldMapping,
+    });
+    expect(old.result).toMatchObject({ rowsUpdated: 1, rowsAdded: 1 });
+    expect(await brandFor('BRAND-1')).toEqual(saved);
+    expect(await brandFor('BRAND-3')).toBeUndefined();
   });
 });
