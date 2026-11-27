@@ -24,6 +24,7 @@ import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/recor
 import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
+import { StartAutomationOnMessageBurst } from '@dakly/core/automations/jobs/start-automation-on-message-burst.job';
 import { StartAutomationOnOrderCreated } from '@dakly/core/automations/jobs/start-automation-on-order-created.job';
 import { StartAutomationOnOrderStageChanged } from '@dakly/core/automations/jobs/start-automation-on-order-stage-changed.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
@@ -146,6 +147,7 @@ import { JobSchedulers } from './job-schedulers';
     RecordAutomationBirthdaysJob,
     StartAutomationOnBirthday,
     StartAutomationOnConsent,
+    StartAutomationOnMessageBurst,
     SweepAutomationBirthdaysJob,
     StartAutomationOnOrderCreated,
     StartAutomationOnOrderStageChanged,

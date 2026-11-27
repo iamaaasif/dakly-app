@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
-  ChatIntent,
   ChangeConversationLabelInput,
   ConversationAssigneeResponse,
   ConversationCountsResponse,
@@ -321,15 +320,6 @@ export class InboxService {
 
   // The classifier's reading of the customer's latest messages. It fills the Order request folder and
   // is not a change a member makes, so the chat keeps its version.
-  async setIntentTag(storeId: string, id: string, intentTag: ChatIntent) {
-    await this.repository.update(
-      storeId,
-      id,
-      { intentTag },
-      { now: this.clock.now(), bumpVersion: false },
-    );
-  }
-
   saveSuggestedReply(storeId: string, id: string, text: string, burstAt: Date) {
     return this.repository.saveSuggestedReply(storeId, id, text, burstAt);
   }
