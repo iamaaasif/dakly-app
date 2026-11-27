@@ -5,11 +5,17 @@ import { cn } from './cn';
 export type TableProps = ComponentProps<'table'>;
 
 // Inside a TableCard the card draws the border, so the table passes bare.
-export function Table({ className, bare = false, ...props }: TableProps & { bare?: boolean }) {
+export function Table({
+  className,
+  bare = false,
+  containerClassName,
+  ...props
+}: TableProps & { bare?: boolean; containerClassName?: string }) {
   return (
     <div
       className={cn(
         'w-full overflow-x-auto bg-surface',
+        containerClassName,
         !bare && 'rounded-lg border border-border shadow-card',
       )}
     >

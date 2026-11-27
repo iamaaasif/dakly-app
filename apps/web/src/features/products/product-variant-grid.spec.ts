@@ -9,6 +9,7 @@ import {
   parsePastedCells,
   profitPercent,
   removeOptionAt,
+  variantPriceNotice,
   withSuggestions,
   type GridOption,
   type GridVariant,
@@ -113,5 +114,25 @@ describe('profit and paste', () => {
     ]);
     expect(parsePastedCells('1200')).toBeNull();
     expect(cleanPastedNumber('৳1,200')).toBe('1200');
+  });
+});
+
+describe('variant price notices', () => {
+  it('stays quiet without a variant price', () => {
+    expect(variantPriceNotice(row({}), false)).toBeNull();
+    expect(variantPriceNotice(row({}, { costPoisha: '500' }), true)).toBeNull();
+  });
+
+  it('warns when the price is below cost and passes when it is not', () => {
+    expect(
+      variantPriceNotice(row({}, { priceOverridePoisha: '400', costPoisha: '500' }), false)?.tone,
+    ).toBe('warning');
+    expect(
+      variantPriceNotice(row({}, { priceOverridePoisha: '500', costPoisha: '500' }), false),
+    ).toBeNull();
+  });
+
+  it('blocks any variant price while negotiation is on', () => {
+    expect(variantPriceNotice(row({}, { priceOverridePoisha: '900' }), true)?.tone).toBe('danger');
   });
 });

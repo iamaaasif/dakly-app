@@ -376,6 +376,29 @@ describe('All customers', () => {
     expect(push).toHaveBeenCalledWith('/customers?type=vip&search=01712345678');
   });
 
+  it('searches 250 ms after the last key without Enter', async () => {
+    respondWithList([rahimaInList]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    const user = userEvent.setup();
+    const search = await screen.findByRole('searchbox', { name: 'Search' });
+    await user.type(search, 'ra');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(replace).not.toHaveBeenCalled();
+    await user.type(search, 'him');
+    expect(replace).not.toHaveBeenCalled();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/customers?search=rahim'));
+  });
+
+  it('clears the search with the x button and shows everyone at once', async () => {
+    respondWithList([rahimaInList]);
+    show(
+      <CustomersScreen query={{ ...ordered, search: 'rahim' }} columns={defaultCustomerColumns} />,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Clear search' }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/customers'));
+  });
+
   it('puts a source, spending, time and sort choice in the address', async () => {
     respondWithList([rahimaInList]);
     show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
@@ -452,7 +475,31 @@ describe('All contacts', () => {
     show(<ContactsScreen query={everyone} columns={columns} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
-    expect(screen.getByText(/1 selected/)).toBeTruthy();
+    expect(screen.getAllByText(/1 selected/).length).toBeGreaterThan(0);
+  });
+
+  it('shows a bulk bar for ticked rows and clears the selection', async () => {
+    respondWithList([rahimaInList]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    const bar = screen.getByRole('region', { name: 'Selected rows' });
+    expect(within(bar).getByText('1 selected')).toBeTruthy();
+    await user.click(within(bar).getByRole('button', { name: 'Clear' }));
+    expect(screen.queryByRole('region', { name: 'Selected rows' })).toBeNull();
+  });
+
+  it('opens the profile from anywhere on the row but not from the checkbox', async () => {
+    respondWithList([rahimaInList]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    const user = userEvent.setup();
+    const row = (await screen.findByRole('checkbox', { name: 'Select Rahima Akter' })).closest(
+      'tr',
+    )!;
+    await user.click(screen.getByRole('checkbox', { name: 'Select Rahima Akter' }));
+    expect(push).not.toHaveBeenCalledWith(`/customers/${contactId}`);
+    await user.click(within(row).getByText('Sylhet'));
+    expect(push).toHaveBeenCalledWith(`/customers/${contactId}`);
   });
 
   it('says there are no contacts yet and offers to add one', async () => {

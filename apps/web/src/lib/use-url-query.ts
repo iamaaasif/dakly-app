@@ -43,6 +43,10 @@ export function useUrlQuery<Value>(
 }
 
 export function changeUrl(href: string, mode: 'push' | 'replace' = 'push') {
+  // A tab fires its change twice (on press and on focus). The second push would add a history entry
+  // that looks the same, so Back would need two presses to leave one tab.
+  const target = new URL(href, window.location.origin);
+  if (target.pathname + target.search === window.location.pathname + window.location.search) return;
   if (mode === 'push') window.history.pushState(null, '', href);
   else window.history.replaceState(null, '', href);
   changedInBrowser = true;
