@@ -62,6 +62,7 @@ let paths: string[] = [];
 // One channel keeps the channel filter hidden and the inbox open.
 let connectionKinds: string[] = ['whatsapp'];
 let connectionsForbidden = false;
+let connectionStatus = 'active';
 
 function respond(list: () => Response) {
   vi.stubGlobal('fetch', async (path: string) => {
@@ -73,7 +74,10 @@ function respond(list: () => Response) {
       );
     if (path.startsWith('/api/channel-connections'))
       return Response.json(
-        { items: connectionKinds.map((kind) => ({ kind, status: 'active' })), nextCursor: null },
+        {
+          items: connectionKinds.map((kind) => ({ kind, status: connectionStatus })),
+          nextCursor: null,
+        },
         { headers: { 'x-session-context': 'verified' } },
       );
     return sidebarResponse(path) ?? list();
@@ -174,6 +178,7 @@ afterEach(() => {
   paths = [];
   connectionKinds = ['whatsapp'];
   connectionsForbidden = false;
+  connectionStatus = 'active';
   pastOrders = [];
   autoReplyOn = true;
 });
@@ -409,6 +414,15 @@ describe('Chat list', () => {
       '/integrations',
     );
     expect(screen.queryByText('No chats here yet.')).toBeNull();
+  });
+
+  it('keeps the inbox when the only channel is disconnected', async () => {
+    connectionKinds = ['whatsapp'];
+    connectionStatus = 'disconnected';
+    respond(() => ok([]));
+    show();
+    expect(await screen.findByText('No chats here yet.')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Connect your channel' })).toBeNull();
   });
 
   it('hides the channel filter when only one channel is connected', async () => {

@@ -26,9 +26,9 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   const folders = useInboxFolders();
   const connections = useChatChannels();
   useCollapsedShellNavigation();
+  // A disconnected channel keeps its past chats, so only a shop with no connection at all sees this.
   // Staff who cannot read the connections get an error here and keep the inbox.
-  if (connections.data && !connections.data.items.some((item) => item.status !== 'disconnected'))
-    return <ConnectChannelEmpty />;
+  if (connections.data && connections.data.items.length === 0) return <ConnectChannelEmpty />;
   return (
     <main
       data-full-width
