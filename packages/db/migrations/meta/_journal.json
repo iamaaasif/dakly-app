@@ -801,10 +801,10 @@
       "breakpoints": true
     },
     {
-      "idx": 116,
+      "idx": 118,
       "version": "7",
       "when": 1795785542255,
-      "tag": "0116_product_tags_collections",
+      "tag": "0118_product_tags_collections",
       "breakpoints": true
     }
   ]
