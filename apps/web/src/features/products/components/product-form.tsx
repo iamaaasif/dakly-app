@@ -75,6 +75,8 @@ type ProductFormProps = {
   expectedVersion?: number;
   statusConflict?: ApiError;
   onReload?: () => void;
+  // Photos uploaded before the product exists; Create attaches them.
+  photos?: { fileIds: string[]; uploading: number; failed: number };
 };
 
 export function ProductForm(props: ProductFormProps) {
@@ -99,6 +101,7 @@ export function ProductForm(props: ProductFormProps) {
     isDuplicate: Boolean(duplicateSource),
     dirtyFields,
     expectedVersion: props.expectedVersion,
+    photos: props.photos,
     onSaved,
   });
   const actions = (
@@ -107,6 +110,7 @@ export function ProductForm(props: ProductFormProps) {
       editingOption={editingOption}
       isDirty={isDirty}
       invalidWeight={Boolean(errors.weightGrams)}
+      uploading={props.photos?.uploading ?? 0}
       product={product}
       cancelHref={page?.backHref}
     />
@@ -158,12 +162,13 @@ type SubmitProductArgs = {
   isDuplicate: boolean;
   dirtyFields: FormState<ProductFormValues>['dirtyFields'];
   expectedVersion?: number;
+  photos?: ProductFormProps['photos'];
   onSaved: ProductFormProps['onSaved'];
 };
 
 function useSubmitProduct(
   form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>,
-  { product, isDuplicate, dirtyFields, expectedVersion, onSaved }: SubmitProductArgs,
+  { product, isDuplicate, dirtyFields, expectedVersion, photos, onSaved }: SubmitProductArgs,
 ) {
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
@@ -201,7 +206,11 @@ function useSubmitProduct(
         .then(writeStock, setError);
       return;
     }
-    create.mutate(input, { onError: setError, onSuccess: writeStock });
+    if (photos?.failed) return failedPhotoError(form);
+    create.mutate(
+      { ...input, imageFileIds: photos?.fileIds },
+      { onError: setError, onSuccess: writeStock },
+    );
   });
   const dialog = askReason ? (
     <StockReasonDialog
@@ -229,11 +238,22 @@ function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
   };
 }
 
+function failedPhotoError(form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>) {
+  form.setError('root.server', {
+    message: 'A photo did not upload. Retry or remove it, then create the product.',
+  });
+}
+
+function uploadingLabel(count: number) {
+  return `Uploading ${count} ${count === 1 ? 'photo' : 'photos'}…`;
+}
+
 type ProductFormActionsProps = {
   isPending: boolean;
   editingOption: boolean;
   isDirty: boolean;
   invalidWeight: boolean;
+  uploading: number;
   product?: ProductResponse;
   cancelHref?: string;
 };
@@ -243,9 +263,11 @@ function ProductFormActions({
   editingOption,
   isDirty,
   invalidWeight,
+  uploading,
   product,
   cancelHref,
 }: ProductFormActionsProps) {
+  const saveLabel = product ? 'Save' : 'Create';
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {cancelHref ? (
@@ -256,9 +278,9 @@ function ProductFormActions({
       <Button
         type="submit"
         loading={isPending}
-        disabled={editingOption || invalidWeight || (Boolean(product) && !isDirty)}
+        disabled={editingOption || invalidWeight || uploading > 0 || (Boolean(product) && !isDirty)}
       >
-        {product ? 'Save' : 'Create'}
+        {uploading > 0 ? uploadingLabel(uploading) : saveLabel}
       </Button>
     </div>
   );
