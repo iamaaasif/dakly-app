@@ -87,7 +87,7 @@ describe('product sales for the catalogue', () => {
     const other = await addProduct(f.b);
     await sell(f.a, variantId, 8001, ['2026-11-20T10:00:00Z', 2]);
     await sell(f.a, variantId, 8002, ['2026-11-21T10:00:00Z', 3]);
-    await sell(f.a, variantId, 8003, ['2026-11-21T11:00:00Z', 9, 'confirmed']);
+    await sell(f.a, variantId, 8003, ['2026-11-21T11:00:00Z', 9, 'to_pack']);
     await sell(f.a, variantId, 8004, ['2026-11-21T12:00:00Z', 9, 'cancelled']);
     await sell(f.b, other, 8005, ['2026-11-21T12:00:00Z', 7]);
 
