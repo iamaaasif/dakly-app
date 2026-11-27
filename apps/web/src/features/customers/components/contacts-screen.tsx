@@ -117,7 +117,6 @@ function ContactsTable({
     <>
       <ContactTabs query={query} columns={columns} counts={counts} hrefFor={hrefFor} />
       <ContactToolbar
-        key={`${query.search ?? ''}`}
         query={query}
         columns={columns}
         hrefFor={hrefFor}

@@ -59,12 +59,7 @@ export function CustomersScreen(initial: CustomersScreenState) {
         ) : (
           <>
             <CustomerTabs query={query} columns={columns} counts={counts.data} />
-            <CustomerToolbar
-              key={`${query.search ?? ''}`}
-              query={query}
-              columns={columns}
-              searchError={searchError}
-            />
+            <CustomerToolbar query={query} columns={columns} searchError={searchError} />
             {searchError ? null : (
               <CustomerResults
                 key={JSON.stringify(query)}

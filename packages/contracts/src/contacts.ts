@@ -120,7 +120,8 @@ export const customerInsightSources = ['all', 'shopify', 'facebook', 'store'] as
 const contactName = z.string().trim().min(1).max(120);
 
 export const MAX_CONTACT_TAGS = 50;
-const contactTags = z.array(z.string().trim().min(1).max(50)).max(MAX_CONTACT_TAGS);
+export const contactTagSchema = z.string().trim().min(1, 'Type a tag.').max(50);
+const contactTags = z.array(contactTagSchema).max(MAX_CONTACT_TAGS);
 
 // Everything past name and phone is what the Add contact form can fill in. `age` is stored as a
 // birth year, and `notes` becomes the first note on the profile.

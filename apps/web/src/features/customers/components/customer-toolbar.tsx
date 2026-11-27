@@ -1,7 +1,8 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Download, Search } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { Download, Search, X } from 'lucide-react';
+import { useEffect } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 
 import { type ContactListQuery, contactListQuerySchema } from '@dakly/contracts/contacts';
 import { formatCount } from '@dakly/contracts/money';
@@ -25,6 +26,7 @@ import {
 import { type CustomerFilterChange, type ListHref, customersHref } from '../customers-query';
 import { CustomerColumnsMenu } from './customer-columns-menu';
 import { useSessionContext } from '@/lib/session-context';
+import { useSearchAsYouType } from '@/lib/use-search-as-you-type';
 import { useUrlRouter } from '@/lib/use-url-query';
 
 const searchSchema = contactListQuerySchema.pick({ search: true });
@@ -139,10 +141,18 @@ export function SearchField({ query, columns, hrefFor, searchError }: SearchFiel
     defaultValues: { search: query.search },
     errors: searchError ? { search: { type: 'server', message: searchError } } : undefined,
   });
+  const apply = (search: string | undefined) => router.replace(hrefFor(columns, { search }));
   const submit = form.handleSubmit((values) =>
     router.push(hrefFor(columns, { search: values.search })),
   );
-  const { onChange, ...field } = form.register('search', {
+  const typed = useWatch({ control: form.control, name: 'search' });
+  useSearchAsYouType(typed, query.search, apply);
+  // Back and Forward change the address; the box follows it.
+  useEffect(() => {
+    if ((form.getValues('search')?.trim() || undefined) !== query.search)
+      form.reset({ search: query.search });
+  }, [form, query.search]);
+  const field = form.register('search', {
     setValueAs: (value: string) => value.trim() || undefined,
   });
   const error = form.formState.errors.search?.message;
@@ -155,18 +165,23 @@ export function SearchField({ query, columns, hrefFor, searchError }: SearchFiel
       />
       <Input
         {...field}
-        onChange={(event) => {
-          void onChange(event);
-          // Clearing the box shows everyone again at once; typing waits for Enter.
-          if (!event.target.value && query.search) void submit();
-        }}
         type="search"
         aria-label="Search"
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? 'customer-search-error' : undefined}
         placeholder="Search name, phone, email or area..."
-        className="pl-9"
+        className="pl-9 [&::-webkit-search-cancel-button]:hidden"
       />
+      {typed ? (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={() => form.setValue('search', undefined, { shouldDirty: true })}
+          className="absolute top-0 right-0 flex size-10 items-center justify-center text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-focus"
+        >
+          <X aria-hidden="true" size={16} strokeWidth={1.75} />
+        </button>
+      ) : null}
       {error ? (
         <p id="customer-search-error" role="alert" className="pt-1 text-sm text-danger">
           {error}

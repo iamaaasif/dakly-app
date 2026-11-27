@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { type ReactNode, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { type MouseEvent, type ReactNode, useState } from 'react';
 
 import { consentChannels, type ContactListItemResponse } from '@dakly/contracts/contacts';
 import { formatMoney } from '@dakly/contracts/money';
@@ -14,6 +15,7 @@ import {
   customerColumnLabels,
 } from '../customer-columns';
 import { channelLabels, customerPhone, customerTypePill } from '../customer-labels';
+import { CustomerBulkBar } from './customer-bulk-bar';
 import { CustomerTags } from './customer-tags';
 import { formatShortDate } from '@/lib/format-date';
 import { formatPhone } from '@/lib/format-phone';
@@ -39,6 +41,10 @@ export function CustomerList(props: CustomerListProps) {
     </>
   );
 }
+
+// The checkbox and name columns stay at the left edge while the other columns scroll under them.
+const stickyCheckbox = 'sticky left-0 z-[1]';
+const stickyName = 'sticky left-9 z-[1] border-r border-border';
 
 const headClass =
   'whitespace-nowrap px-1.5 text-xs font-semibold tracking-wide text-text-muted uppercase';
@@ -93,27 +99,21 @@ function CustomerTable({
     else next.delete(id);
     choose(next);
   };
+  const chosen = customers.filter((customer) => selected.has(customer.id));
   return (
-    <div className="hidden md:block">
-      <Table bare className="text-xs">
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="w-9 pr-0 pl-3">
-              <Checkbox
-                aria-label="Select all customers on this page"
-                checked={selectAllState(customers, selected)}
-                onCheckedChange={(on) =>
-                  choose(on === true ? new Set(customers.map((each) => each.id)) : new Set())
-                }
-              />
-            </TableHead>
-            <TableHead className={headClass}>Customer</TableHead>
-            <ColumnHeads columns={columns} list={leadingColumns} />
-            <TableHead className={headClass}>Type</TableHead>
-            {withOrders ? <OrderHeads /> : null}
-            <ColumnHeads columns={columns} list={trailingColumns} />
-          </TableRow>
-        </TableHeader>
+    <div className="relative hidden md:block">
+      {/* The box scrolls both ways, so the header and the name column stay in view. */}
+      <Table
+        bare
+        className="text-xs"
+        containerClassName="max-h-[calc(100dvh-19rem)] min-h-64 overflow-auto"
+      >
+        <CustomerTableHead
+          columns={columns}
+          withOrders={withOrders}
+          selectAll={selectAllState(customers, selected)}
+          onSelectAll={(on) => choose(on ? new Set(customers.map((each) => each.id)) : new Set())}
+        />
         <TableBody>
           {customers.map((customer) => (
             <CustomerTableRow
@@ -127,7 +127,43 @@ function CustomerTable({
           ))}
         </TableBody>
       </Table>
+      {chosen.length ? (
+        <CustomerBulkBar selected={chosen} onClear={() => choose(new Set())} />
+      ) : null}
     </div>
+  );
+}
+
+type CustomerTableHeadProps = {
+  columns: CustomerColumn[];
+  withOrders: boolean;
+  selectAll: boolean | 'indeterminate';
+  onSelectAll: (on: boolean) => void;
+};
+
+function CustomerTableHead({
+  columns,
+  withOrders,
+  selectAll,
+  onSelectAll,
+}: CustomerTableHeadProps) {
+  return (
+    <TableHeader className="sticky top-0 z-10 bg-surface-muted">
+      <TableRow className="hover:bg-transparent">
+        <TableHead className={`${stickyCheckbox} w-9 bg-surface-muted pr-0 pl-3`}>
+          <Checkbox
+            aria-label="Select all customers on this page"
+            checked={selectAll}
+            onCheckedChange={(on) => onSelectAll(on === true)}
+          />
+        </TableHead>
+        <TableHead className={`${headClass} ${stickyName} bg-surface-muted`}>Customer</TableHead>
+        <ColumnHeads columns={columns} list={leadingColumns} />
+        <TableHead className={headClass}>Type</TableHead>
+        {withOrders ? <OrderHeads /> : null}
+        <ColumnHeads columns={columns} list={trailingColumns} />
+      </TableRow>
+    </TableHeader>
   );
 }
 
@@ -139,6 +175,18 @@ type CustomerTableRowProps = {
   onToggle: (on: boolean) => void;
 };
 
+// A click anywhere on the row opens the profile; Ctrl or Cmd opens it in a new tab.
+function useOpenProfile(customerId: string) {
+  const router = useRouter();
+  return (event: MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    // Buttons, links and checkboxes inside the row keep their own action.
+    if (target.closest('a, button, input, [role="checkbox"]') || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey) window.open(`/customers/${customerId}`, '_blank');
+    else router.push(`/customers/${customerId}`);
+  };
+}
+
 function CustomerTableRow({
   customer,
   columns,
@@ -146,16 +194,21 @@ function CustomerTableRow({
   withOrders,
   onToggle,
 }: CustomerTableRowProps) {
+  const open = useOpenProfile(customer.id);
   return (
-    <TableRow data-state={selected ? 'selected' : undefined}>
-      <TableCell className="pr-0 pl-3">
+    <TableRow
+      data-state={selected ? 'selected' : undefined}
+      onClick={open}
+      className="cursor-pointer bg-surface focus-within:bg-surface-hover hover:bg-surface-hover data-[state=selected]:bg-primary-soft"
+    >
+      <TableCell className={`${stickyCheckbox} bg-inherit pr-0 pl-3`}>
         <Checkbox
           aria-label={`Select ${customer.name ?? 'No name'}`}
           checked={selected}
           onCheckedChange={(on) => onToggle(on === true)}
         />
       </TableCell>
-      <TableCell className="px-1.5">
+      <TableCell className={`${stickyName} bg-inherit px-1.5`}>
         <div className="flex items-center gap-2">
           <Avatar name={customer.name} />
           <CustomerLink customer={customer} />
@@ -203,7 +256,7 @@ function CustomerMobileList({
   return (
     <ul className="divide-y divide-border md:hidden">
       {customers.map((customer) => (
-        <li key={customer.id} className="space-y-2 p-4">
+        <MobileRow key={customer.id} customer={customer}>
           <div className="flex items-center gap-3">
             <Avatar name={customer.name} />
             <div className="min-w-0 flex-1">
@@ -233,9 +286,24 @@ function CustomerMobileList({
                 </div>
               ))}
           </dl>
-        </li>
+        </MobileRow>
       ))}
     </ul>
+  );
+}
+
+function MobileRow({
+  customer,
+  children,
+}: {
+  customer: ContactListItemResponse;
+  children: ReactNode;
+}) {
+  const open = useOpenProfile(customer.id);
+  return (
+    <li onClick={open} className="cursor-pointer space-y-2 p-4 active:bg-surface-hover">
+      {children}
+    </li>
   );
 }
 

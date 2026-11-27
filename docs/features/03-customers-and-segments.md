@@ -24,6 +24,11 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 
 ## Built so far
 
+List behaviour on All customers, Contacts and Products (DSN-25): a click anywhere on a row opens the
+profile (Ctrl or Cmd opens a new tab); search runs 250 ms after the last key from three letters, Enter
+runs it at once, and the x button clears it; ticking rows shows a bar with "N selected", Add tag and Clear;
+the header and the name column stay in view when the table scrolls; Back undoes one tab change.
+
 The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 `customers` example moved into it: migration 0030 copied each `customers` row into
 `contacts` with the same id (source `manual`, kind `customer`), and 0031 dropped the
