@@ -13,7 +13,14 @@ import {
   type ChatScreenQuery,
 } from '../chat-filters';
 
-export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
+export function ChatChannelFilter({
+  query,
+  heading,
+}: {
+  query: ChatScreenQuery;
+  // The filter sheet names each field; a lone channel leaves nothing to name.
+  heading?: string;
+}) {
   const connections = useChatChannels();
   // Chat staff without settings access cannot read the connections, so they see every channel.
   const connected = connections.isError
@@ -24,7 +31,7 @@ export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
     query.channel && !connected.includes(query.channel) ? [...connected, query.channel] : connected;
   // One channel means nothing to choose between.
   if (channels.length < 2) return null;
-  return (
+  const picker = (
     <Popover>
       <PopoverTrigger asChild>
         <Button aria-label="Channels" variant="secondary" size="sm">
@@ -48,5 +55,13 @@ export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
         </nav>
       </PopoverContent>
     </Popover>
+  );
+  return heading ? (
+    <div className="space-y-1">
+      <p className="text-sm font-semibold">{heading}</p>
+      {picker}
+    </div>
+  ) : (
+    picker
   );
 }
