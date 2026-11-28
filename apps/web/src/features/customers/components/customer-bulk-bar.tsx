@@ -1,17 +1,20 @@
 'use client';
 import { formatCount } from '@dakly/contracts/money';
 import { Button } from '@dakly/ui/button';
-import { useToast } from '@dakly/ui/toast';
 
-import { useExportSelectedCustomers } from '../api/export-customers';
+import { CustomerBulkCampaign } from './customer-bulk-campaign';
+import { CustomerBulkExport } from './customer-bulk-export';
+import { CustomerBulkSegment } from './customer-bulk-segment';
 import { CustomerBulkTag } from './customer-bulk-tag';
+import { useSessionContext } from '@/lib/session-context';
 
 type CustomerBulkBarProps = { contactIds: string[]; onClear: () => void };
 
-// Slides up inside the card while rows are ticked.
+// Slides up inside the card while rows are ticked. Each action shows only for a member who may
+// do it.
 export function CustomerBulkBar({ contactIds, onClear }: CustomerBulkBarProps) {
-  const showToast = useToast();
-  const exportSelected = useExportSelectedCustomers();
+  const store = useSessionContext().data?.currentStore;
+  const { canCreateCustomer, canEditSegments, canEditCampaigns, canExportCustomers } = store ?? {};
   return (
     <div
       role="region"
@@ -21,20 +24,12 @@ export function CustomerBulkBar({ contactIds, onClear }: CustomerBulkBarProps) {
       <p className="mr-auto text-sm font-medium tabular-nums" aria-live="polite">
         {formatCount(contactIds.length)} selected
       </p>
-      <CustomerBulkTag contactIds={contactIds} />
-      <Button
-        variant="link"
-        disabled={exportSelected.isPending}
-        onClick={() =>
-          exportSelected.mutate(contactIds, {
-            onSuccess: (rows) => showToast(`Downloaded ${formatCount(rows)} customers.`),
-            onError: () => showToast('Could not download the file. Try again.'),
-          })
-        }
-        className="px-3 text-on-primary hover:no-underline"
-      >
-        Export selected
-      </Button>
+      {canCreateCustomer ? <CustomerBulkTag contactIds={contactIds} /> : null}
+      {canEditSegments ? <CustomerBulkSegment contactIds={contactIds} /> : null}
+      {canEditSegments && canEditCampaigns ? (
+        <CustomerBulkCampaign contactIds={contactIds} />
+      ) : null}
+      {canExportCustomers ? <CustomerBulkExport contactIds={contactIds} /> : null}
       <Button variant="link" onClick={onClear} className="px-3 text-on-primary hover:no-underline">
         Clear
       </Button>

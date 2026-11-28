@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
-import { consentChannels, contactKinds, contactSources } from './contacts';
+import { bulkContactIds, consentChannels, contactKinds, contactSources } from './contacts';
 
 // Feature 03: at most 20 conditions, in a top group with one level of groups inside it.
 export const MAX_SEGMENT_CONDITIONS = 20;
 export const MAX_SEGMENTS_PER_STORE = 200;
+// A hand-picked segment lists its customers by id inside its rules, so it stays small.
+export const MAX_HAND_PICKED_CONTACTS = 500;
 
 // "Is" and "is any of" both compile as any of; "is not" as none of.
 function listCondition<Field extends string, Value extends z.ZodType<string>>(
@@ -23,6 +25,12 @@ const textSchema = z.string().trim().min(1).max(80);
 export const segmentConditionSchema = z.discriminatedUnion('field', [
   listCondition('tag', textSchema),
   listCondition('district', textSchema),
+  // Customers chosen by hand on the list. "Is not" leaves those customers out of a bigger segment.
+  z.strictObject({
+    field: z.literal('contact'),
+    operator: z.enum(['is_any_of', 'is_none_of']),
+    values: z.array(z.uuid()).min(1).max(MAX_HAND_PICKED_CONTACTS),
+  }),
   listCondition('source', z.enum(contactSources)),
   // Not a customer contacts never match a segment, so they cannot be asked for.
   listCondition('kind', z.enum(contactKinds).exclude(['not_customer'])),
@@ -70,17 +78,31 @@ export const createSegmentSchema = z.strictObject({
 export const changeSegmentSchema = createSegmentSchema
   .partial()
   .refine((input) => input.name !== undefined || input.rules !== undefined, 'Nothing to change');
+// Without a name the customers are a one-off audience for one campaign and are never listed.
+export const createHandPickedSegmentSchema = z.strictObject({
+  name: segmentNameSchema.optional(),
+  contactIds: bulkContactIds,
+});
+export const handPickedChangeSchema = z.strictObject({ contactIds: bulkContactIds });
 export const segmentPreviewSchema = z.strictObject({ rules: segmentRulesSchema });
 export const segmentStatuses = ['all', 'active', 'archived'] as const;
 export const segmentListQuerySchema = z.strictObject({
   status: z.enum(segmentStatuses).default('all'),
   search: z.string().trim().min(1).max(80).optional(),
+  // One-off audiences are listed only when asked for by id, as a campaign draft does for its own.
+  include: z
+    .string()
+    .transform((value) => value.split(','))
+    .pipe(z.array(z.uuid()).max(10))
+    .optional(),
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 export type CreateSegmentInput = z.infer<typeof createSegmentSchema>;
 export type ChangeSegmentInput = z.infer<typeof changeSegmentSchema>;
+export type CreateHandPickedSegmentInput = z.infer<typeof createHandPickedSegmentSchema>;
+export type HandPickedChangeInput = z.infer<typeof handPickedChangeSchema>;
 export type SegmentPreviewInput = z.infer<typeof segmentPreviewSchema>;
 export type SegmentListQuery = z.infer<typeof segmentListQuerySchema>;
 
@@ -92,6 +114,8 @@ export type SegmentResponse = {
   createdAt: string;
   updatedAt: string;
 };
+// `changedIds` are the customers added or removed, which Undo sends back.
+export type HandPickedChangeResponse = { segment: SegmentResponse; changedIds: string[] };
 // The list adds each segment's live size so the table can show "24 contacts".
 export type SegmentListItem = SegmentResponse & { contactCount: number };
 export type SegmentListResponse = { items: SegmentListItem[]; nextCursor: string | null };

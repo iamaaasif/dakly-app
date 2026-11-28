@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt, ilike, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, ilike, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 import type { SegmentListQuery, SegmentRules } from '@dakly/contracts/segments';
 import { segments } from '@dakly/db/schema/contacts';
@@ -38,6 +38,9 @@ export class SegmentsRepository {
         .where(
           and(
             eq(segments.storeId, storeId),
+            query.include
+              ? or(eq(segments.oneOff, false), inArray(segments.id, query.include))
+              : eq(segments.oneOff, false),
             query.status === 'active' ? isNull(segments.archivedAt) : undefined,
             query.status === 'archived' ? isNotNull(segments.archivedAt) : undefined,
             query.search ? ilike(segments.name, `%${escapeLike(query.search)}%`) : undefined,
@@ -70,7 +73,7 @@ export class SegmentsRepository {
           archived: count(segments.archivedAt),
         })
         .from(segments)
-        .where(eq(segments.storeId, storeId)),
+        .where(and(eq(segments.storeId, storeId), eq(segments.oneOff, false))),
     );
     return { active: row!.active - row!.archived, archived: row!.archived };
   }
@@ -116,14 +119,17 @@ export class SegmentsRepository {
 
   async countSaved(storeId: string): Promise<number> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx.select({ count: count() }).from(segments).where(eq(segments.storeId, storeId)),
+      tx
+        .select({ count: count() })
+        .from(segments)
+        .where(and(eq(segments.storeId, storeId), eq(segments.oneOff, false))),
     );
     return row!.count;
   }
 
   async insert(
     storeId: string,
-    segment: Pick<Segment, 'name' | 'rules'> & { createdByUserId: string | null },
+    segment: Pick<Segment, 'name' | 'rules'> & { createdByUserId: string | null; oneOff?: boolean },
   ): Promise<Segment | 'name_taken'> {
     try {
       const [row] = await this.database.forStore(storeId, (tx) =>

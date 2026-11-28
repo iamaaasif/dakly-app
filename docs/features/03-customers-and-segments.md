@@ -38,6 +38,23 @@ left alone and counted as unchanged. Each change emits `contact.tag_added`. The 
 to `POST /contacts/export-selected` and returns the same file as the list export, with the same
 download permission, phone masking and audit entry.
 
+Picked customers (CUS-19): the customers ticked on the list are held as one `contact` condition
+("customer is any of", at most 500 ids), so campaigns, consent and frequency checks read them like
+any segment. `POST /segments/hand-picked` takes up to 100 ids and an optional name; ids from another
+shop or of deleted customers are dropped. With a name the result is an ordinary segment the shop can
+reuse. Without one it is a one-off audience for a single campaign: `segments.one_off` is true, it is
+not listed, not counted in the tabs or against the 200 limit, and its name may repeat (the unique
+name index skips one-offs). `GET /segments?include=<ids>` lists a draft's own one-offs with the rest,
+so the audience step can show them. Add to segment (`POST /segments/:id/customers`, store lock held so
+two members adding at once keep both) appends the ids that are not in yet and returns them; Undo
+sends them to `.../customers/remove`. A segment built from rules refuses with
+`SEGMENT_NOT_HAND_PICKED`, a full one with `SEGMENT_HAND_PICKED_FULL`, and the last customer cannot
+be removed (`SEGMENT_HAND_PICKED_EMPTY`). Send campaign opens a small form on the bar: "Save as
+segment" is off by default, and when ticked asks for a name. It then opens
+`/campaigns/new?segment=<id>`, which puts the audience in the new draft. One-off audiences are not
+removed when a draft is deleted yet. The segment builder shows the condition as "N customers picked
+on the list" and does not offer it in the field list.
+
 The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 `customers` example moved into it: migration 0030 copied each `customers` row into
 `contacts` with the same id (source `manual`, kind `customer`), and 0031 dropped the
@@ -704,7 +721,7 @@ The nightly repair also covers imported contacts that have no creation event. It
 
 Segments
 
-1. A segment is a condition tree validated by `segmentRulesSchema` in `packages/contracts/src/segments.ts`: a top group that matches all or any of its items, which are conditions or groups of conditions (two levels of groups), and at most 20 conditions in all. Any other field, or a deeper group, is `400 VALIDATION_FAILED`. A store saves at most 200 segments, each with a unique name.
+1. A segment is a condition tree validated by `segmentRulesSchema` in `packages/contracts/src/segments.ts`: a top group that matches all or any of its items, which are conditions or groups of conditions (two levels of groups), and at most 20 conditions in all. The fields are tag, district, source, kind, consent and `contact` (customer is any of, up to 500 ids), which only the customer list creates. Any other field, or a deeper group, is `400 VALIDATION_FAILED`. A store saves at most 200 segments, each with a unique name.
 2. Fields that work now: tag, district, source and kind (is any of, is none of; the builder's "is" and "is not" send one value), and consent per channel (granted, or not granted, which includes never asked). "Is none of" on district keeps contacts with no district. Kind cannot ask for Not a customer.
 3. Fields that wait for their data, and are not in the schema until then: order count, net spend, usual gap, first and last order and lifecycle stage wait for CUS-3 (contact stats, after ORD-1); first and last inbound message wait for CHAT-1; last campaign received waits for CAMP-3.
 4. `ContactsService.countMatching` and `listIdsMatching` compile the tree to a Drizzle `where` in the contacts repository, because contacts owns the table; consent conditions read the `contact_consent_current` view in the same query, a read-only exception listed in [module-boundaries.md](../rules/module-boundaries.md). Every value is a bound parameter. Not a customer and deleted contacts never match.
