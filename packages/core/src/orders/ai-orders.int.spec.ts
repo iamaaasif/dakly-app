@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { OrderBusyHoursRepository } from './order-busy-hours.repository';
 import { OrderReportingRepository } from './order-reporting.repository';
 
 describe('orders the AI agent created', () => {
   const f = new OwnerIsolationFixture();
   const reports = new OrderReportingRepository(f.tenant);
+  const busyHours = new OrderBusyHoursRepository(f.tenant);
   const range = { from: '2026-11-10', through: '2026-11-11', timeZone: 'Asia/Dhaka' };
   const query = (sql: string, values: unknown[]) => f.connection.pool.query(sql, values);
 
@@ -47,5 +49,21 @@ describe('orders the AI agent created', () => {
 
   it('shows nothing for another shop', async () => {
     expect(await reports.aiOrders(f.b, range)).toEqual({ count: 0, salesPoisha: 0n });
+  });
+
+  it('counts orders by the hour they were placed in the shop time zone, leaving out cancelled ones', async () => {
+    const hours = await busyHours.orderHourCounts(
+      f.a,
+      new Date('2026-11-01T00:00:00Z'),
+      'Asia/Dhaka',
+    );
+    // 18:30Z on the 9th and 18:00Z on the 11th are 00:30 and 00:00 in Dhaka; 10:00Z is 16:00.
+    expect(hours.sort((a, b) => a.hour - b.hour)).toEqual([
+      { hour: 0, orders: 2 },
+      { hour: 16, orders: 2 },
+    ]);
+    expect(
+      await busyHours.orderHourCounts(f.b, new Date('2026-11-01T00:00:00Z'), 'Asia/Dhaka'),
+    ).toEqual([]);
   });
 });

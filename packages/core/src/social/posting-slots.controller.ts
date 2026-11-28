@@ -5,6 +5,7 @@ import {
   savePostingSlotsSchema,
   type PostingSlotsQuery,
   type PostingSlotsResponse,
+  type RecommendedPostingSlots,
   type SavePostingSlotsInput,
 } from '@dakly/contracts/social';
 
@@ -25,6 +26,12 @@ export class PostingSlotsController {
     @Query(new ZodValidationPipe(postingSlotsQuerySchema)) query: PostingSlotsQuery,
   ): Promise<PostingSlotsResponse> {
     return this.slots.postingSlots(storeId, query.channelConnectionId);
+  }
+
+  @Get('recommended')
+  @RequirePermission('social.view')
+  recommendedSlots(@CurrentStore() storeId: string): Promise<RecommendedPostingSlots> {
+    return this.slots.recommendedSlots(storeId);
   }
 
   @Put()

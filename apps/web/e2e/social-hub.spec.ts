@@ -119,6 +119,9 @@ test('shows accounts, drafts and the reconnect banner', async ({ page, context, 
     await page.getByRole('button', { name: 'Posting schedule' }).click();
     const schedule = page.getByRole('dialog', { name: 'Posting schedule' });
     await expect(schedule.getByText(/posting times a week/)).toBeVisible();
+    await schedule.getByRole('button', { name: 'Use recommended times' }).click();
+    await expect(schedule.getByRole('status')).toContainText('Standard times');
+    await expect(schedule.getByText('14 posting times a week')).toBeVisible();
     await capture(page, 'posting-schedule');
     await schedule.getByRole('button', { name: 'Add a time on Sat' }).click();
     await schedule.getByLabel('New time on Sat').fill('09:15');

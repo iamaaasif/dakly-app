@@ -18,6 +18,7 @@ import { KhataSalesService } from './khata-sales.service';
 import { OrderAdvancesService } from './order-advances.service';
 import { OrderAttributionRepository } from './order-attribution.repository';
 import { OrderAttributionService } from './order-attribution.service';
+import { OrderBusyHoursRepository } from './order-busy-hours.repository';
 import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderConfirmationController } from './order-confirmation.controller';
 import { OrderConfirmationRepository } from './order-confirmation.repository';
@@ -93,6 +94,7 @@ import { OrdersService } from './orders.service';
     OrderShippingLabelsService,
     OrderAdvancesService,
     OrderReportingRepository,
+    OrderBusyHoursRepository,
     OrderReportingService,
     OrderAttributionRepository,
     OrderAttributionService,

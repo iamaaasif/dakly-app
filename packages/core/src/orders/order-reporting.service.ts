@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { OrderBusyHoursRepository } from './order-busy-hours.repository';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { orderTotalPoisha } from './order-totals';
 
@@ -7,6 +8,7 @@ import { orderTotalPoisha } from './order-totals';
 export class OrderReportingService {
   constructor(
     @Inject(OrderReportingRepository) private readonly orders: OrderReportingRepository,
+    @Inject(OrderBusyHoursRepository) private readonly busyHours: OrderBusyHoursRepository,
   ) {}
 
   contactOrderTotals(storeId: string, contactId: string, timeZone: string) {
@@ -45,6 +47,10 @@ export class OrderReportingService {
     range: { from: string; through: string; timeZone: string },
   ) {
     return this.orders.marketingProfitInputs(storeId, range);
+  }
+
+  orderHourCounts(storeId: string, since: Date, timeZone: string) {
+    return this.busyHours.orderHourCounts(storeId, since, timeZone);
   }
 
   progress(storeId: string, orderId: string) {
