@@ -54,8 +54,6 @@ export class ContentService {
       (await this.repository.findBrandProfile(storeId)) ?? {
         voice: null,
         audience: null,
-        whatYouSell: null,
-        website: null,
         languages: [],
         hashtags: [],
         preferredWords: [],

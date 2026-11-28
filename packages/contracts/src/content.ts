@@ -10,8 +10,6 @@ const hashtag = searchText.max(60).regex(/^#\S+$/u, 'Start each hashtag with #')
 export const brandProfileSchema = z.strictObject({
   voice: profileText,
   audience: profileText,
-  whatYouSell: profileText,
-  website: searchText.max(200).nullable(),
   // One usual language; stored as an array because the column also serves generation defaults.
   languages: z.array(z.enum(contentLanguages)).max(1),
   hashtags: z.array(hashtag).max(10),

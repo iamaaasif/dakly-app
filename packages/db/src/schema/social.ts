@@ -34,8 +34,6 @@ export const brandProfiles = pgTable(
       .references(() => stores.id),
     voice: text('voice'),
     audience: text('audience'),
-    whatYouSell: text('what_you_sell'),
-    website: text('website'),
     preferredWords: text('preferred_words')
       .array()
       .notNull()

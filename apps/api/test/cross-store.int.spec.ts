@@ -5984,8 +5984,6 @@ fixture('POST /post-media/confirm', async () => {
 const brandProfile = {
   voice: 'Warm',
   audience: 'Parents',
-  whatYouSell: 'Handmade toys',
-  website: null,
   languages: ['bn'],
   hashtags: ['#handmade'],
   preferredWords: ['made by hand'],

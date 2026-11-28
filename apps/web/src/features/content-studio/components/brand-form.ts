@@ -10,8 +10,6 @@ export type BrandLanguage = BrandProfile['languages'][number];
 export type BrandValues = {
   voice: string[];
   audience: string;
-  whatYouSell: string;
-  website: string;
   language: BrandLanguage;
   hashtags: string;
   preferredWords: string;
@@ -38,8 +36,6 @@ export function profileOf(values: BrandValues): BrandProfile {
   return {
     voice: values.voice.join(', ') || null,
     audience: text(values.audience),
-    whatYouSell: text(values.whatYouSell),
-    website: text(values.website),
     languages: [values.language],
     hashtags: hashtagsOf(values.hashtags),
     preferredWords: words(values.preferredWords),
@@ -57,8 +53,6 @@ export function valuesOf(profile: BrandProfile): BrandValues {
       .map((word) => word.trim())
       .filter(Boolean),
     audience: profile.audience ?? '',
-    whatYouSell: profile.whatYouSell ?? '',
-    website: profile.website ?? '',
     language: profile.languages[0] ?? 'bn',
     hashtags: profile.hashtags.join(' '),
     preferredWords: profile.preferredWords.join(', '),
@@ -71,8 +65,6 @@ export function valuesOf(profile: BrandProfile): BrandValues {
 const fields: Record<keyof BrandProfile, keyof BrandValues> = {
   voice: 'voice',
   audience: 'audience',
-  whatYouSell: 'whatYouSell',
-  website: 'website',
   languages: 'language',
   hashtags: 'hashtags',
   preferredWords: 'preferredWords',

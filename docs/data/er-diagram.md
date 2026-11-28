@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0127_snapshot.json`: **116 tables, 1495 columns, 450 explicit indexes and 356 foreign keys**.
+Built from `packages/db/migrations/meta/0126_snapshot.json`: **116 tables, 1493 columns, 450 explicit indexes and 356 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1584,8 +1584,6 @@ erDiagram
         uuid store_id PK,FK "NOT NULL; uuid"
         text voice "NULL; text"
         text audience "NULL; text"
-        text what_you_sell "NULL; text"
-        text website "NULL; text"
         text__ preferred_words "NOT NULL; text[]"
         text call_to_action_bn "NULL; text"
         text call_to_action_en "NULL; text"
