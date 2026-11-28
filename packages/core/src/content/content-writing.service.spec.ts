@@ -29,6 +29,8 @@ const topic: ContentWriteInput = {
 const profile: BrandProfile = {
   voice: 'Warm',
   audience: null,
+  languages: [],
+  hashtags: [],
   preferredWords: [],
   wordsToAvoid: ['cheap', 'সস্তা'],
   callToActionBn: null,

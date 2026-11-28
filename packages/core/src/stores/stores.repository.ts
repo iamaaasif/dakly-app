@@ -30,6 +30,7 @@ const settingsColumns = {
   ...storeColumns,
   legalName: stores.legalName,
   businessType: stores.businessType,
+  websiteUrl: stores.websiteUrl,
   phone: stores.phone,
   email: stores.email,
   address: stores.address,

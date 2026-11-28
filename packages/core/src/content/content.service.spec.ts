@@ -36,6 +36,8 @@ describe('ContentService', () => {
     await expect(content.brandProfile(storeId)).resolves.toEqual({
       voice: null,
       audience: null,
+      languages: [],
+      hashtags: [],
       preferredWords: [],
       wordsToAvoid: [],
       callToActionBn: null,

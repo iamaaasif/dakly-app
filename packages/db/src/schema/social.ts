@@ -44,6 +44,7 @@ export const brandProfiles = pgTable(
     defaultTone: text('default_tone'),
     languages: text('languages')
       .array()
+      .$type<(typeof contentLanguages)[number][]>()
       .notNull()
       .default(sql`'{}'::text[]`),
     wordsToAvoid: text('words_to_avoid')

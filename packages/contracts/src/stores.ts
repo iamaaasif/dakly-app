@@ -152,6 +152,7 @@ export type ChangeStoreExtensionsInput = z.infer<typeof changeStoreExtensionsSch
 export type StoreSettingsResponse = StoreResponse & {
   legalName: string | null;
   businessType: string | null;
+  websiteUrl: string | null;
   phone: string | null;
   email: string | null;
   address: string | null;

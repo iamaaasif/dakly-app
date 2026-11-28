@@ -12,6 +12,8 @@ import { sessionContextKey } from '@/lib/session-context';
 const saved: BrandProfile = {
   voice: 'Friendly, Quirky',
   audience: 'Women in Dhaka',
+  languages: [],
+  hashtags: [],
   preferredWords: ['comfort', 'everyday'],
   wordsToAvoid: ['cheap'],
   callToActionBn: null,
@@ -62,6 +64,8 @@ it('shows the saved profile and saves changes, keeping voice words the chips do 
   expect(requests.find(({ method }) => method === 'PUT')?.body).toEqual({
     voice: 'Friendly, Quirky, Warm',
     audience: 'Women in Dhaka',
+    languages: ['bn'],
+    hashtags: [],
     preferredWords: ['comfort', 'everyday'],
     wordsToAvoid: ['cheap', 'guaranteed'],
     callToActionBn: null,
@@ -84,4 +88,20 @@ it('is read only without edit permission', async () => {
     ((await screen.findByLabelText('Who your customers are')) as HTMLTextAreaElement).disabled,
   ).toBe(true);
   expect(screen.queryByRole('button', { name: 'Save brand profile' })).toBeNull();
+});
+
+it('saves the shop fields and shows a sample that follows them', async () => {
+  const user = userEvent.setup();
+  show();
+  await user.type(await screen.findByLabelText('Your hashtags'), 'UrbanTrend #Dhaka');
+  await user.click(screen.getByLabelText('English'));
+  const sample = screen.getByRole('complementary', { name: 'Sample with these settings' });
+  expect(sample.textContent).toContain('Inbox us to order.');
+  expect(sample.textContent).toContain('#UrbanTrend #Dhaka');
+  await user.click(screen.getByRole('button', { name: 'Save brand profile' }));
+  expect(await screen.findByText('Brand profile saved')).toBeTruthy();
+  expect(requests.find(({ method }) => method === 'PUT')?.body).toMatchObject({
+    languages: ['en'],
+    hashtags: ['#UrbanTrend', '#Dhaka'],
+  });
 });

@@ -7,7 +7,7 @@ import { createDatabase } from '@dakly/db/client';
 
 test.use({ screenshot: 'off' });
 
-const evidence = resolve(process.cwd(), '../../docs/design/evidence/soc-5-content-studio-brand');
+const evidence = resolve(process.cwd(), '../../docs/design/evidence/soc-8-brand-profile');
 
 async function capture(page: Page, name: string, scrollTo?: Locator) {
   await mkdir(evidence, { recursive: true });
@@ -56,12 +56,19 @@ test('saves the brand profile', async ({ page, context, baseURL }) => {
       ).status(),
     ).toBe(204);
     await page.setViewportSize({ width: 1440, height: 900 });
+    await database.pool.query(
+      "update stores set business_type='Clothing', website_url='https://urbantrend.com.bd' where id=$1",
+      [storeId],
+    );
     await page.goto('/content-studio?tab=brand');
     await expect(page.getByLabel('Who your customers are')).toBeVisible();
 
+    await expect(page.getByLabel('Website or page link')).toHaveValue('https://urbantrend.com.bd');
+    await expect(page.getByLabel('What you sell')).toHaveValue('Clothing');
     await page.getByLabel('Who your customers are').fill('Women and men aged 22-40 in Dhaka');
     await page.getByRole('button', { name: 'Friendly' }).click();
     await page.getByRole('button', { name: 'Warm' }).click();
+    await page.getByLabel('Your hashtags').fill('#UrbanTrend #DhakaFashion');
     await page.getByLabel('Words you like to use').fill('comfort, everyday style');
     await page.getByLabel('Words to never use').fill('cheap, guaranteed');
     await page.getByLabel('In English').fill('Inbox us to order.');
@@ -69,13 +76,15 @@ test('saves the brand profile', async ({ page, context, baseURL }) => {
     await page.getByRole('button', { name: 'Save brand profile' }).click();
     await expect(page.getByText('Brand profile saved')).toBeVisible();
     const saved = await database.pool.query(
-      'select voice, audience, preferred_words, words_to_avoid, call_to_action_en, call_to_action_bn from brand_profiles where store_id=$1',
+      'select voice, audience, languages, hashtags, preferred_words, words_to_avoid, call_to_action_en, call_to_action_bn from brand_profiles where store_id=$1',
       [storeId],
     );
     expect(saved.rows).toEqual([
       {
         voice: 'Friendly, Warm',
         audience: 'Women and men aged 22-40 in Dhaka',
+        languages: ['bn'],
+        hashtags: ['#UrbanTrend', '#DhakaFashion'],
         preferred_words: ['comfort', 'everyday style'],
         words_to_avoid: ['cheap', 'guaranteed'],
         call_to_action_en: 'Inbox us to order.',
@@ -87,6 +96,10 @@ test('saves the brand profile', async ({ page, context, baseURL }) => {
     await capture(page, 'brand-profile');
     await capture(page, 'brand-profile-order', page.getByLabel('In Bangla'));
   } finally {
+    await database.pool.query(
+      'update stores set business_type=null, website_url=null where id=$1',
+      [storeId],
+    );
     await database.pool.query('delete from brand_profiles where store_id=$1', [storeId]);
     await database.pool.end();
   }

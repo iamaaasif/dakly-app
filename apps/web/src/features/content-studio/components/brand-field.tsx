@@ -9,7 +9,7 @@ import type { BrandValues } from './brand-form';
 
 export type BrandFieldProps = {
   form: UseFormReturn<BrandValues>;
-  name: Exclude<keyof BrandValues, 'voice'>;
+  name: Exclude<keyof BrandValues, 'voice' | 'language'>;
   label: string;
   hint?: string;
   oneLine?: boolean;
