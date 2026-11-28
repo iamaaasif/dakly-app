@@ -13,6 +13,7 @@ import {
 } from '@dakly/contracts/events/contacts';
 import { messageBurstReceivedEventSchema } from '@dakly/contracts/events/messaging';
 import {
+  orderCodCollectedEventSchema,
   orderCreatedEventSchema,
   orderStageChangedEventSchema,
 } from '@dakly/contracts/events/orders';
@@ -45,9 +46,13 @@ export const automationMessageBurstEvent = messageBurstReceivedEventSchema.exten
 export const automationCommentEvent = commentReceivedEventSchema.extend({ id: z.uuid() });
 export const automationOrderCreatedEvent = orderCreatedEventSchema.extend({ id: z.uuid() });
 export const automationOrderStageEvent = orderStageChangedEventSchema.extend({ id: z.uuid() });
+export const automationOrderCodCollectedEvent = orderCodCollectedEventSchema.extend({
+  id: z.uuid(),
+});
 type OrderEvent =
   | Omit<z.infer<typeof automationOrderCreatedEvent>, 'storeId'>
-  | Omit<z.infer<typeof automationOrderStageEvent>, 'storeId'>;
+  | Omit<z.infer<typeof automationOrderStageEvent>, 'storeId'>
+  | Omit<z.infer<typeof automationOrderCodCollectedEvent>, 'storeId'>;
 type OrderFacts = NonNullable<Awaited<ReturnType<OrderReportingService['triggerFacts']>>>;
 // An order event carries the buyer and the order facts that the trigger filters read.
 type WithFacts<E> = E extends { payload: infer P }
@@ -172,12 +177,11 @@ export class AutomationEntryService {
     const facts = await this.orders.triggerFacts(storeId, event.payload.orderId);
     if (!facts) return;
     // Spreading the union loses the link between type and payload, so each branch is typed alone.
-    await this.startMatching(
-      storeId,
-      event.type === 'order.created'
-        ? { ...event, payload: { ...event.payload, ...facts } }
-        : { ...event, payload: { ...event.payload, ...facts } },
-    );
+    if (event.type === 'order.created')
+      return this.startMatching(storeId, { ...event, payload: { ...event.payload, ...facts } });
+    if (event.type === 'order.cod_collected')
+      return this.startMatching(storeId, { ...event, payload: { ...event.payload, ...facts } });
+    await this.startMatching(storeId, { ...event, payload: { ...event.payload, ...facts } });
   }
 
   async start(storeId: string, automationId: string, event: TriggerEvent): Promise<boolean> {
@@ -315,7 +319,9 @@ export class AutomationEntryService {
 }
 
 function orderTriggerFor(event: OrderEvent): TriggerKey | undefined {
-  return event.type === 'order.created' ? 'order_placed' : stageTriggers[event.payload.to];
+  if (event.type === 'order.created') return 'order_placed';
+  // Cash collected is the moment a COD order counts as paid.
+  return event.type === 'order.cod_collected' ? 'order_paid' : stageTriggers[event.payload.to];
 }
 
 function triggerFor(event: TriggerEvent) {
@@ -424,7 +430,11 @@ function orderIdOf(event: TriggerEvent) {
 }
 
 function isOrderEvent(event: TriggerEvent): event is OrderTriggerEvent {
-  return event.type === 'order.created' || event.type === 'order.stage_changed';
+  return (
+    event.type === 'order.created' ||
+    event.type === 'order.stage_changed' ||
+    event.type === 'order.cod_collected'
+  );
 }
 
 function canReEnter(rule: AutomationGraph['reEntry'], enteredAt: Date, now: Date) {

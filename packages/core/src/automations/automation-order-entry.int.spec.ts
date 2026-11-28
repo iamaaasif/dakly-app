@@ -99,6 +99,13 @@ describe('order triggers (Postgres)', () => {
       occurredAt: eventAt.toISOString(),
       payload: { orderId, from: 'to_pack', to },
     });
+  const collected = (orderId: string) =>
+    entries.startMatchingOrder(storeId, {
+      id: randomUUID(),
+      type: 'order.cod_collected',
+      occurredAt: eventAt.toISOString(),
+      payload: { orderId },
+    });
   const runs = async (id: string) =>
     (await admin.pool.query('select 1 from automation_runs where automation_id=$1', [id])).rowCount;
 
@@ -221,6 +228,29 @@ describe('order triggers (Postgres)', () => {
       await runs(bigSpender),
       await runs(noSpend),
     ]).toEqual([1, 0, 0, 1]);
+  });
+
+  it('counts a COD order toward spend when the cash is collected, not when it is delivered', async () => {
+    const filter = [
+      { field: 'customer_spend', operator: 'at_least', amountPoisha: 100000 },
+    ] as const;
+    const onDelivered = await workflow('order_delivered', [...filter]);
+    const onPaid = await workflow('order_paid', [...filter]);
+    const orderId = await order(7);
+    await admin.pool.query("update orders set stage='delivered' where id=$1", [orderId]);
+    await entries.startMatchingOrder(storeId, {
+      id: randomUUID(),
+      type: 'order.stage_changed',
+      occurredAt: eventAt.toISOString(),
+      payload: { orderId, from: 'with_courier', to: 'delivered' },
+    });
+    expect([await runs(onDelivered), await runs(onPaid)]).toEqual([0, 0]);
+    await admin.pool.query(
+      "update orders set payment_status='cod_collected', cod_collected_poisha=cod_amount_poisha where id=$1",
+      [orderId],
+    );
+    await collected(orderId);
+    expect([await runs(onDelivered), await runs(onPaid)]).toEqual([0, 1]);
   });
 
   it('maps a move to With courier to the shipped trigger and ignores other stages', async () => {

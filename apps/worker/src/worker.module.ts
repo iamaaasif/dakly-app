@@ -26,6 +26,7 @@ import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-au
 import { StartAutomationOnComment } from '@dakly/core/automations/jobs/start-automation-on-comment.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
 import { StartAutomationOnMessageBurst } from '@dakly/core/automations/jobs/start-automation-on-message-burst.job';
+import { StartAutomationOnOrderCodCollected } from '@dakly/core/automations/jobs/start-automation-on-order-cod-collected.job';
 import { StartAutomationOnOrderCreated } from '@dakly/core/automations/jobs/start-automation-on-order-created.job';
 import { StartAutomationOnOrderStageChanged } from '@dakly/core/automations/jobs/start-automation-on-order-stage-changed.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
@@ -152,6 +153,7 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnMessageBurst,
     SweepAutomationBirthdaysJob,
     StartAutomationOnOrderCreated,
+    StartAutomationOnOrderCodCollected,
     StartAutomationOnOrderStageChanged,
     StartAutomationOnTagAdded,
     BuildCampaignAudienceJob,

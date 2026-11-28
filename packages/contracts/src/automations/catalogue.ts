@@ -169,7 +169,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     availableBefore: null,
   },
   order_paid: {
-    source: { plannedEvent: 'payment.succeeded' },
+    source: { event: 'order.cod_collected' },
     filters: { order_total: 'optional', customer_spend: 'optional', customer_orders: 'optional' },
     needs: 'orders',
     availableBefore: null,
@@ -258,6 +258,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
 // The order triggers that a worker subscriber starts workflows from.
 export const orderTriggerKeys: readonly TriggerKey[] = [
   'order_placed',
+  'order_paid',
   'order_shipped',
   'order_delivered',
   'order_cancelled',
