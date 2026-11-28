@@ -278,7 +278,7 @@ On the admin hostname, staff session, passkey or TOTP required. Each route names
 | `POST /admin/stores/:storeId/suspend`, `POST /admin/stores/:storeId/restore`       | ops                                     |
 | `GET /admin/sms-sender-ids` (`open_sms_sender_ids`)                                | super_admin, ops                        |
 | `POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve`, `.../reject`  | super_admin, ops                        |
-| `GET /admin/plans`, `PUT /admin/plans/:planCode`                                   | finance                                 |
+| `GET /admin/plans`, `POST /admin/plans`, `PUT /admin/plans/:planCode`, `POST /admin/plans/:planCode/retire` | finance                                 |
 | `GET /admin/coupons`, `POST /admin/coupons`, `PATCH /admin/coupons/:couponId`      | finance                                 |
 | `GET /admin/settings`, `PUT /admin/settings/:key`                                  | super_admin                             |
 | `GET /admin/staff`, `POST /admin/staff`, `PATCH /admin/staff/:staffUserId`         | super_admin                             |

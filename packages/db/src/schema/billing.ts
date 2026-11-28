@@ -54,6 +54,8 @@ export const plans = pgTable(
     limits: jsonb('limits').notNull(),
     isPublic: boolean('is_public').notNull().default(true),
     position: smallint('position').notNull().default(0),
+    // A retired plan is never offered again; shops already on it keep it until they change plan.
+    retiredAt: timestamptz('retired_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

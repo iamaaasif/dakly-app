@@ -1,6 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { AdminPlan, UpdatePlanInput } from '@dakly/contracts/admin-plans';
+import type {
+  AdminPlan,
+  CreatePlanInput,
+  RetirePlanInput,
+  UpdatePlanInput,
+} from '@dakly/contracts/admin-plans';
 import type { PublicPlan, UsageUnit, billingCycles } from '@dakly/contracts/billing';
 
 import { Clock } from '../platform/clock';
@@ -42,7 +47,27 @@ export class BillingService {
     change: UpdatePlanInput;
     ip: string;
   }): Promise<AdminPlan> {
-    return toAdminPlan(await this.repository.updatePlan(input));
+    return toAdminPlan(await this.repository.updatePlan({ ...input, now: this.clock.now() }));
+  }
+
+  async createPlan(input: {
+    id: string;
+    auditId: string;
+    staffUserId: string;
+    change: CreatePlanInput;
+    ip: string;
+  }): Promise<AdminPlan> {
+    return toAdminPlan(await this.repository.createPlan(input));
+  }
+
+  async retirePlan(input: {
+    auditId: string;
+    staffUserId: string;
+    code: string;
+    change: RetirePlanInput;
+    ip: string;
+  }): Promise<AdminPlan> {
+    return toAdminPlan(await this.repository.retirePlan({ ...input, now: this.clock.now() }));
   }
 
   async seatLimit(storeId: string): Promise<number> {
@@ -83,7 +108,7 @@ export class BillingService {
 
   async startPlan(storeId: string, code: string, cycle: (typeof billingCycles)[number]) {
     const plan = await this.repository.findPlan(storeId, code);
-    if (!plan || plan.kind !== 'plan' || !plan.isPublic) throw billingError('PLAN_NOT_FOUND');
+    if (!plan || !isOffered(plan)) throw billingError('PLAN_NOT_FOUND');
     const price = cycle === 'monthly' ? plan.monthlyPricePoisha : plan.yearlyPricePoisha;
     if (price > 0 && plan.trialDays === 0) throw billingError('PLAN_NEEDS_PAYMENT');
     const now = this.clock.now();
@@ -100,6 +125,10 @@ export class BillingService {
   }
 }
 
+function isOffered(plan: { kind: string; isPublic: boolean; retiredAt: Date | null }) {
+  return plan.kind === 'plan' && plan.isPublic && plan.retiredAt === null;
+}
+
 function toAdminPlan(plan: Awaited<ReturnType<BillingRepository['allPlans']>>[number]): AdminPlan {
   return {
     code: plan.code,
@@ -110,6 +139,7 @@ function toAdminPlan(plan: Awaited<ReturnType<BillingRepository['allPlans']>>[nu
     yearlyPricePoisha: plan.yearlyPricePoisha,
     limits: plan.limits,
     isPublic: plan.isPublic,
+    retiredAt: plan.retiredAt?.toISOString() ?? null,
     updatedAt: plan.updatedAt.toISOString(),
   };
 }

@@ -1,8 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
-import type { UpdatePlanInput } from '@dakly/contracts/admin-plans';
+import type {
+  CreatePlanInput,
+  RetirePlanInput,
+  UpdatePlanInput,
+} from '@dakly/contracts/admin-plans';
 import { planLimitsSchema } from '@dakly/contracts/billing';
 import type { Database } from '@dakly/db/client';
 import { staffAuditLog } from '@dakly/db/schema/admin';
@@ -19,6 +23,7 @@ const planColumns = {
   name: plans.name,
   kind: plans.kind,
   isPublic: plans.isPublic,
+  retiredAt: plans.retiredAt,
   monthlyPricePoisha: plans.monthlyPricePoisha,
   yearlyPricePoisha: plans.yearlyPricePoisha,
   trialDays: plans.trialDays,
@@ -73,7 +78,7 @@ export class BillingRepository {
     const rows = await this.database
       .select(planColumns)
       .from(plans)
-      .where(and(eq(plans.kind, 'plan'), eq(plans.isPublic, true)))
+      .where(and(eq(plans.kind, 'plan'), eq(plans.isPublic, true), isNull(plans.retiredAt)))
       .orderBy(asc(plans.position), asc(plans.code));
     return rows.map((row) => ({ ...row, limits: planLimitsSchema.parse(row.limits) }));
   }
@@ -94,18 +99,17 @@ export class BillingRepository {
     code: string;
     change: UpdatePlanInput;
     ip: string;
+    now: Date;
   }): Promise<Plan & { updatedAt: Date }> {
     const { change } = input;
     return this.staff.forStaff(input.staffUserId, async (tx) => {
       const [current] = await tx
-        .select({ id: plans.id, limits: plans.limits })
+        .select({ id: plans.id, limits: plans.limits, retiredAt: plans.retiredAt })
         .from(plans)
         .where(eq(plans.code, input.code))
         .for('update');
       if (!current) throw billingError('PLAN_NOT_FOUND');
-      const currentKeys = Object.keys(planLimitsSchema.parse(current.limits)).sort();
-      if (Object.keys(change.limits).sort().join() !== currentKeys.join())
-        throw billingError('PLAN_LIMIT_UNKNOWN');
+      if (current.retiredAt) throw billingError('PLAN_RETIRED');
       await tx.insert(staffAuditLog).values({
         id: input.auditId,
         staffUserId: input.staffUserId,
@@ -120,6 +124,7 @@ export class BillingRepository {
           monthlyPricePoisha: change.monthlyPricePoisha,
           yearlyPricePoisha: change.yearlyPricePoisha,
           limits: change.limits,
+          previousLimits: planLimitsSchema.parse(current.limits),
           isPublic: change.isPublic,
         },
         ip: input.ip,
@@ -133,8 +138,95 @@ export class BillingRepository {
           yearlyPricePoisha: change.yearlyPricePoisha,
           limits: change.limits,
           isPublic: change.isPublic,
-          updatedAt: new Date(),
+          updatedAt: input.now,
         })
+        .where(eq(plans.id, current.id))
+        .returning({ ...planColumns, updatedAt: plans.updatedAt });
+      if (!row) throw billingError('PLAN_NOT_FOUND');
+      return { ...row, limits: planLimitsSchema.parse(row.limits) };
+    });
+  }
+
+  createPlan(input: {
+    id: string;
+    auditId: string;
+    staffUserId: string;
+    change: CreatePlanInput;
+    ip: string;
+  }): Promise<Plan & { updatedAt: Date }> {
+    const { change } = input;
+    return this.staff.forStaff(input.staffUserId, async (tx) => {
+      const [last] = await tx
+        .select({ position: sql<number>`coalesce(max(${plans.position}), 0)` })
+        .from(plans);
+      await tx.insert(staffAuditLog).values({
+        id: input.auditId,
+        staffUserId: input.staffUserId,
+        action: 'plan.created',
+        targetType: 'plan',
+        targetId: input.id,
+        reason: change.reason,
+        actionDetails: {
+          code: change.code,
+          name: change.name,
+          trialDays: change.trialDays,
+          monthlyPricePoisha: change.monthlyPricePoisha,
+          yearlyPricePoisha: change.yearlyPricePoisha,
+          limits: change.limits,
+          isPublic: change.isPublic,
+        },
+        ip: input.ip,
+      });
+      const [row] = await tx
+        .insert(plans)
+        .values({
+          id: input.id,
+          code: change.code,
+          kind: 'plan',
+          name: change.name,
+          trialDays: change.trialDays,
+          monthlyPricePoisha: change.monthlyPricePoisha,
+          yearlyPricePoisha: change.yearlyPricePoisha,
+          limits: change.limits,
+          isPublic: change.isPublic,
+          position: (last?.position ?? 0) + 1,
+        })
+        .onConflictDoNothing({ target: plans.code })
+        .returning({ ...planColumns, updatedAt: plans.updatedAt });
+      if (!row) throw billingError('PLAN_CODE_TAKEN');
+      return { ...row, limits: planLimitsSchema.parse(row.limits) };
+    });
+  }
+
+  retirePlan(input: {
+    auditId: string;
+    staffUserId: string;
+    code: string;
+    change: RetirePlanInput;
+    ip: string;
+    now: Date;
+  }): Promise<Plan & { updatedAt: Date }> {
+    return this.staff.forStaff(input.staffUserId, async (tx) => {
+      const [current] = await tx
+        .select({ id: plans.id, retiredAt: plans.retiredAt })
+        .from(plans)
+        .where(eq(plans.code, input.code))
+        .for('update');
+      if (!current) throw billingError('PLAN_NOT_FOUND');
+      if (current.retiredAt) throw billingError('PLAN_RETIRED');
+      await tx.insert(staffAuditLog).values({
+        id: input.auditId,
+        staffUserId: input.staffUserId,
+        action: 'plan.retired',
+        targetType: 'plan',
+        targetId: current.id,
+        reason: input.change.reason,
+        actionDetails: { code: input.code },
+        ip: input.ip,
+      });
+      const [row] = await tx
+        .update(plans)
+        .set({ retiredAt: input.now, isPublic: false, updatedAt: input.now })
         .where(eq(plans.id, current.id))
         .returning({ ...planColumns, updatedAt: plans.updatedAt });
       if (!row) throw billingError('PLAN_NOT_FOUND');
