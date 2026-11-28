@@ -1,6 +1,6 @@
 'use client';
 import type { ReactNode } from 'react';
-import { Controller, useFormContext } from 'react-hook-form';
+import { Controller, useFormContext, useWatch } from 'react-hook-form';
 
 import type { CreateOrderValues } from '@dakly/contracts/orders';
 import { ApiError } from '@dakly/ui/api-client';
@@ -52,8 +52,10 @@ type OrderPaymentCardProps = {
 };
 
 export function OrderPaymentCard({ quotePoisha, quoteError, onRetryQuote }: OrderPaymentCardProps) {
+  const { control } = useFormContext<CreateOrderValues>();
+  const typed = useWatch({ control, name: 'deliveryChargePoisha' });
   const missingZones =
-    quoteError instanceof ApiError && quoteError.code === 'DELIVERY_DEFAULT_REQUIRED';
+    !typed && quoteError instanceof ApiError && quoteError.code === 'DELIVERY_DEFAULT_REQUIRED';
   return (
     <OrderCard title="Payment">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -70,7 +72,7 @@ export function OrderPaymentCard({ quotePoisha, quoteError, onRetryQuote }: Orde
       </div>
       <ConfirmNow />
       {missingZones && <SetupDeliveryZones retryQuote={onRetryQuote} />}
-      {quoteError && !missingZones && (
+      {quoteError && !missingZones && !typed && (
         <p role="alert" className="text-sm text-danger">
           {quoteError.message}
         </p>
