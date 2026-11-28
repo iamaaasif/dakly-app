@@ -200,6 +200,29 @@ describe('order triggers (Postgres)', () => {
     expect(await runs(big)).toBe(1);
   });
 
+  it('checks what the buyer has ordered and spent in all', async () => {
+    const regular = await workflow('order_placed', [
+      { field: 'customer_orders', operator: 'at_least', count: 2 },
+    ]);
+    const newcomer = await workflow('order_placed', [
+      { field: 'customer_orders', operator: 'at_most', count: 1 },
+    ]);
+    // Nothing is delivered and paid yet, so no spend counts.
+    const bigSpender = await workflow('order_placed', [
+      { field: 'customer_spend', operator: 'at_least', amountPoisha: 1 },
+    ]);
+    const noSpend = await workflow('order_placed', [
+      { field: 'customer_spend', operator: 'at_most', amountPoisha: 0 },
+    ]);
+    await placed(await order(6));
+    expect([
+      await runs(regular),
+      await runs(newcomer),
+      await runs(bigSpender),
+      await runs(noSpend),
+    ]).toEqual([1, 0, 0, 1]);
+  });
+
   it('maps a move to With courier to the shipped trigger and ignores other stages', async () => {
     const shipped = await workflow('order_shipped');
     const orderId = await order(5);

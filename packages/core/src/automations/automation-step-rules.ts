@@ -329,3 +329,16 @@ export function sendLateness(
 export function shouldPrepareSender(step: AutomationStep): boolean {
   return step.kind === 'send' && step.channels.includes('sms') && !step.reviewBeforeSending;
 }
+
+export type TotalCondition = Extract<Condition, { kind: 'total_spent' | 'order_count' }>;
+
+export const isTotalCondition = (condition: Condition): condition is TotalCondition =>
+  condition.kind === 'total_spent' || condition.kind === 'order_count';
+
+export function atLeastOrAtMost(
+  { operator }: { operator: 'at_least' | 'at_most' },
+  value: number,
+  limit: number,
+) {
+  return operator === 'at_least' ? value >= limit : value <= limit;
+}

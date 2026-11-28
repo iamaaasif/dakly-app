@@ -13,6 +13,10 @@ export class OrderReportingService {
     return this.orders.contactOrderTotals(storeId, contactId, timeZone);
   }
 
+  buyerTotals(storeId: string, contactId: string) {
+    return this.orders.buyerTotals(storeId, contactId);
+  }
+
   buyerContactId(storeId: string, orderId: string) {
     return this.orders.buyerContactId(storeId, orderId);
   }

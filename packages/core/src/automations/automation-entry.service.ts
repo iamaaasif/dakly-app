@@ -30,6 +30,7 @@ import { AppError } from '../platform/errors/app-error';
 import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
+import { holdsCustomerTotals } from './automation-customer-totals';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { isChatChannel, MESSENGER_WINDOW_MS, type SendStep } from './automation-step-rules';
 import { commentIntents, hasReadableWords } from './comment-intent';
@@ -304,11 +305,12 @@ export class AutomationEntryService {
     trigger: AutomationGraph['trigger'],
     event: TriggerEvent,
   ) {
+    const { contactId } = event.payload;
     if (!matchesTrigger(trigger, event)) return false;
+    if (!(await holdsCustomerTotals(this.orders, storeId, contactId, trigger.filters)))
+      return false;
     const segment = trigger.filters.find((filter) => filter.field === 'segment');
-    return (
-      !segment || this.segments.hasContact(storeId, segment.segmentId, event.payload.contactId)
-    );
+    return !segment || this.segments.hasContact(storeId, segment.segmentId, contactId);
   }
 }
 
@@ -399,6 +401,10 @@ function matchesOrderFilter(filter: TriggerFilter, { payload }: OrderTriggerEven
       return payload.bdAreaId !== null && filter.bdAreaIds.includes(payload.bdAreaId);
     case 'first_order':
       return payload.isFirstOrder;
+    // Checked against the buyer's orders in holdsCustomerTotals.
+    case 'customer_spend':
+    case 'customer_orders':
+      return true;
     default:
       return false;
   }

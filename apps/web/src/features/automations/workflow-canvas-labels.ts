@@ -88,6 +88,10 @@ export function conditionLabel(condition: Condition, stepNumber: (key: string) =
       return `Can get ${channelLabels[condition.channel]}`;
     case 'placed_order':
       return 'Has placed an order';
+    case 'total_spent':
+      return amountFilter('Has spent', condition);
+    case 'order_count':
+      return countFilter('Has placed', condition, 'orders');
   }
 }
 
@@ -106,6 +110,11 @@ function exitLabel(exit: ExitCondition) {
 function amountFilter(name: string, filter: { operator: string; amountPoisha: number }) {
   const operator = filter.operator === 'at_least' ? 'at least' : 'at most';
   return `${name} ${operator} ${formatMoney(filter.amountPoisha)}`;
+}
+
+function countFilter(name: string, filter: { operator: string; count: number }, noun = '') {
+  const operator = filter.operator === 'at_least' ? 'at least' : 'at most';
+  return `${name} ${operator} ${filter.count}${noun && ` ${noun}`}`;
 }
 
 type FilterLabels = {
@@ -131,6 +140,8 @@ const filterLabels: FilterLabels = {
   payment_status: (filter) => `Payment: ${filter.statuses.map(words).join(', ')}`,
   delivery_district: (filter) => pluralize(filter.bdAreaIds.length, 'delivery area'),
   first_order: () => 'First order only',
+  customer_spend: (filter) => amountFilter('Customer spent', filter),
+  customer_orders: (filter) => countFilter('Customer orders', filter),
   days: (filter) => pluralize(filter.days, 'day'),
 };
 

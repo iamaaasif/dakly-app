@@ -51,6 +51,30 @@ describe('WorkflowTriggerPanel', () => {
     });
   });
 
+  it('sets the customer total spent in poisha and drops it when the box is cleared', () => {
+    const seen = vi.fn();
+    render(<Host start={automationTemplates.thank_you_first_order.graph} seen={seen} />);
+    const box = screen.getByLabelText('Customer total spent');
+    fireEvent.change(box, { target: { value: '10000' } });
+    expect(seen.mock.calls.at(-1)![0].trigger.filters).toContainEqual({
+      field: 'customer_spend',
+      operator: 'at_least',
+      amountPoisha: 1_000_000,
+    });
+    fireEvent.change(screen.getByLabelText('Customer orders'), { target: { value: '3' } });
+    expect(seen.mock.calls.at(-1)![0].trigger.filters).toContainEqual({
+      field: 'customer_orders',
+      operator: 'at_least',
+      count: 3,
+    });
+    fireEvent.change(box, { target: { value: '' } });
+    expect(
+      seen.mock.calls
+        .at(-1)![0]
+        .trigger.filters.some((f: { field: string }) => f.field === 'customer_spend'),
+    ).toBe(false);
+  });
+
   it('drops a filter when its last choice is untoggled', () => {
     const seen = vi.fn();
     render(<Host start={automationTemplates.price_question_in_chat.graph} seen={seen} />);

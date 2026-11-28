@@ -97,6 +97,11 @@ describe('SegmentsService (Postgres)', () => {
     );
     for (const [key, person] of Object.entries(people)) await seed(storeA, key, person);
     await seed(storeB, 'foreign', { name: 'অন্য দোকানের রিনা', district: 'ঢাকা', tags: ['vip'] });
+    await admin.pool.query(
+      `insert into contact_stats(contact_id,store_id,orders_count,net_spend_poisha)
+       values($1,$2,3,1200000),($3,$2,1,50000)`,
+      [ids.rina, storeA, ids.karim],
+    );
     await consent(ids.rina!, 'sms', 'granted', '2026-11-01T00:00:00Z');
     await consent(ids.karim!, 'sms', 'granted', '2026-11-01T00:00:00Z');
     await consent(ids.karim!, 'sms', 'withdrawn', '2026-11-02T00:00:00Z');
@@ -142,6 +147,22 @@ describe('SegmentsService (Postgres)', () => {
     ],
     ['kind is', { field: 'kind', operator: 'is_any_of', values: ['lead'] }, ['nusrat']],
     ['kind is not', { field: 'kind', operator: 'is_none_of', values: ['lead'] }, ['karim', 'rina']],
+    [
+      'total spent at least',
+      { field: 'total_spent', operator: 'at_least', amountPoisha: 1000000 },
+      ['rina'],
+    ],
+    [
+      'total spent at most, counting a customer with no orders as 0',
+      { field: 'total_spent', operator: 'at_most', amountPoisha: 50000 },
+      ['karim', 'nusrat'],
+    ],
+    [
+      'order count at least',
+      { field: 'order_count', operator: 'at_least', count: 1 },
+      ['karim', 'rina'],
+    ],
+    ['never ordered', { field: 'order_count', operator: 'at_most', count: 0 }, ['nusrat']],
     [
       'consent granted, latest answer wins',
       { field: 'consent', channel: 'sms', granted: true },

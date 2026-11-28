@@ -1,6 +1,6 @@
 'use client';
 import { Trash2 } from 'lucide-react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useController, useFormContext, useWatch } from 'react-hook-form';
 
 import { consentChannels } from '@dakly/contracts/contacts';
 import { formatCount } from '@dakly/contracts/money';
@@ -11,6 +11,7 @@ import { Input } from '@dakly/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import {
+  amountOperatorLabels,
   channelLabels,
   fieldLabels,
   kindLabels,
@@ -20,6 +21,7 @@ import {
   sourceLabels,
 } from '../segment-labels';
 import { OptionSelect } from './option-select';
+import { DigitsInput } from '@/components/digits-input';
 
 type ConditionPath = `rules.conditions.${number}.conditions.${number}`;
 
@@ -108,6 +110,13 @@ export function ConditionFields({ path, label, joiner, onRemove }: ConditionFiel
 
 function ConditionValueFields({ path, field }: { path: ConditionPath; field: SegmentField }) {
   const { register } = useFormContext<CreateSegmentInput>();
+  if (field === 'total_spent' || field === 'order_count')
+    return (
+      <>
+        <OptionSelect name={`${path}.operator`} label="Operator" options={amountOperatorLabels} />
+        <TotalValue path={path} field={field} />
+      </>
+    );
   if (field === 'consent')
     return (
       <>
@@ -132,5 +141,37 @@ function ConditionValueFields({ path, field }: { path: ConditionPath; field: Seg
         </FormField>
       )}
     </>
+  );
+}
+
+const TAKA = 100;
+
+// Spend is typed in whole taka and kept in poisha; the order count is kept as typed.
+function TotalValue({
+  path,
+  field,
+}: {
+  path: ConditionPath;
+  field: 'total_spent' | 'order_count';
+}) {
+  const isSpend = field === 'total_spent';
+  const scale = isSpend ? TAKA : 1;
+  const name = isSpend ? (`${path}.amountPoisha` as const) : (`${path}.count` as const);
+  const { field: control } = useController<CreateSegmentInput>({ name });
+  // A cleared box is NaN, not undefined, because the form would put the default back.
+  const stored =
+    typeof control.value === 'number' && !Number.isNaN(control.value) ? control.value : null;
+  return (
+    <FormField name={name} label={isSpend ? 'Amount in taka' : 'Number of orders'} hideLabel>
+      {(controlProps) => (
+        <DigitsInput
+          {...controlProps}
+          value={stored === null ? null : Math.floor(stored / scale)}
+          onChange={(next) => control.onChange(next === null ? Number.NaN : next * scale)}
+          onBlur={control.onBlur}
+          placeholder={isSpend ? 'Taka, e.g. 10000' : 'Orders, e.g. 3'}
+        />
+      )}
+    </FormField>
   );
 }
