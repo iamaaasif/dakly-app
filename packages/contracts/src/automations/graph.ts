@@ -49,6 +49,12 @@ const amountFilter = {
   amountPoisha: amountPoishaSchema,
 };
 
+// Zero is allowed: "at most 0 orders" finds people who have never ordered.
+const orderCountFilter = {
+  operator: z.enum(['at_least', 'at_most']),
+  count: z.number().int().min(0).max(100_000),
+};
+
 const triggerFilterSchema = z.discriminatedUnion('field', [
   z.strictObject({
     field: z.literal('channel'),
@@ -86,6 +92,8 @@ const triggerFilterSchema = z.discriminatedUnion('field', [
     bdAreaIds: z.array(z.number().int().positive()).min(1).max(64),
   }),
   z.strictObject({ field: z.literal('first_order') }),
+  z.strictObject({ field: z.literal('customer_spend'), ...amountFilter }),
+  z.strictObject({ field: z.literal('customer_orders'), ...orderCountFilter }),
   z.strictObject({ field: z.literal('days'), days: z.number().int().min(1).max(365) }),
 ]);
 
@@ -102,6 +110,9 @@ const conditionSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('in_segment'), segmentId: z.uuid() }),
   z.strictObject({ kind: z.literal('reachable'), channel: z.enum(automationChannels) }),
   z.strictObject({ kind: z.literal('placed_order') }),
+  // What the customer has spent and ordered in all, read when the step runs.
+  z.strictObject({ kind: z.literal('total_spent'), ...amountFilter }),
+  z.strictObject({ kind: z.literal('order_count'), ...orderCountFilter }),
 ]);
 
 // Leave the workflow when this happens after entry. A goal is an exit that counts as a conversion.

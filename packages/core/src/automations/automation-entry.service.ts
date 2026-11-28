@@ -13,6 +13,7 @@ import {
 } from '@dakly/contracts/events/contacts';
 import { messageBurstReceivedEventSchema } from '@dakly/contracts/events/messaging';
 import {
+  orderCodCollectedEventSchema,
   orderCreatedEventSchema,
   orderStageChangedEventSchema,
 } from '@dakly/contracts/events/orders';
@@ -30,6 +31,7 @@ import { AppError } from '../platform/errors/app-error';
 import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
+import { holdsCustomerTotals } from './automation-customer-totals';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { isChatChannel, MESSENGER_WINDOW_MS, type SendStep } from './automation-step-rules';
 import { commentIntents, hasReadableWords } from './comment-intent';
@@ -44,9 +46,13 @@ export const automationMessageBurstEvent = messageBurstReceivedEventSchema.exten
 export const automationCommentEvent = commentReceivedEventSchema.extend({ id: z.uuid() });
 export const automationOrderCreatedEvent = orderCreatedEventSchema.extend({ id: z.uuid() });
 export const automationOrderStageEvent = orderStageChangedEventSchema.extend({ id: z.uuid() });
+export const automationOrderCodCollectedEvent = orderCodCollectedEventSchema.extend({
+  id: z.uuid(),
+});
 type OrderEvent =
   | Omit<z.infer<typeof automationOrderCreatedEvent>, 'storeId'>
-  | Omit<z.infer<typeof automationOrderStageEvent>, 'storeId'>;
+  | Omit<z.infer<typeof automationOrderStageEvent>, 'storeId'>
+  | Omit<z.infer<typeof automationOrderCodCollectedEvent>, 'storeId'>;
 type OrderFacts = NonNullable<Awaited<ReturnType<OrderReportingService['triggerFacts']>>>;
 // An order event carries the buyer and the order facts that the trigger filters read.
 type WithFacts<E> = E extends { payload: infer P }
@@ -171,12 +177,11 @@ export class AutomationEntryService {
     const facts = await this.orders.triggerFacts(storeId, event.payload.orderId);
     if (!facts) return;
     // Spreading the union loses the link between type and payload, so each branch is typed alone.
-    await this.startMatching(
-      storeId,
-      event.type === 'order.created'
-        ? { ...event, payload: { ...event.payload, ...facts } }
-        : { ...event, payload: { ...event.payload, ...facts } },
-    );
+    if (event.type === 'order.created')
+      return this.startMatching(storeId, { ...event, payload: { ...event.payload, ...facts } });
+    if (event.type === 'order.cod_collected')
+      return this.startMatching(storeId, { ...event, payload: { ...event.payload, ...facts } });
+    await this.startMatching(storeId, { ...event, payload: { ...event.payload, ...facts } });
   }
 
   async start(storeId: string, automationId: string, event: TriggerEvent): Promise<boolean> {
@@ -304,16 +309,19 @@ export class AutomationEntryService {
     trigger: AutomationGraph['trigger'],
     event: TriggerEvent,
   ) {
+    const { contactId } = event.payload;
     if (!matchesTrigger(trigger, event)) return false;
+    if (!(await holdsCustomerTotals(this.orders, storeId, contactId, trigger.filters)))
+      return false;
     const segment = trigger.filters.find((filter) => filter.field === 'segment');
-    return (
-      !segment || this.segments.hasContact(storeId, segment.segmentId, event.payload.contactId)
-    );
+    return !segment || this.segments.hasContact(storeId, segment.segmentId, contactId);
   }
 }
 
 function orderTriggerFor(event: OrderEvent): TriggerKey | undefined {
-  return event.type === 'order.created' ? 'order_placed' : stageTriggers[event.payload.to];
+  if (event.type === 'order.created') return 'order_placed';
+  // Cash collected is the moment a COD order counts as paid.
+  return event.type === 'order.cod_collected' ? 'order_paid' : stageTriggers[event.payload.to];
 }
 
 function triggerFor(event: TriggerEvent) {
@@ -399,6 +407,10 @@ function matchesOrderFilter(filter: TriggerFilter, { payload }: OrderTriggerEven
       return payload.bdAreaId !== null && filter.bdAreaIds.includes(payload.bdAreaId);
     case 'first_order':
       return payload.isFirstOrder;
+    // Checked against the buyer's orders in holdsCustomerTotals.
+    case 'customer_spend':
+    case 'customer_orders':
+      return true;
     default:
       return false;
   }
@@ -418,7 +430,11 @@ function orderIdOf(event: TriggerEvent) {
 }
 
 function isOrderEvent(event: TriggerEvent): event is OrderTriggerEvent {
-  return event.type === 'order.created' || event.type === 'order.stage_changed';
+  return (
+    event.type === 'order.created' ||
+    event.type === 'order.stage_changed' ||
+    event.type === 'order.cod_collected'
+  );
 }
 
 function canReEnter(rule: AutomationGraph['reEntry'], enteredAt: Date, now: Date) {

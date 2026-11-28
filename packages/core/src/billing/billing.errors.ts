@@ -2,7 +2,8 @@ import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const BILLING_ERRORS = {
   PLAN_NOT_FOUND: { status: 404, message: 'Plan not found' },
-  PLAN_LIMIT_UNKNOWN: { status: 422, message: 'This plan has no allowance with that name' },
+  PLAN_CODE_TAKEN: { status: 409, message: 'A plan with this code already exists' },
+  PLAN_RETIRED: { status: 409, message: 'This plan is retired and can no longer be changed' },
   PLAN_NEEDS_PAYMENT: { status: 409, message: 'This plan needs payment before it can start' },
   SUBSCRIPTION_NOT_FOUND: { status: 404, message: 'This store has no plan' },
   STORE_READ_ONLY: {

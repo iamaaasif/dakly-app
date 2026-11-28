@@ -15,7 +15,7 @@ import {
   type SQL,
   sql,
 } from 'drizzle-orm';
-import { type PgColumn, QueryBuilder } from 'drizzle-orm/pg-core';
+import { QueryBuilder } from 'drizzle-orm/pg-core';
 
 import type {
   ConsentChannel,
@@ -35,6 +35,7 @@ import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { isTotalsCondition, listWhere, totalsWhere } from './contact-filters.repository';
 
 export type Contact = {
   id: string;
@@ -399,6 +400,7 @@ function groupWhere(storeId: string, group: SegmentRules | SegmentInnerGroup): S
 }
 
 function conditionWhere(storeId: string, condition: SegmentCondition): SQL | undefined {
+  if (isTotalsCondition(condition)) return totalsWhere(condition);
   switch (condition.field) {
     case 'tag':
       return condition.operator === 'is_any_of'
@@ -417,16 +419,6 @@ function conditionWhere(storeId: string, condition: SegmentCondition): SQL | und
         ? exists(granted(storeId, condition.channel))
         : not(exists(granted(storeId, condition.channel)));
   }
-}
-
-// "Is not Dhaka" keeps contacts with no district.
-function listWhere(
-  column: PgColumn,
-  condition: { operator: 'is_any_of' | 'is_none_of'; values: string[] },
-): SQL | undefined {
-  return condition.operator === 'is_any_of'
-    ? inArray(column, condition.values)
-    : or(isNull(column), not(inArray(column, condition.values)));
 }
 
 const query = new QueryBuilder();

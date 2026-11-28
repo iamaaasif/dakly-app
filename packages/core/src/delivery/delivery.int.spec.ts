@@ -66,6 +66,14 @@ describe('DeliveryService with Postgres', () => {
     });
   });
 
+  it('finds a Dhaka city area by name and prices it as Inside Dhaka', async () => {
+    const areaId = await service.findAreaIdByName(f.a, 'Dhanmondi');
+    expect(await service.calculateDeliveryCharge(f.a, areaId)).toMatchObject({
+      chargePoisha: 6000,
+      district: 'Dhaka',
+    });
+  });
+
   it('quotes a mapped district, its parent zone, a more specific area and the default', async () => {
     expect(await service.calculateDeliveryCharge(f.a, 301)).toMatchObject({ chargePoisha: 6000 });
     expect(await service.calculateDeliveryCharge(f.a, 303)).toMatchObject({ chargePoisha: 10000 });
@@ -275,6 +283,29 @@ describe('DeliveryService with Postgres', () => {
     } finally {
       await f.connection.pool.query('delete from orders where id=$1', [orderId]);
       await service.removeZone(f.a, zone.id, actor);
+    }
+  });
+
+  it('takes a typed charge for an order when the store has no zones, and asks for one otherwise', async () => {
+    const storeId = randomUUID();
+    await f.connection.pool.query("insert into stores(id,name) values($1,'No zone fixture')", [
+      storeId,
+    ]);
+    try {
+      await expect(service.quoteOrderDelivery(storeId, 301, 9000)).resolves.toEqual({
+        district: 'Dhaka',
+        deliveryZoneId: null,
+        chargePoisha: 9000,
+      });
+      await expect(service.quoteOrderDelivery(storeId, 301)).rejects.toMatchObject({
+        code: 'DELIVERY_DEFAULT_REQUIRED',
+      });
+      await expect(service.quoteOrderDelivery(f.a, 301, 0)).resolves.toMatchObject({
+        chargePoisha: 0,
+        deliveryZoneId: defaults[0]!.id,
+      });
+    } finally {
+      await f.connection.pool.query('delete from stores where id=$1', [storeId]);
     }
   });
 

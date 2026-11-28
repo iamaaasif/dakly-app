@@ -33,6 +33,8 @@ export const triggerFilterFields = [
   'payment_status',
   'delivery_district',
   'first_order',
+  'customer_spend',
+  'customer_orders',
   'days',
 ] as const;
 export type TriggerFilterField = (typeof triggerFilterFields)[number];
@@ -160,38 +162,50 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
       payment_status: 'optional',
       delivery_district: 'optional',
       first_order: 'optional',
+      customer_spend: 'optional',
+      customer_orders: 'optional',
     },
     needs: 'orders',
     availableBefore: null,
   },
   order_paid: {
-    source: { plannedEvent: 'payment.succeeded' },
-    filters: { order_total: 'optional' },
+    source: { event: 'order.cod_collected' },
+    filters: { order_total: 'optional', customer_spend: 'optional', customer_orders: 'optional' },
     needs: 'orders',
     availableBefore: null,
   },
   // D21: staff move the order to With courier; there is no courier status feed.
   order_shipped: {
     source: { event: 'order.stage_changed' },
-    filters: { order_total: 'optional', delivery_district: 'optional' },
+    filters: {
+      order_total: 'optional',
+      delivery_district: 'optional',
+      customer_spend: 'optional',
+      customer_orders: 'optional',
+    },
     needs: 'orders',
     availableBefore: null,
   },
   order_delivered: {
     source: { event: 'order.stage_changed' },
-    filters: { order_total: 'optional', product: 'optional' },
+    filters: {
+      order_total: 'optional',
+      product: 'optional',
+      customer_spend: 'optional',
+      customer_orders: 'optional',
+    },
     needs: 'orders',
     availableBefore: null,
   },
   order_cancelled: {
     source: { event: 'order.stage_changed' },
-    filters: { order_total: 'optional' },
+    filters: { order_total: 'optional', customer_spend: 'optional', customer_orders: 'optional' },
     needs: 'orders',
     availableBefore: null,
   },
   order_returned: {
     source: { event: 'order.stage_changed' },
-    filters: { order_total: 'optional' },
+    filters: { order_total: 'optional', customer_spend: 'optional', customer_orders: 'optional' },
     needs: 'orders',
     availableBefore: null,
   },
@@ -244,6 +258,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
 // The order triggers that a worker subscriber starts workflows from.
 export const orderTriggerKeys: readonly TriggerKey[] = [
   'order_placed',
+  'order_paid',
   'order_shipped',
   'order_delivered',
   'order_cancelled',

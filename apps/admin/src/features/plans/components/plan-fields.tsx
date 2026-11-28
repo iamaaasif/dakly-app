@@ -1,14 +1,17 @@
 'use client';
+import { useState } from 'react';
 import { Controller, type UseFormReturn } from 'react-hook-form';
 
+import { planLimitNameSchema } from '@dakly/contracts/admin-plans';
+import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { Input } from '@dakly/ui/input';
 
 import type { PlanFormValues } from './plan-form-schema';
 
-type Props = { form: UseFormReturn<PlanFormValues>; id: string; limitNames: string[] };
+type Props = { form: UseFormReturn<PlanFormValues>; id: string };
 
-export function PlanFields({ form, id, limitNames }: Props) {
+export function PlanFields({ form, id }: Props) {
   return (
     <>
       <label htmlFor={`${id}-name`}>Name</label>
@@ -33,7 +36,7 @@ export function PlanFields({ form, id, limitNames }: Props) {
         type="number"
         {...form.register('trialDays', { valueAsNumber: true })}
       />
-      <LimitFields form={form} id={id} limitNames={limitNames} />
+      <LimitFields form={form} id={id} />
       <Controller
         control={form.control}
         name="isPublic"
@@ -66,19 +69,54 @@ export function PlanFields({ form, id, limitNames }: Props) {
   );
 }
 
-function LimitFields({ form, id, limitNames }: Props) {
+function LimitFields({ form, id }: Props) {
+  const [newName, setNewName] = useState('');
+  const limits = form.watch('limits');
+  const nameError = newName !== '' && !planLimitNameSchema.safeParse(newName).success;
+  const addLimit = () => {
+    if (newName === '' || nameError || newName in limits) return;
+    form.setValue('limits', { ...limits, [newName]: 0 });
+    setNewName('');
+  };
+  const removeLimit = (name: string) => {
+    form.setValue(
+      'limits',
+      Object.fromEntries(Object.entries(limits).filter(([key]) => key !== name)),
+    );
+  };
   return (
     <>
-      {limitNames.map((name) => (
+      {Object.keys(limits).map((name) => (
         <div key={name} className="space-y-1">
           <label htmlFor={`${id}-limit-${name}`}>Allowance: {name.replaceAll('_', ' ')}</label>
-          <Input
-            id={`${id}-limit-${name}`}
-            type="number"
-            {...form.register(`limits.${name}`, { valueAsNumber: true })}
-          />
+          <div className="flex gap-2">
+            <Input
+              id={`${id}-limit-${name}`}
+              type="number"
+              {...form.register(`limits.${name}`, { valueAsNumber: true })}
+            />
+            <Button type="button" onClick={() => removeLimit(name)}>
+              Remove {name.replaceAll('_', ' ')}
+            </Button>
+          </div>
         </div>
       ))}
+      <label htmlFor={`${id}-new-limit`}>New allowance name (lower case, underscores)</label>
+      <div className="flex gap-2">
+        <Input
+          id={`${id}-new-limit`}
+          value={newName}
+          onChange={(event) => setNewName(event.target.value)}
+        />
+        <Button type="button" onClick={addLimit}>
+          Add allowance
+        </Button>
+      </div>
+      {nameError ? (
+        <p role="alert" className="text-danger">
+          Use lower case letters, numbers and underscores, starting with a letter.
+        </p>
+      ) : null}
     </>
   );
 }

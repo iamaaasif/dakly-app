@@ -249,6 +249,35 @@ describe('automationGraphSchema', () => {
     );
   });
 
+  it('takes customer spend and order count filters on an order trigger only', () => {
+    const steps = { start: send, end: { kind: 'exit' } };
+    const filters = [
+      { field: 'customer_spend', operator: 'at_least', amountPoisha: 500000 },
+      { field: 'customer_orders', operator: 'at_most', count: 0 },
+    ];
+    expect(
+      automationGraphSchema.safeParse(
+        workflow(steps, { trigger: { key: 'order_delivered', filters } }),
+      ).success,
+    ).toBe(true);
+    expect(
+      messages(
+        automationGraphSchema.safeParse(
+          workflow(steps, { trigger: { key: 'consent_given', filters } }),
+        ),
+      ),
+    ).toContain('consent_given has no customer_spend filter');
+  });
+
+  it('takes spend and order count as conditions', () => {
+    const conditions = [
+      { kind: 'total_spent', operator: 'at_least', amountPoisha: 1000000 },
+      { kind: 'order_count', operator: 'at_least', count: 3 },
+    ];
+    const graph = workflow({ start: send, end: { kind: 'exit' } }, { workflowFilters: conditions });
+    expect(automationGraphSchema.safeParse(graph).success).toBe(true);
+  });
+
   it('rejects a send step that lists a channel twice', () => {
     const graph = workflow({ start: { ...send, channels: ['sms', 'sms'] }, end: { kind: 'exit' } });
     expect(automationGraphSchema.safeParse(graph).success).toBe(false);

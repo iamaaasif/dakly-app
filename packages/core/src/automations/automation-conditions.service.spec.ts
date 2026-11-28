@@ -105,6 +105,43 @@ describe('COD confirmation exits', () => {
   });
 });
 
+describe('customer total conditions', () => {
+  async function pick(
+    condition: Parameters<AutomationConditionsService['firstHoldingPath']>[0][number]['condition'],
+    totals: { ordersCount: number; netSpendPoisha: number },
+  ) {
+    const orders = { buyerTotals: async () => totals } as unknown as OrderReportingService;
+    const unused = {} as never;
+    const service = new AutomationConditionsService(unused, unused, unused, unused, orders, unused);
+    return service.firstHoldingPath([{ condition, next: 'yes' }], facts(null), at);
+  }
+
+  const vip = { ordersCount: 6, netSpendPoisha: 1_500_000 };
+
+  it('holds when the customer has spent at least the amount', async () => {
+    const atLeast = { kind: 'total_spent', operator: 'at_least', amountPoisha: 1_500_000 } as const;
+    expect(await pick(atLeast, vip)).toEqual({ outcome: 'path_1', next: 'yes' });
+    expect(await pick({ ...atLeast, amountPoisha: 1_500_001 }, vip)).toBeUndefined();
+  });
+
+  it('holds when the customer has spent at most the amount', async () => {
+    const atMost = { kind: 'total_spent', operator: 'at_most', amountPoisha: 1_499_999 } as const;
+    expect(await pick(atMost, vip)).toBeUndefined();
+    expect(await pick({ ...atMost, amountPoisha: 1_500_000 }, vip)).toEqual({
+      outcome: 'path_1',
+      next: 'yes',
+    });
+  });
+
+  it('compares the number of orders', async () => {
+    expect(await pick({ kind: 'order_count', operator: 'at_least', count: 6 }, vip)).toBeDefined();
+    expect(
+      await pick({ kind: 'order_count', operator: 'at_least', count: 7 }, vip),
+    ).toBeUndefined();
+    expect(await pick({ kind: 'order_count', operator: 'at_most', count: 0 }, vip)).toBeUndefined();
+  });
+});
+
 describe('staff reply exit', () => {
   const messageGraph: RunFacts['graph'] = {
     ...graph,

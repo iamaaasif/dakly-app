@@ -11,6 +11,7 @@ const plan: Plan = {
   name: 'Growth',
   kind: 'plan',
   isPublic: true,
+  retiredAt: null,
   monthlyPricePoisha: 349000,
   yearlyPricePoisha: 3490000,
   trialDays: 14,
@@ -53,7 +54,7 @@ describe('BillingService', () => {
       service({ trialDays: 0 }).startPlan('store-id', 'growth', 'monthly'),
     ).rejects.toMatchObject({ code: 'PLAN_NEEDS_PAYMENT', status: 409 });
   });
-  it.each([{ kind: 'add_on' as const }, { isPublic: false }])(
+  it.each([{ kind: 'add_on' as const }, { isPublic: false }, { retiredAt: now }])(
     'refuses a plan that cannot be picked publicly %j',
     async (change) => {
       await expect(

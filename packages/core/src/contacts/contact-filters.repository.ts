@@ -7,10 +7,12 @@ import {
   isNull,
   like,
   lte,
+  not,
   or,
   type SQL,
   sql,
 } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 
 import type {
   ContactKind,
@@ -18,6 +20,7 @@ import type {
   ContactListType,
   ContactSource,
 } from '@dakly/contracts/contacts';
+import type { SegmentCondition } from '@dakly/contracts/segments';
 import { contacts, contactStats } from '@dakly/db/schema/contacts';
 
 import { escapeLike } from '../platform/database/escape-like';
@@ -175,4 +178,29 @@ export function cursorCondition(
     (select ${sql.raw(key('cc', 'cs'))}, cc.id from contacts cc
       left join contact_stats cs on cs.store_id = cc.store_id and cs.contact_id = cc.id
       where cc.store_id = ${storeId} and cc.id = ${cursor})`;
+}
+
+type TotalsCondition = Extract<SegmentCondition, { field: 'total_spent' | 'order_count' }>;
+
+export const isTotalsCondition = (condition: SegmentCondition): condition is TotalsCondition =>
+  condition.field === 'total_spent' || condition.field === 'order_count';
+
+// A customer with no stats row has not ordered, so reads as 0: "at most 0" finds them.
+export function totalsWhere(condition: TotalsCondition): SQL {
+  const [column, limit] =
+    condition.field === 'total_spent'
+      ? ([contactStats.netSpendPoisha, condition.amountPoisha] as const)
+      : ([contactStats.ordersCount, condition.count] as const);
+  const value = sql`coalesce((select ${column} from ${contactStats} where ${contactStats.contactId} = ${contacts.id}), 0)`;
+  return condition.operator === 'at_least' ? sql`${value} >= ${limit}` : sql`${value} <= ${limit}`;
+}
+
+// "Is not Dhaka" keeps contacts with no district.
+export function listWhere(
+  column: PgColumn,
+  condition: { operator: 'is_any_of' | 'is_none_of'; values: string[] },
+): SQL | undefined {
+  return condition.operator === 'is_any_of'
+    ? inArray(column, condition.values)
+    : or(isNull(column), not(inArray(column, condition.values)));
 }

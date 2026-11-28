@@ -156,7 +156,7 @@ async function reopenOrder(
 ): Promise<StageWrite> {
   if (actor.kind !== 'user') throw orderError('ORDER_STAGE_NOT_ALLOWED');
   const items = await orders.items(storeId, order.id);
-  const reference = { orderId: order.id, actor };
+  const reference = { orderId: order.id, actor, reason: 'Delivery reopened' };
   const write: StageWrite = { deliveredAt: null };
   if (order.stage !== 'with_courier')
     Object.assign(
@@ -190,7 +190,11 @@ async function reverseDelivery(
     order,
     items,
     reference,
-  }: { order: LockedOrder; items: Items; reference: { orderId: string; actor: Actor } },
+  }: {
+    order: LockedOrder;
+    items: Items;
+    reference: { orderId: string; actor: Actor; reason: string };
+  },
   { orders, stock }: FulfilmentDependencies,
 ): Promise<StageWrite> {
   // A partial delivery put the undelivered units back on the shelf; take them off again.
@@ -200,7 +204,7 @@ async function reverseDelivery(
       await stock.moveStock(storeId, variantId, {
         kind: 'adjust',
         quantity: -undelivered,
-        reference: { ...reference, reason: 'Delivery reopened' },
+        reference,
       });
   }
   await orders.recordDelivery(

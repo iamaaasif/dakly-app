@@ -15,6 +15,8 @@ export const fieldLabels: Record<BuilderField, string> = {
   district: 'District',
   source: 'Source',
   kind: 'Customer type',
+  total_spent: 'Total spent',
+  order_count: 'Orders placed',
   consent: 'Marketing consent',
 };
 
@@ -47,7 +49,14 @@ export const channelLabels: Record<ConsentChannel, string> = {
   email: 'Email',
 };
 
+export const amountOperatorLabels = [
+  ['at_least', 'at least'],
+  ['at_most', 'at most'],
+] as const;
+
 export function newCondition(field: BuilderField): SegmentCondition {
+  if (field === 'total_spent') return { field, operator: 'at_least', amountPoisha: 100_000 };
+  if (field === 'order_count') return { field, operator: 'at_least', count: 2 };
   if (field === 'consent') return { field, channel: 'sms', granted: true };
   if (field === 'source') return { field, operator: 'is_any_of', values: ['messenger'] };
   if (field === 'kind') return { field, operator: 'is_any_of', values: ['customer'] };

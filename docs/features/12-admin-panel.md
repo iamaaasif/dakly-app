@@ -105,6 +105,8 @@ Support session checks and Owner request lists read current rows without explici
 #### Plans and pricing
 
 - Plans: name, monthly and yearly price, trial length in days (0 for no trial, D34), VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).
+- Staff with the finance or super admin role create a plan (a new code, which never changes), edit its values, and add or remove any allowance name in the limits (for example the free plan's AI allowance). The limits sent replace the stored ones. Each change needs a reason and writes a `plan.created`, `plan.updated` or `plan.retired` audit row first; the update row also keeps the previous limits.
+- Retiring a plan is permanent: nobody can pick it again and it can no longer be edited, but shops already on it keep it until they change plan. Hiding a plan (not public) is the reversible option.
 - Add-ons: Chats AI add-on tiers.
 - Unit prices: SMS per message, WhatsApp margin over Meta's rate per category, AI credit packs.
 - Coupons: code, percent or fixed, duration (once, 1 to 36 months, forever), limit of uses, expiry, which plans. After first redemption the discount and duration are fixed; staff create another coupon to change them. The lifetime redemption count cannot decrease. See [billing rules](07-payments-and-billing.md#how-it-works) for invoice timing.

@@ -272,8 +272,8 @@ it('gives the charge for a matched place with no zones, and the zones for an unm
     { name: 'Inside Dhaka', chargeTaka: 60, isDefault: false },
     { name: 'Outside Dhaka', chargeTaka: 120, isDefault: true },
   ]);
-  expect(await run(storeId, buyer, 'get_delivery_charge', { area: 'Dhaka' })).toEqual({
-    places: [{ area: 'Dhaka', district: 'Dhaka', chargeTaka: 60 }],
+  expect(await run(storeId, buyer, 'get_delivery_charge', { area: 'Dhaka' })).toMatchObject({
+    places: expect.arrayContaining([{ area: 'Dhaka', district: 'Dhaka', chargeTaka: 60 }]),
   });
   expect(await run(storeId, buyer, 'get_delivery_charge', { area: 'Nowhereville' })).toEqual({
     places: [],

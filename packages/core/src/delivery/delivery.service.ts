@@ -131,6 +131,24 @@ export class DeliveryService {
   }
 
   async calculateDeliveryCharge(storeId: string, areaId: number): Promise<DeliveryChargeResponse> {
+    const { district, zone } = await this.findAreaZone(storeId, areaId);
+    if (!zone) throw deliveryError('DELIVERY_DEFAULT_REQUIRED');
+    return { deliveryZoneId: zone.id, chargePoisha: zone.chargePoisha, district };
+  }
+
+  // Couriers are not connected yet, so staff type the charge. A typed charge needs no zone;
+  // without one the order is saved with no zone and the charge marked as overridden.
+  async quoteOrderDelivery(storeId: string, areaId: number, typedChargePoisha?: number) {
+    const { district, zone } = await this.findAreaZone(storeId, areaId);
+    if (typedChargePoisha === undefined && !zone) throw deliveryError('DELIVERY_DEFAULT_REQUIRED');
+    return {
+      district,
+      deliveryZoneId: zone?.id ?? null,
+      chargePoisha: typedChargePoisha ?? zone?.chargePoisha ?? 0,
+    };
+  }
+
+  private async findAreaZone(storeId: string, areaId: number) {
     const path = await this.repository.findAreaPath(storeId, areaId);
     const district = path.find((area) => area.kind === 'district');
     if (!district) throw deliveryError('DELIVERY_AREA_INVALID');
@@ -142,8 +160,7 @@ export class DeliveryService {
       path
         .map((area) => zones.find((candidate) => candidate.bdAreaIds.includes(area.id)))
         .find(Boolean) ?? zones.find((candidate) => candidate.isDefault);
-    if (!zone) throw deliveryError('DELIVERY_DEFAULT_REQUIRED');
-    return { deliveryZoneId: zone.id, chargePoisha: zone.chargePoisha, district: district.name };
+    return { district: district.name, zone };
   }
 
   // Same zone rule as calculateDeliveryCharge, for every district in two queries.
