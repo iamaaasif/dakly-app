@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Badge } from '@dakly/ui/badge';
-import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
 import { useAiBlockers } from '../ai-blockers';
@@ -24,32 +23,14 @@ const channelMarks: Record<ConversationResponse['channel'], { label: string; col
 type ChatRowProps = {
   conversation: ConversationResponse;
   query: ChatScreenQuery;
-  // Set while picking chats for a bulk action: the row then ticks instead of opening.
-  selection?: { selected: boolean; onToggle: () => void };
-  // Ticking the box that replaces the avatar on hover starts picking with this chat.
-  onStartSelection?: () => void;
 };
 
 const rowClasses = 'flex gap-3 border-l-2 border-transparent px-3.5 py-3 hover:bg-surface-muted';
 
-export function ChatRow({ conversation, query, selection, onStartSelection }: ChatRowProps) {
+export function ChatRow({ conversation, query }: ChatRowProps) {
   const name = contactDisplayName(conversation);
-  const content = <ChatRowContent conversation={conversation} name={name} />;
-  if (selection)
-    return (
-      <li>
-        <label className={cn(rowClasses, 'cursor-pointer items-center')}>
-          <Checkbox
-            aria-label={`Select ${name}`}
-            checked={selection.selected}
-            onCheckedChange={selection.onToggle}
-          />
-          {content}
-        </label>
-      </li>
-    );
   return (
-    <li className="group relative">
+    <li>
       <Link
         href={chatsHref({ ...query, chat: conversation.id })}
         aria-current={query.chat === conversation.id ? 'true' : undefined}
@@ -58,17 +39,8 @@ export function ChatRow({ conversation, query, selection, onStartSelection }: Ch
           'aria-[current=true]:border-primary aria-[current=true]:bg-primary-soft',
         )}
       >
-        {content}
+        <ChatRowContent conversation={conversation} name={name} />
       </Link>
-      {onStartSelection ? (
-        <span className="absolute top-3 left-4 hidden size-10 items-center justify-center rounded-full bg-surface opacity-0 group-hover:opacity-100 focus-within:opacity-100 pointer-fine:flex">
-          <Checkbox
-            aria-label={`Select ${name}`}
-            checked={false}
-            onCheckedChange={onStartSelection}
-          />
-        </span>
-      ) : null}
     </li>
   );
 }
