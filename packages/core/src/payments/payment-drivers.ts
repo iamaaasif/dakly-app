@@ -1,4 +1,5 @@
 import { BkashPaymentDriver } from '@dakly/providers/payment/bkash/bkash-payment-driver';
+import { NagadPaymentDriver } from '@dakly/providers/payment/nagad/nagad-payment-driver';
 import type { PaymentDriver } from '@dakly/providers/payment/payment-driver';
 
 import type { Env } from '../platform/config/env';
@@ -16,5 +17,15 @@ export function buildPaymentDrivers(env: Env): PaymentDriver[] {
           credentials: { appKey, appSecret, username, password },
         }
       : undefined;
-  return [new BkashPaymentDriver({ billing })];
+  const { NAGAD_BILLING_MERCHANT_ID: merchantId } = env;
+  const { NAGAD_BILLING_PRIVATE_KEY: merchantPrivateKey } = env;
+  const { NAGAD_BILLING_PUBLIC_KEY: nagadPublicKey } = env;
+  const nagadBilling =
+    merchantId && merchantPrivateKey && nagadPublicKey
+      ? {
+          mode: env.NAGAD_BILLING_MODE ?? 'sandbox',
+          credentials: { merchantId, merchantPrivateKey, nagadPublicKey },
+        }
+      : undefined;
+  return [new BkashPaymentDriver({ billing }), new NagadPaymentDriver({ billing: nagadBilling })];
 }
