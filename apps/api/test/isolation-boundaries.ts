@@ -134,7 +134,12 @@ const groups = [
   {
     evidence: 'admin/plan-catalogue.int.spec.ts',
     boundary: 'audited staff edits of the global plan catalogue, which holds no shop data',
-    routes: ['GET /admin/plans', 'PUT /admin/plans/:code'],
+    routes: [
+      'GET /admin/plans',
+      'POST /admin/plans',
+      'PUT /admin/plans/:code',
+      'POST /admin/plans/:code/retire',
+    ],
   },
   {
     evidence: 'ai-rate/ai-rate.int.spec.ts',
