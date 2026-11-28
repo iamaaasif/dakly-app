@@ -105,6 +105,10 @@ Statuses: `created` → `pending` (customer sent to gateway) → `succeeded` or 
 
 The golden rule: **the browser redirect and the callback are only hints.** A payment is succeeded only when Dakly's server has called the gateway's execute or query API itself and the reply matches the intent's amount, currency and merchant reference.
 
+#### Nagad Online Payment (driver built)
+
+`packages/providers/src/payment/nagad/`. Initialise, complete and verify follow the published SDK shapes, with RSA encryption and signatures both ways and a reply signature check. Shop credentials are Merchant ID, merchant private key and Nagad public key (PEM or bare base64). Dakly's own account comes from `NAGAD_BILLING_*`. The shapes are unconfirmed until a merchant sandbox is available; Nagad's order id length limit also needs checking against our merchant references.
+
 #### bKash Tokenized Checkout
 
 Used for flow A (including auto-renew) and flow B. Steps, per bKash's tokenized checkout API (endpoint names to be confirmed against the official docs at developer.bka.sh when the merchant account is approved):
