@@ -1,10 +1,9 @@
-import { Check, ImagePlus, Upload } from 'lucide-react';
+import { Check, ShoppingBag, Upload, type LucideIcon } from 'lucide-react';
 import Image from 'next/image';
 import { useRef, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { CreatePostInput } from '@dakly/contracts/social';
-import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 
 import { useProductPhotos } from '../../api/get-product-photos';
@@ -27,27 +26,26 @@ export function PostPhotos({ preview }: PostPhotosProps) {
       aria-labelledby="photos-heading"
       className="space-y-3 rounded-lg border border-border bg-surface p-4"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 id="photos-heading" className="text-sm font-semibold">
-            Photos
-          </h2>
-          <p className="text-xs text-text-muted">
-            {chosen.length} of {limit} chosen
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            className="min-h-9 px-3 text-sm"
-            onClick={() => setOpen((value) => !value)}
-            aria-expanded={open}
-          >
-            <ImagePlus aria-hidden="true" size={16} strokeWidth={1.75} /> From products
-          </Button>
-          <UploadButton pending={upload.isPending} onFile={choice.handleFile} />
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="photos-heading" className="text-sm font-semibold">
+          Photos
+        </h2>
+        <p className="text-sm text-text-muted">
+          {chosen.length} / {limit}
+        </p>
       </div>
+      <div className="flex flex-wrap gap-3">
+        <UploadTile pending={upload.isPending} onFile={choice.handleFile} />
+        <PhotoTile
+          icon={ShoppingBag}
+          label="From products"
+          expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        />
+      </div>
+      <p className="text-xs text-text-muted">
+        JPG or PNG. On Instagram, more than one photo becomes a swipeable carousel.
+      </p>
       <PhotoMessages
         pending={upload.isPending}
         error={upload.error?.message ?? products.error?.message}
@@ -102,18 +100,42 @@ function usePhotoChoice(uploads: UploadedPhotos, open: boolean) {
   };
 }
 
-function UploadButton({ pending, onFile }: { pending: boolean; onFile: (file: File) => void }) {
+const tileClass =
+  'flex size-28 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-input-border bg-surface-muted text-sm font-medium hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50';
+
+type PhotoTileProps = {
+  icon: LucideIcon;
+  label: string;
+  disabled?: boolean;
+  expanded?: boolean;
+  onClick: () => void;
+};
+
+function PhotoTile({ icon: Icon, label, disabled, expanded, onClick }: PhotoTileProps) {
+  return (
+    <button
+      type="button"
+      className={tileClass}
+      disabled={disabled}
+      aria-expanded={expanded}
+      onClick={onClick}
+    >
+      <Icon aria-hidden="true" size={20} strokeWidth={1.75} />
+      {label}
+    </button>
+  );
+}
+
+function UploadTile({ pending, onFile }: { pending: boolean; onFile: (file: File) => void }) {
   const chooser = useRef<HTMLInputElement>(null);
   return (
     <>
-      <Button
-        variant="secondary"
-        className="min-h-9 px-3 text-sm"
+      <PhotoTile
+        icon={Upload}
+        label="Upload"
         disabled={pending}
         onClick={() => chooser.current?.click()}
-      >
-        <Upload aria-hidden="true" size={16} strokeWidth={1.75} /> Upload from device
-      </Button>
+      />
       <input
         ref={chooser}
         type="file"

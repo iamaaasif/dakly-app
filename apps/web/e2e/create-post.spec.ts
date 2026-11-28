@@ -116,11 +116,11 @@ test('writes a caption with AI and queues the post', async ({ page, context, bas
       'aria-pressed',
       'true',
     );
-    await expect(page.getByText('1 of 10 chosen')).toBeVisible();
+    await expect(page.getByText('1 / 10')).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Preview' }).locator('img')).toBeVisible();
     await capture(page, 'photo-uploaded', page.getByRole('region', { name: 'Photos' }));
 
-    await page.getByRole('radio', { name: /Pick date and time/ }).check();
+    await page.getByRole('radio', { name: /Pick a date and time/ }).check();
     await page.getByLabel('Scheduled time').fill('2027-03-01T10:00');
     await page.getByRole('button', { name: 'Schedule', exact: true }).click();
     await expect(page).toHaveURL(/\/social\/posts$/);
