@@ -298,7 +298,9 @@ function useStageActionState(order: OrderDetail, mutate: (change: OrderStageChan
       : setActiveDialog(a);
   // Leaving Delivered undoes the COD collection and the stock count, so staff confirm it first.
   const handleAction = (a: StageAction) =>
-    leavesDelivered(order.stage) && a !== 'cod' ? setExitAction(a) : runAction(a);
+    leavesDelivered(order.stage) && a !== 'cod' && a !== 'returned'
+      ? setExitAction(a)
+      : runAction(a);
   const confirmExit = () => {
     if (exitAction) runAction(exitAction);
     setExitAction(null);
