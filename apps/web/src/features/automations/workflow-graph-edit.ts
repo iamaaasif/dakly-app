@@ -97,8 +97,16 @@ function freshKey(kind: NewStepKind, steps: Steps) {
   }
 }
 
-function redirect(step: AutomationStep, from: string, to: string): AutomationStep {
-  const swap = (key: string) => (key === from ? to : key);
+// With `branch`, only that path of a split moves; otherwise every path that led to `from` does.
+function redirect(
+  step: AutomationStep,
+  { from, to, branch }: { from: string; to: string; branch?: number },
+): AutomationStep {
+  let position = -1;
+  const swap = (key: string) => {
+    position += 1;
+    return key === from && (branch === undefined || branch === position) ? to : key;
+  };
   if (step.kind === 'exit') return step;
   if (step.kind === 'condition') {
     return {
@@ -115,7 +123,7 @@ function redirect(step: AutomationStep, from: string, to: string): AutomationSte
 
 function redirectParents(graph: AutomationGraph, from: string, to: string): AutomationGraph {
   const steps = Object.fromEntries(
-    Object.entries(graph.steps).map(([key, step]) => [key, redirect(step, from, to)]),
+    Object.entries(graph.steps).map(([key, step]) => [key, redirect(step, { from, to })]),
   );
   return { ...graph, firstStepKey: graph.firstStepKey === from ? to : graph.firstStepKey, steps };
 }
@@ -128,13 +136,16 @@ export function canAddStep(graph: AutomationGraph) {
 // parent that led to the target now goes through the new step.
 export function insertStep(
   graph: AutomationGraph,
-  { parent, target }: { parent: string; target: string },
+  { parent, target, branch }: { parent: string; target: string; branch?: number },
   kind: NewStepKind,
 ) {
   const key = freshKey(kind, graph.steps);
   const steps = { ...graph.steps, [key]: newStep(kind, target) };
   if (parent === TRIGGER_KEY) return { ...graph, firstStepKey: key, steps };
-  return { ...graph, steps: { ...steps, [parent]: redirect(steps[parent]!, target, key) } };
+  return {
+    ...graph,
+    steps: { ...steps, [parent]: redirect(steps[parent]!, { from: target, to: key, branch }) },
+  };
 }
 
 // Puts a step after a point where paths merge, so every path goes through it.
@@ -165,12 +176,15 @@ export function appendStep(graph: AutomationGraph, kind: NewStepKind) {
   if (kind === 'private_reply') {
     return insertStep(graph, { parent: TRIGGER_KEY, target: graph.firstStepKey }, kind);
   }
-  const exits = Object.keys(graph.steps).filter((key) => graph.steps[key]!.kind === 'exit');
-  const exit = exits.at(-1)!;
-  const parent =
-    Object.keys(graph.steps).find((key) => nextStepKeys(graph.steps[key]!).includes(exit)) ??
-    TRIGGER_KEY;
-  return insertStep(graph, { parent, target: exit }, kind);
+  // Follow the first path of every split to the exit it reaches, so the other branches stay as
+  // they are.
+  let parent = TRIGGER_KEY;
+  let target = graph.firstStepKey;
+  while (graph.steps[target]!.kind !== 'exit') {
+    parent = target;
+    target = nextStepKeys(graph.steps[target]!)[0]!;
+  }
+  return insertStep(graph, { parent, target, branch: 0 }, kind);
 }
 
 function dropUnreachable(graph: AutomationGraph): AutomationGraph {

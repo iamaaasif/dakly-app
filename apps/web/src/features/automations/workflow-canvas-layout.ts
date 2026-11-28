@@ -55,6 +55,8 @@ type CanvasEdge = {
   to: string;
   path: string;
   label?: string;
+  // Which path of the split this line is; unset for lines that merge several paths.
+  branch?: number;
   labelX: number;
   labelY: number;
   midX: number;
@@ -132,7 +134,7 @@ function describeBranches(
   });
 }
 
-type Link = { from: string; to: string; label?: string };
+type Link = { from: string; to: string; label?: string; branch?: number };
 type Spot = { centerX: number; top: number; bottom: number; laneBottom: number };
 
 const isWaypoint = (item: string) => item.startsWith('~');
@@ -252,7 +254,7 @@ function mergeParallel(links: Link[]) {
     const key = `${link.from}:${link.to}`;
     const first = merged.get(key);
     const label = [first?.label, link.label].filter(Boolean).join(' + ') || undefined;
-    merged.set(key, { ...link, label });
+    merged.set(key, { ...link, label, branch: first ? undefined : link.branch });
   }
   return [...merged.values()];
 }
@@ -295,17 +297,29 @@ function triggerCardHeight(graph: AutomationGraph, extraTriggerRow: boolean) {
   );
 }
 
+function pathsOf(graph: AutomationGraph, order: string[], stepNumber: (key: string) => number) {
+  const paths: Link[] = [{ from: TRIGGER_KEY, to: graph.firstStepKey }];
+  for (const key of order) {
+    const step = graph.steps[key]!;
+    const labels = branchLabels(step, stepNumber);
+    nextStepKeys(step).forEach((to, index) =>
+      paths.push({
+        from: key,
+        to,
+        label: labels[index],
+        branch: labels[index] ? index : undefined,
+      }),
+    );
+  }
+  return paths;
+}
+
 export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false): CanvasLayout {
   const order = readingOrder(graph);
   const numbered = order.filter((key) => graph.steps[key]!.kind !== 'exit');
   const stepNumber = (key: string) => numbered.indexOf(key) + 1;
   const rows = new Map([[TRIGGER_KEY, 0], ...rowOfEachStep(order, graph.steps)]);
-  const paths: Link[] = [{ from: TRIGGER_KEY, to: graph.firstStepKey }];
-  for (const key of order) {
-    const step = graph.steps[key]!;
-    const labels = branchLabels(step, stepNumber);
-    nextStepKeys(step).forEach((to, index) => paths.push({ from: key, to, label: labels[index] }));
-  }
+  const paths = pathsOf(graph, order, stepNumber);
   const copies = splitExits(paths, graph.steps, rows);
   const links = mergeParallel(paths);
   const routes = links.map((link, index) => routeOf(link, index, rows));
@@ -329,7 +343,7 @@ export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false):
     copies,
   });
 
-  const edges = links.map(({ from, to, label }, index) => {
+  const edges = links.map(({ from, to, label, branch }, index) => {
     const target = spots.get(to)!;
     const merging = mergeKeys.has(to);
     const source = spots.get(from)!;
@@ -339,6 +353,7 @@ export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false):
       to: copies.get(to) ?? to,
       path: routePath(routes[index]!, spots, merging),
       label,
+      branch,
       labelX: target.centerX,
       labelY: target.top - LABEL_ABOVE,
       // Where the add button of this line sits. Under a label it is just above the target; lines
