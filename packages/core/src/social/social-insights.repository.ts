@@ -16,6 +16,7 @@ export class SocialInsightsRepository {
           id: postTargets.id,
           channelConnectionId: postTargets.channelConnectionId,
           externalPostId: postTargets.externalPostId,
+          permalink: postTargets.permalink,
           publishedAt: postTargets.publishedAt,
           nextMetricsAt: postTargets.nextMetricsAt,
           postKind: posts.kind,
@@ -44,7 +45,7 @@ export class SocialInsightsRepository {
     changes: Partial<
       Pick<
         typeof postTargets.$inferInsert,
-        'reach' | 'reactions' | 'comments' | 'shares' | 'metricsAt' | 'nextMetricsAt'
+        'reach' | 'reactions' | 'comments' | 'shares' | 'permalink' | 'metricsAt' | 'nextMetricsAt'
       >
     >,
   ) {

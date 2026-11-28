@@ -3,15 +3,21 @@ import Image from 'next/image';
 
 import { formatCount } from '@dakly/contracts/money';
 
+import type { SocialAccount } from '../api/get-social-accounts';
 import { publishedTotals, type CalendarEntry } from '../post-calendar';
 import { networkNames } from '../social-labels';
 import { NetworkIcon } from './network-icon';
 import { postTitle } from './post-chip';
+import { ViewPostLink } from './view-post-link';
 import { formatShortDateTime } from '@/lib/format-date';
 
-type PublishedRowProps = { entry: CalendarEntry; onOpen: (entry: CalendarEntry) => void };
+type PublishedRowProps = {
+  entry: CalendarEntry;
+  accounts: SocialAccount[];
+  onOpen: (entry: CalendarEntry) => void;
+};
 
-export function PublishedRow({ entry, onOpen }: PublishedRowProps) {
+export function PublishedRow({ entry, accounts, onOpen }: PublishedRowProps) {
   const totals = publishedTotals(entry.post);
   const photo = entry.post.photos[0];
   const stats = [
@@ -22,23 +28,7 @@ export function PublishedRow({ entry, onOpen }: PublishedRowProps) {
   ] as const;
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-      {photo ? (
-        <Image
-          src={photo.url}
-          alt=""
-          width={64}
-          height={64}
-          unoptimized
-          className="size-16 shrink-0 rounded-md object-cover"
-        />
-      ) : (
-        <span
-          aria-hidden="true"
-          className="grid size-16 shrink-0 place-items-center rounded-md bg-surface-muted text-text-subtle"
-        >
-          <ImageIcon size={20} strokeWidth={1.75} />
-        </span>
-      )}
+      <PublishedThumbnail photo={photo} />
       <div className="min-w-48 flex-1 space-y-1">
         <button
           type="button"
@@ -56,6 +46,15 @@ export function PublishedRow({ entry, onOpen }: PublishedRowProps) {
           {entry.kinds.map((kind) => networkNames[kind]).join(' + ')} · Published{' '}
           {formatShortDateTime(entry.at)}
         </p>
+        <p className="flex flex-wrap gap-x-4">
+          {entry.post.targets.map((target) => (
+            <ViewPostLink
+              key={target.id}
+              permalink={target.permalink}
+              kind={accounts.find(({ id }) => id === target.channelConnectionId)?.kind}
+            />
+          ))}
+        </p>
       </div>
       <dl className="grid grid-cols-4 gap-4 text-center">
         {stats.map(([label, value]) => (
@@ -66,5 +65,29 @@ export function PublishedRow({ entry, onOpen }: PublishedRowProps) {
         ))}
       </dl>
     </li>
+  );
+}
+
+function PublishedThumbnail({
+  photo,
+}: {
+  photo: CalendarEntry['post']['photos'][number] | undefined;
+}) {
+  return photo ? (
+    <Image
+      src={photo.url}
+      alt=""
+      width={64}
+      height={64}
+      unoptimized
+      className="size-16 shrink-0 rounded-md object-cover"
+    />
+  ) : (
+    <span
+      aria-hidden="true"
+      className="grid size-16 shrink-0 place-items-center rounded-md bg-surface-muted text-text-subtle"
+    >
+      <ImageIcon size={20} strokeWidth={1.75} />
+    </span>
   );
 }

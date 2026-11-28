@@ -55,7 +55,7 @@ export function PublishedList({
       {entries.length ? (
         <ul className="divide-y divide-border border-t border-border">
           {sortPublished(entries, sort).map((entry) => (
-            <PublishedRow key={entry.post.id} entry={entry} onOpen={onOpen} />
+            <PublishedRow key={entry.post.id} entry={entry} accounts={accounts} onOpen={onOpen} />
           ))}
         </ul>
       ) : (
