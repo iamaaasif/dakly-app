@@ -862,6 +862,13 @@
       "when": 1795814086333,
       "tag": "0122_product_collections",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1795827528379,
+      "tag": "0123_dhaka_city_areas",
+      "breakpoints": true
     }
   ]
 }
