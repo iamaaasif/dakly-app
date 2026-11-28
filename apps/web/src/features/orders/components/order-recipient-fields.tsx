@@ -102,7 +102,6 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
   const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const areaId = useWatch({ control, name: 'recipient.areaId' });
   const { chargePoisha: charge, error, refetch } = useOrderDelivery(areaId, order);
-  const missingZones = error instanceof ApiError && error.code === 'DELIVERY_DEFAULT_REQUIRED';
   return (
     <>
       <div
@@ -134,13 +133,22 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
         </FormField>
       </div>
       <ChargeHint chargePoisha={charge} />
-      {missingZones && <SetupDeliveryZones retryQuote={() => void refetch()} />}
-      {error && !missingZones && (
-        <p role="alert" className="text-danger">
-          {error.message}
-        </p>
-      )}
+      <QuoteProblem error={error} retryQuote={() => void refetch()} />
     </>
+  );
+}
+
+// A typed charge needs no zone, so a failed quote is not shown once staff have typed one.
+function QuoteProblem({ error, retryQuote }: { error: Error | null; retryQuote: () => void }) {
+  const { control } = useFormContext<OrderEditorValues>();
+  const typed = useWatch({ control, name: 'deliveryChargePoisha' });
+  if (!error || typed) return null;
+  if (error instanceof ApiError && error.code === 'DELIVERY_DEFAULT_REQUIRED')
+    return <SetupDeliveryZones retryQuote={retryQuote} />;
+  return (
+    <p role="alert" className="text-danger">
+      {error.message}
+    </p>
   );
 }
 
