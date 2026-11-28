@@ -4,6 +4,7 @@ import {
   nextStepKeys,
 } from '@dakly/contracts/automations/graph';
 
+import { triggerEntryLabels } from './automation-labels';
 import { conditionLabel } from './workflow-canvas-labels';
 
 const TRIGGER_WIDTH = 440;
@@ -21,6 +22,9 @@ const PADDING = 16;
 // Cards show one truncated line per row, so heights are fixed and edges can be computed.
 // The trigger card lists five rows, plus one when it shows recent entries.
 const EXTRA_TRIGGER_ROW = 20;
+// A long entry sentence wraps to a second line in the 440px card.
+const WRAPPED_TRIGGER_TITLE = 24;
+const TRIGGER_TITLE_ONE_LINE = 58 - 'Customers enter when they '.length;
 const heights = {
   trigger: 190,
   wait: 44,
@@ -51,6 +55,8 @@ type CanvasEdge = {
   to: string;
   path: string;
   label?: string;
+  // Which path of the split this line is; unset for lines that merge several paths.
+  branch?: number;
   labelX: number;
   labelY: number;
   midX: number;
@@ -128,7 +134,7 @@ function describeBranches(
   });
 }
 
-type Link = { from: string; to: string; label?: string };
+type Link = { from: string; to: string; label?: string; branch?: number };
 type Spot = { centerX: number; top: number; bottom: number; laneBottom: number };
 
 const isWaypoint = (item: string) => item.startsWith('~');
@@ -188,15 +194,18 @@ type RowSizes = {
   stepNumber: (key: string) => number;
   gapBefore: Map<string, number>;
   triggerHeight: number;
+  // Exit markers drawn once per branch point at the one real exit step.
+  copies: Map<string, string>;
 };
 
 function placeRows(lanes: string[][], graph: AutomationGraph, sizes: RowSizes) {
-  const { stepNumber, gapBefore, triggerHeight } = sizes;
+  const { stepNumber, gapBefore, triggerHeight, copies } = sizes;
   const widthOf = (item: string) => {
     if (isWaypoint(item)) return 0;
     return item === TRIGGER_KEY ? TRIGGER_WIDTH : STEP_WIDTH;
   };
-  const stepOf = (item: string) => (item === TRIGGER_KEY ? null : graph.steps[item]!);
+  const stepOf = (item: string) =>
+    item === TRIGGER_KEY ? null : graph.steps[copies.get(item) ?? item]!;
   const laneWidth = (lane: string[]) =>
     lane.reduce((sum, item) => sum + widthOf(item), 0) + (lane.length - 1) * COLUMN_GAP;
   const heightOf = (step: AutomationStep | null) => (step ? nodeHeight(step) : triggerHeight);
@@ -245,7 +254,7 @@ function mergeParallel(links: Link[]) {
     const key = `${link.from}:${link.to}`;
     const first = merged.get(key);
     const label = [first?.label, link.label].filter(Boolean).join(' + ') || undefined;
-    merged.set(key, { ...link, label });
+    merged.set(key, { ...link, label, branch: first ? undefined : link.branch });
   }
   return [...merged.values()];
 }
@@ -262,17 +271,56 @@ function mergeMarkers(links: Link[], mergeKeys: Set<string>, spots: Map<string, 
     }));
 }
 
+// Each branch of a split that ends the workflow gets its own exit marker, so Yes and No never
+// share one line.
+function splitExits(paths: Link[], steps: AutomationGraph['steps'], rows: Map<string, number>) {
+  const copies = new Map<string, string>();
+  for (const link of paths) {
+    if (!link.label || steps[link.to]!.kind !== 'exit') continue;
+    const copy = `${link.to}@${copies.size}`;
+    copies.set(copy, link.to);
+    rows.set(copy, rows.get(link.to)!);
+    link.to = copy;
+  }
+  for (const real of new Set(copies.values())) {
+    if (!paths.some((link) => link.to === real)) rows.delete(real);
+  }
+  return copies;
+}
+
+function triggerCardHeight(graph: AutomationGraph, extraTriggerRow: boolean) {
+  const wraps = triggerEntryLabels[graph.trigger.key].length > TRIGGER_TITLE_ONE_LINE;
+  return (
+    heights.trigger +
+    (extraTriggerRow ? EXTRA_TRIGGER_ROW : 0) +
+    (wraps ? WRAPPED_TRIGGER_TITLE : 0)
+  );
+}
+
+function pathsOf(graph: AutomationGraph, order: string[], stepNumber: (key: string) => number) {
+  const paths: Link[] = [{ from: TRIGGER_KEY, to: graph.firstStepKey }];
+  for (const key of order) {
+    const step = graph.steps[key]!;
+    const labels = branchLabels(step, stepNumber);
+    nextStepKeys(step).forEach((to, index) =>
+      paths.push({
+        from: key,
+        to,
+        label: labels[index],
+        branch: labels[index] ? index : undefined,
+      }),
+    );
+  }
+  return paths;
+}
+
 export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false): CanvasLayout {
   const order = readingOrder(graph);
   const numbered = order.filter((key) => graph.steps[key]!.kind !== 'exit');
   const stepNumber = (key: string) => numbered.indexOf(key) + 1;
   const rows = new Map([[TRIGGER_KEY, 0], ...rowOfEachStep(order, graph.steps)]);
-  const paths: Link[] = [{ from: TRIGGER_KEY, to: graph.firstStepKey }];
-  for (const key of order) {
-    const step = graph.steps[key]!;
-    const labels = branchLabels(step, stepNumber);
-    nextStepKeys(step).forEach((to, index) => paths.push({ from: key, to, label: labels[index] }));
-  }
+  const paths = pathsOf(graph, order, stepNumber);
+  const copies = splitExits(paths, graph.steps, rows);
   const links = mergeParallel(paths);
   const routes = links.map((link, index) => routeOf(link, index, rows));
   const lanes = arrangeRows(routes, rows);
@@ -287,23 +335,25 @@ export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false):
     if (link.label) gapBefore.set(link.to, BRANCH_GAP);
     if (mergeKeys.has(link.to)) gapBefore.set(link.to, MERGE_GAP);
   }
-  const triggerHeight = heights.trigger + (extraTriggerRow ? EXTRA_TRIGGER_ROW : 0);
+  const triggerHeight = triggerCardHeight(graph, extraTriggerRow);
   const { nodes, spots, width, height } = placeRows(lanes, graph, {
     stepNumber,
     gapBefore,
     triggerHeight,
+    copies,
   });
 
-  const edges = links.map(({ from, to, label }, index) => {
+  const edges = links.map(({ from, to, label, branch }, index) => {
     const target = spots.get(to)!;
     const merging = mergeKeys.has(to);
     const source = spots.get(from)!;
     return {
       id: `${index}:${from}:${to}`,
       from,
-      to,
+      to: copies.get(to) ?? to,
       path: routePath(routes[index]!, spots, merging),
       label,
+      branch,
       labelX: target.centerX,
       labelY: target.top - LABEL_ABOVE,
       // Where the add button of this line sits. Under a label it is just above the target; lines
@@ -319,7 +369,9 @@ export function layoutWorkflow(graph: AutomationGraph, extraTriggerRow = false):
     width,
     height,
     // The reading order is also the order a screen reader hears.
-    nodes: [TRIGGER_KEY, ...order].map((key) => nodes.get(key)!),
+    nodes: [TRIGGER_KEY, ...order, ...copies.keys()]
+      .map((key) => nodes.get(key))
+      .filter((node) => node !== undefined),
     edges,
   };
 }

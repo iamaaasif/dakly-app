@@ -72,7 +72,9 @@ export function EdgeAddButtons({
           y={edge.midY}
           disabled={!editing.canAdd}
           canAddKind={editing.canAddKind}
-          onAdd={(kind) => editing.insert({ parent: edge.from, target: edge.to }, kind)}
+          onAdd={(kind) =>
+            editing.insert({ parent: edge.from, target: edge.to, branch: edge.branch }, kind)
+          }
         />
       ))}
       {layout.merges.map((merge) => (

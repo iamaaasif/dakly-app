@@ -162,7 +162,7 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
 export type CanvasEditing = {
   canAdd: boolean;
   canAddKind: (kind: NewStepKind) => boolean;
-  insert: (edge: { parent: string; target: string }, kind: NewStepKind) => void;
+  insert: (edge: { parent: string; target: string; branch?: number }, kind: NewStepKind) => void;
   insertAfterMerge: (target: string, kind: NewStepKind) => void;
   remove: (key: string) => void;
   canMove: (key: string, direction: 'up' | 'down') => boolean;

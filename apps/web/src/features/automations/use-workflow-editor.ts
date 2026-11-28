@@ -27,7 +27,7 @@ type Refresh = ReturnType<typeof useAutomation>['refetch'];
 function graphEdits(graph: AutomationGraph, change: (next: AutomationGraph) => void) {
   return {
     apply: change,
-    insert: (edge: { parent: string; target: string }, kind: NewStepKind) =>
+    insert: (edge: { parent: string; target: string; branch?: number }, kind: NewStepKind) =>
       change(insertStep(graph, edge, kind)),
     append: (kind: NewStepKind) => change(appendStep(graph, kind)),
     insertAfterMerge: (target: string, kind: NewStepKind) =>
