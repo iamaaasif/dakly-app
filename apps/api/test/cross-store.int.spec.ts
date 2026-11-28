@@ -6024,6 +6024,44 @@ fixture('PUT /brand-profile', async () => {
   expect((await f.request(b.member, 'PUT', '/brand-profile', change)).statusCode).toBe(403);
 });
 
+fixture('GET /social/platform-interests', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/social/platform-interests/tiktok', 200);
+  expect((await success(a, 'GET', '/social/platform-interests', 200)).json()).toEqual({
+    platforms: ['tiktok'],
+  });
+  expect((await success(b, 'GET', '/social/platform-interests', 200)).json()).toEqual({
+    platforms: [],
+  });
+});
+
+fixture('PUT /social/platform-interests/:platform', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/social/platform-interests/tiktok', 200);
+  const again = await success(a, 'PUT', '/social/platform-interests/tiktok', 200);
+  expect(again.json()).toEqual({ platforms: ['tiktok'] });
+  const rows = await f.admin.pool.query(
+    'select store_id, user_id from platform_interests where store_id=$1',
+    [a.id],
+  );
+  expect(rows.rows).toEqual([{ store_id: a.id, user_id: a.owner.id }]);
+  expect((await f.request(a.owner, 'PUT', '/social/platform-interests/threads')).statusCode).toBe(
+    400,
+  );
+  expect((await success(b, 'GET', '/social/platform-interests', 200)).json().platforms).toEqual([]);
+});
+
+fixture('DELETE /social/platform-interests/:platform', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/social/platform-interests/tiktok', 200);
+  await success(b, 'PUT', '/social/platform-interests/tiktok', 200);
+  const removed = await success(a, 'DELETE', '/social/platform-interests/tiktok', 200);
+  expect(removed.json()).toEqual({ platforms: [] });
+  expect((await success(b, 'GET', '/social/platform-interests', 200)).json()).toEqual({
+    platforms: ['tiktok'],
+  });
+});
+
 const libraryPiece = { kind: 'sms', language: 'bn', body: 'অর্ডার করুন' };
 
 async function contentPiece(shop: Shop) {
