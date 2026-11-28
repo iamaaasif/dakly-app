@@ -2556,6 +2556,14 @@ fixture('POST /segments/hand-picked', async () => {
   });
   expect(members.json().count).toBe(1);
   expect((await f.row('segments', id)).store_id).toBe(a.id);
+  const oneOff = await success(a, 'POST', '/segments/hand-picked', 201, { contactIds: [own] });
+  const listed = async (shop: Shop, query = '') =>
+    (await success(shop, 'GET', `/segments${query}`, 200))
+      .json()
+      .items.map((item: { id: string }) => item.id);
+  expect(await listed(a)).not.toContain(oneOff.json().id);
+  expect(await listed(a, `?include=${oneOff.json().id}`)).toContain(oneOff.json().id);
+  expect(await listed(b, `?include=${oneOff.json().id}`)).not.toContain(oneOff.json().id);
 });
 fixture('POST /segments/:segmentId/customers', async () => {
   const { a, b } = await pair(),

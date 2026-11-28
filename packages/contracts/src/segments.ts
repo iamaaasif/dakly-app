@@ -78,8 +78,9 @@ export const createSegmentSchema = z.strictObject({
 export const changeSegmentSchema = createSegmentSchema
   .partial()
   .refine((input) => input.name !== undefined || input.rules !== undefined, 'Nothing to change');
+// Without a name the customers are a one-off audience for one campaign and are never listed.
 export const createHandPickedSegmentSchema = z.strictObject({
-  name: segmentNameSchema,
+  name: segmentNameSchema.optional(),
   contactIds: bulkContactIds,
 });
 export const handPickedChangeSchema = z.strictObject({ contactIds: bulkContactIds });
@@ -88,6 +89,12 @@ export const segmentStatuses = ['all', 'active', 'archived'] as const;
 export const segmentListQuerySchema = z.strictObject({
   status: z.enum(segmentStatuses).default('all'),
   search: z.string().trim().min(1).max(80).optional(),
+  // One-off audiences are listed only when asked for by id, as a campaign draft does for its own.
+  include: z
+    .string()
+    .transform((value) => value.split(','))
+    .pipe(z.array(z.uuid()).max(10))
+    .optional(),
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });

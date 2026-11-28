@@ -49,9 +49,11 @@ export class HandPickedSegmentsService {
   ): Promise<SegmentResponse> {
     const contactIds = await this.ownCustomers(storeId, input.contactIds);
     if (!contactIds.length) throw segmentError('SEGMENT_NO_CUSTOMERS');
-    return this.segments.create(
+    const rules = handPickedRules(contactIds);
+    if (input.name) return this.segments.create(storeId, { name: input.name, rules }, actor);
+    return this.segments.createOneOff(
       storeId,
-      { name: input.name, rules: handPickedRules(contactIds) },
+      { name: `Picked customers (${contactIds.length})`, rules },
       actor,
     );
   }

@@ -38,16 +38,22 @@ left alone and counted as unchanged. Each change emits `contact.tag_added`. The 
 to `POST /contacts/export-selected` and returns the same file as the list export, with the same
 download permission, phone masking and audit entry.
 
-Picked-customer segments (CUS-19): a segment of the customers ticked on the list is one `contact`
-condition ("customer is any of", at most 500 ids), so campaigns, consent and frequency checks read it
-like any segment. `POST /segments/hand-picked` makes one from up to 100 ids and a name. Add to segment
-(`POST /segments/:id/customers`, store lock held so two members adding at once keep both) appends the
-ids that are not in yet and returns them; Undo sends them to `.../customers/remove`. A segment built
-from rules refuses with `SEGMENT_NOT_HAND_PICKED`, a full one with `SEGMENT_HAND_PICKED_FULL`, and the
-last customer cannot be removed (`SEGMENT_HAND_PICKED_EMPTY`). Send campaign saves the selection as
-a segment named "Picked <date, time with seconds> (count)" and opens `/campaigns/new?segment=<id>`, which puts it in the
-new draft's audience. The segment builder shows such a condition as "N customers picked on the list"
-and does not offer it in the field list.
+Picked customers (CUS-19): the customers ticked on the list are held as one `contact` condition
+("customer is any of", at most 500 ids), so campaigns, consent and frequency checks read them like
+any segment. `POST /segments/hand-picked` takes up to 100 ids and an optional name; ids from another
+shop or of deleted customers are dropped. With a name the result is an ordinary segment the shop can
+reuse. Without one it is a one-off audience for a single campaign: `segments.one_off` is true, it is
+not listed, not counted in the tabs or against the 200 limit, and its name may repeat (the unique
+name index skips one-offs). `GET /segments?include=<ids>` lists a draft's own one-offs with the rest,
+so the audience step can show them. Add to segment (`POST /segments/:id/customers`, store lock held so
+two members adding at once keep both) appends the ids that are not in yet and returns them; Undo
+sends them to `.../customers/remove`. A segment built from rules refuses with
+`SEGMENT_NOT_HAND_PICKED`, a full one with `SEGMENT_HAND_PICKED_FULL`, and the last customer cannot
+be removed (`SEGMENT_HAND_PICKED_EMPTY`). Send campaign opens a small form on the bar: "Save as
+segment" is off by default, and when ticked asks for a name. It then opens
+`/campaigns/new?segment=<id>`, which puts the audience in the new draft. One-off audiences are not
+removed when a draft is deleted yet. The segment builder shows the condition as "N customers picked
+on the list" and does not offer it in the field list.
 
 The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 `customers` example moved into it: migration 0030 copied each `customers` row into

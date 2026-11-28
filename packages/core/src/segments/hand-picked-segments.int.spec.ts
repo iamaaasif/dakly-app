@@ -78,6 +78,22 @@ describe('HandPickedSegmentsService (Postgres)', () => {
     expect(await members(segment.id)).toEqual([ids.rina]);
   });
 
+  it('keeps an unnamed selection out of the list unless asked for by id, and lets names repeat', async () => {
+    const first = await handPicked.createFrom(store, { contactIds: [ids.rina] }, staff);
+    const second = await handPicked.createFrom(store, { contactIds: [ids.karim] }, staff);
+    const listed = async (include: string[] = []) =>
+      (await segments.list(store, { status: 'all', limit: 100, include })).items.map(
+        (item) => item.id,
+      );
+
+    expect(first.name).toBe(second.name);
+    expect(await listed()).not.toContain(first.id);
+    expect(await listed([first.id])).toContain(first.id);
+    expect(await listed([first.id])).not.toContain(second.id);
+    expect(await members(first.id)).toEqual([ids.rina]);
+    expect((await segments.tabCounts(store)).all).toBe((await listed()).length);
+  });
+
   it('refuses a selection with no customer of this shop', async () => {
     await expect(
       handPicked.createFrom(store, { name: 'Strangers', contactIds: [ids.foreign] }, staff),

@@ -129,6 +129,25 @@ export class SegmentsService {
     });
   }
 
+  // A one-off audience for one campaign: not counted against the limit, not listed, and its name
+  // may repeat.
+  async createOneOff(
+    storeId: string,
+    input: CreateSegmentInput,
+    actor: Actor,
+  ): Promise<SegmentResponse> {
+    return this.transaction.run(storeId, async () => {
+      const segment = await this.repository.insert(storeId, {
+        ...input,
+        createdByUserId: actor.kind === 'user' ? actor.userId : null,
+        oneOff: true,
+      });
+      if (segment === 'name_taken') throw segmentError('SEGMENT_NAME_TAKEN');
+      await this.publishSaved(storeId, segment.id, segment.updatedAt);
+      return toSegmentResponse(segment);
+    });
+  }
+
   async change(
     storeId: string,
     segmentId: string,

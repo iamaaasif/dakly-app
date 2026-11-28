@@ -565,7 +565,7 @@ describe('All contacts', () => {
     );
   });
 
-  it('saves the ticked customers as a segment and opens the campaign builder with it', async () => {
+  it('opens the campaign builder with the ticked customers as a one-off audience', async () => {
     respond((path) => {
       if (path.startsWith('/api/contacts/counts')) return { body: counts };
       if (path === '/api/segments/hand-picked') return { body: { id: 'segment-9', name: 'x' } };
@@ -576,10 +576,35 @@ describe('All contacts', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
     await user.click(screen.getByRole('button', { name: 'Send campaign' }));
+    expect(screen.queryByRole('textbox', { name: 'Segment name' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(push).toHaveBeenCalledWith('/campaigns/new?segment=segment-9'));
-    expect(
-      sent.find((request) => request.path === '/api/segments/hand-picked')?.body,
-    ).toMatchObject({ contactIds: [contactId] });
+    expect(sent.find((request) => request.path === '/api/segments/hand-picked')?.body).toEqual({
+      contactIds: [contactId],
+    });
+  });
+
+  it('saves the audience as a named segment when asked', async () => {
+    respond((path) => {
+      if (path.startsWith('/api/contacts/counts')) return { body: counts };
+      if (path === '/api/segments/hand-picked') return { body: { id: 'segment-9', name: 'Eid' } };
+      return { body: { items: [rahimaInList], nextCursor: null, total: 1 } };
+    });
+    canEditCampaigns = true;
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    await user.click(screen.getByRole('button', { name: 'Send campaign' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Save as segment' }));
+    expect(screen.getByRole('button', { name: 'Continue' }).hasAttribute('disabled')).toBe(true);
+    await user.type(screen.getByRole('textbox', { name: 'Segment name' }), 'Eid');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() =>
+      expect(sent.find((request) => request.path === '/api/segments/hand-picked')?.body).toEqual({
+        contactIds: [contactId],
+        name: 'Eid',
+      }),
+    );
   });
 
   it('hides Send campaign from a member who cannot edit campaigns', async () => {
