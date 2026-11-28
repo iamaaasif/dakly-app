@@ -16,6 +16,7 @@ const store = {
   extensions: ['sales'],
   legalName: 'Books Ltd',
   businessType: 'Books',
+  websiteUrl: null,
   phone: null,
   email: null,
   address: null,
