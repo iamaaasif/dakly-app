@@ -24,7 +24,7 @@ const PADDING = 16;
 const EXTRA_TRIGGER_ROW = 20;
 // A long entry sentence wraps to a second line in the 440px card.
 const WRAPPED_TRIGGER_TITLE = 24;
-const TRIGGER_TITLE_ONE_LINE = 46 - 'Customers enter when they '.length;
+const TRIGGER_TITLE_ONE_LINE = 58 - 'Customers enter when they '.length;
 const heights = {
   trigger: 190,
   wait: 44,
