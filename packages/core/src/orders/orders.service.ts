@@ -400,12 +400,12 @@ export class OrdersService {
   }
 
   private async quoteDelivery(storeId: string, areaId: number, override?: number) {
-    const zone = await this.delivery.calculateDeliveryCharge(storeId, areaId);
+    const quote = await this.delivery.quoteOrderDelivery(storeId, areaId, override);
     return {
-      recipientDistrict: zone.district,
+      recipientDistrict: quote.district,
       recipientBdAreaId: areaId,
-      deliveryZoneId: zone.deliveryZoneId,
-      deliveryChargePoisha: override ?? zone.chargePoisha,
+      deliveryZoneId: quote.deliveryZoneId,
+      deliveryChargePoisha: quote.chargePoisha,
       isDeliveryChargeOverridden: override !== undefined,
     };
   }
