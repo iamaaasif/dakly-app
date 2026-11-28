@@ -1170,3 +1170,9 @@ visible button marked `data-shortcut="new"` on a list page, and `?` opens a help
 Ctrl or Cmd with Enter or S work while typing; the plain keys do not. Ctrl or Cmd with Enter or S
 submits the form that holds focus, unless a screen such as the product editor or new order page
 already handled the key. Dialogs and side panels close on Esc through their own components.
+
+### Shop chosen after sign-in
+
+Every new session, whatever the sign-in method, starts on the shop the user used last. If that shop is gone or access was removed, it starts on the first shop in their list. A session that has no shop yet but whose user now has one gets the same choice on its next request, so the dashboard opens with the shop already selected. A user with no shop at all is sent from any shop page to `/setup` on the server, before the page paints. The "Choose a shop" page remains only for a user who has shops but lost access to the one in use.
+
+The header logo cell is as wide as the sidebar and shares its edge. Evidence: `docs/design/evidence/fix-auto-select-shop/`.

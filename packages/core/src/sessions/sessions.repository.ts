@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, isNull, ne, sql, desc, lt } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, ne, sql, desc, lt } from 'drizzle-orm';
 
 import type { CreateSessionInput, Session } from '@dakly/contracts/sessions';
 import type { Database } from '@dakly/db/client';
@@ -185,6 +185,18 @@ export class SessionsRepository {
         .set({ revokedAt: now })
         .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt))),
     );
+  }
+
+  async lastUsedStoreId(userId: string): Promise<string | undefined> {
+    const rows = await this.account.forUser(userId, (tx) =>
+      tx
+        .select({ storeId: sessions.activeStoreId })
+        .from(sessions)
+        .where(and(eq(sessions.userId, userId), isNotNull(sessions.activeStoreId)))
+        .orderBy(desc(sessions.lastSeenAt))
+        .limit(1),
+    );
+    return rows[0]?.storeId ?? undefined;
   }
 
   async setActiveStore(userId: string, id: string, storeId: string, now: Date): Promise<boolean> {

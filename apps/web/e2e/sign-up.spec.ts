@@ -90,13 +90,6 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
     );
     await page.getByRole('button', { name: 'Finish sign-in' }).click();
     await reverified;
-    await expect(
-      otherPage.getByRole('heading', { name: 'Choose a shop', exact: true }),
-    ).toBeVisible();
-    await expect(otherPage.getByRole('heading', { name: 'Dashboard', exact: true })).toBeHidden();
-    await page
-      .getByRole('combobox', { name: 'Current shop' })
-      .selectOption({ label: 'Dhaka Stationery' });
     await expect(otherPage.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
     await expect(page).toHaveURL(`${baseURL}/dashboard`);
     expect(

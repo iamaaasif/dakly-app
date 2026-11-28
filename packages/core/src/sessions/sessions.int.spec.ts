@@ -49,7 +49,10 @@ describe('SessionsService (Postgres)', () => {
       new AccountTransaction(account),
       events,
       clock as Clock,
-      {} as TeamService,
+      {
+        accessFor: async () => undefined,
+        storesFor: async () => ({ items: [], nextCursor: null }),
+      } as unknown as TeamService,
       context.get(UsersService),
     );
     const rows = await admin.db

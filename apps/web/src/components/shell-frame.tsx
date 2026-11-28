@@ -46,7 +46,7 @@ export function ShellFrame({
         Skip to content
       </a>
       <KeyboardShortcuts />
-      <ShellHeader {...{ data, blocked, actions, onSwitch, onSignOut }} />
+      <ShellHeader {...{ data, blocked, actions, onSwitch, onSignOut, collapsed }} />
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
@@ -68,7 +68,7 @@ export function ShellFrame({
           key={`${data.contextTag}:${generation}`}
         >
           <ShellNavigationCollapse value={setCollapsed}>
-            {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}
+            {needsStore ? <StoreRequired /> : children}
           </ShellNavigationCollapse>
         </div>
       </div>
@@ -79,12 +79,12 @@ export function ShellFrame({
 type ShellHeaderProps = Pick<
   ShellFrameProps,
   'data' | 'blocked' | 'actions' | 'onSwitch' | 'onSignOut'
->;
-function ShellHeader({ data, blocked, actions, onSwitch, onSignOut }: ShellHeaderProps) {
+> & { collapsed: boolean };
+function ShellHeader({ data, blocked, actions, onSwitch, onSignOut, collapsed }: ShellHeaderProps) {
   return (
-    <header className="relative z-30 flex min-h-[3.5625rem] shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 md:sticky md:top-0 md:h-[3.5625rem] md:flex-nowrap md:gap-3 md:px-3.5 md:py-0">
+    <header className="relative z-30 flex min-h-[3.5625rem] shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 md:sticky md:top-0 md:h-[3.5625rem] md:flex-nowrap md:gap-3 md:p-0 md:pr-3.5">
       <MobileNavigation session={data} blocked={blocked} onSignOut={onSignOut} />
-      <ShellLogo />
+      <ShellLogo collapsed={collapsed} />
       <div className="order-last w-full min-w-0 md:order-none md:w-64 md:shrink-0">
         <StoreSwitcher session={data} onSwitch={onSwitch} />
       </div>
@@ -96,16 +96,22 @@ function ShellHeader({ data, blocked, actions, onSwitch, onSignOut }: ShellHeade
   );
 }
 
-function ShellLogo() {
+// On desktop this cell is as wide as the sidebar, so the header and the rail share one edge.
+function ShellLogo({ collapsed }: { collapsed: boolean }) {
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div
+      className={cn(
+        'flex min-w-0 items-center gap-3 md:h-full md:shrink-0 md:border-r md:border-border md:px-3.5',
+        collapsed ? 'md:w-16' : 'md:w-62',
+      )}
+    >
       <span
         aria-hidden="true"
         className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-md font-bold text-on-primary"
       >
         D
       </span>
-      <div className="min-w-0 max-sm:hidden">
+      <div className={cn('min-w-0 max-sm:hidden', collapsed && 'md:hidden')}>
         <p className="text-md leading-5 font-bold">
           Dakly <span className="text-primary">AI</span>
         </p>

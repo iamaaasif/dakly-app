@@ -16,7 +16,6 @@ export type SignInRequest = {
   ip: string;
   userAgent?: string;
   isRemembered: boolean;
-  selectFirstStore?: boolean;
 };
 // A pending registration is inserted in the same account transaction as its first session.
 export type SignInUser = {

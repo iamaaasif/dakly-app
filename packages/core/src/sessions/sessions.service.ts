@@ -123,19 +123,16 @@ export class SessionsService {
 
   async create(
     userId: string,
-    { selectFirstStore, ...input }: CreateSessionInput & { selectFirstStore?: boolean },
+    input: CreateSessionInput,
   ): Promise<{ token: string; session: Session }> {
     const token = randomBytes(32).toString('base64url');
     const now = this.clock.now();
-    const firstStore = selectFirstStore
-      ? (await this.team.storesFor(userId, { limit: 1 })).items[0]
-      : undefined;
     const session = await this.repository.insert(userId, {
       tokenHash: hashToken(token),
       input,
       now,
       expiresAt: new Date(now.getTime() + lifetimeMilliseconds(input.isRemembered)),
-      activeStoreId: firstStore?.storeId,
+      activeStoreId: await this.defaultStoreId(userId),
     });
     return { token, session };
   }
@@ -144,6 +141,15 @@ export class SessionsService {
     const session = await this.repository.findByTokenHash(hashToken(token), this.clock.now());
     const now = this.clock.now();
     if (!session || session.expiresAt.getTime() <= now.getTime()) return undefined;
+    if (!session.activeStoreId) {
+      // Sessions made before a shop existed, or before this rule, still land on a shop.
+      const storeId = await this.defaultStoreId(session.userId);
+      if (
+        storeId &&
+        (await this.repository.setActiveStore(session.userId, session.id, storeId, now))
+      )
+        session.activeStoreId = storeId;
+    }
     if (session.lastSeenAt.getTime() <= now.getTime() - TOUCH_INTERVAL) {
       await this.repository.touch(session.userId, session.id, {
         lifetimeMilliseconds: lifetimeMilliseconds(session.isRemembered),
@@ -178,6 +184,13 @@ export class SessionsService {
     if (!(await this.team.accessFor(storeId, userId))) throw sessionError('STORE_NOT_FOUND');
     if (!(await this.repository.setActiveStore(userId, sessionId, storeId, this.clock.now())))
       throw new AppError('AUTH_REQUIRED', PLATFORM_ERRORS.AUTH_REQUIRED);
+  }
+
+  // The shop used last, or the first shop when none was used or access was lost.
+  private async defaultStoreId(userId: string): Promise<string | undefined> {
+    const lastUsed = await this.repository.lastUsedStoreId(userId);
+    if (lastUsed && (await this.team.accessFor(lastUsed, userId))) return lastUsed;
+    return (await this.team.storesFor(userId, { limit: 1 })).items[0]?.storeId;
   }
 
   private async revokeSessions(userId: string, sessionId: string, others: boolean): Promise<void> {
