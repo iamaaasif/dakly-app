@@ -115,6 +115,7 @@ export class ProductImportService {
         shortDescription: null,
         barcode: null,
         tags: [],
+        collections: [],
         aliases: [],
         weightGrams: null,
         compareAtPricePoisha: null,

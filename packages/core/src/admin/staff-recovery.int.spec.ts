@@ -238,7 +238,7 @@ afterAll(async () => {
   await database.pool.query('delete from account_security_events where user_id=any($1::uuid[])', [
     userIds,
   ]);
-  for (const table of ['audit_log', 'subscriptions', 'store_counters'])
+  for (const table of ['audit_log', 'subscriptions', 'store_counters', 'delivery_zones'])
     await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [storeIds]);
   await database.pool.query('delete from memberships where store_id=any($1::uuid[])', [storeIds]);
   await database.pool.query('delete from sessions where user_id=any($1::uuid[])', [userIds]);

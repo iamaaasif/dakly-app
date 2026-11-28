@@ -261,7 +261,7 @@ describe('Chat list', () => {
   it('collapses and reopens the Inbox folders', async () => {
     respond(() => ok([sadia]));
     show();
-    const toggle = screen.getByRole('button', { name: 'Collapse inbox folders' });
+    const toggle = await screen.findByRole('button', { name: 'Collapse inbox folders' });
     expect(screen.getByRole('navigation', { name: 'Chat folders' })).toBeTruthy();
     await userEvent.click(toggle);
     expect(
@@ -300,6 +300,16 @@ describe('Chat list', () => {
       screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('false');
     expect(screen.getByRole('combobox', { name: 'Chat folder' })).toBeTruthy();
+  });
+
+  it('opens every filter in one sheet on a phone and counts the ones that are on', async () => {
+    respond(() => ok([sadia]));
+    show(chatScreenQuerySchema.parse({ state: 'snoozed', sort: 'unread' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Filters, 2 on' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Filter chats' });
+    for (const label of ['Chat folder', 'Chat state', 'Sort chats'])
+      expect(within(sheet).getByRole('combobox', { name: label })).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: 'Clear all' })).toBeTruthy();
   });
 
   it('says why a chat needs the team on its row', async () => {
@@ -409,6 +419,8 @@ describe('Chat list', () => {
     connectionKinds = [];
     respond(() => ok([]));
     show();
+    // The inbox must not paint first and then turn into the Connect page.
+    expect(screen.queryByRole('group', { name: 'Inbox controls' })).toBeNull();
     expect(await screen.findByRole('heading', { name: 'Connect your channel' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Connect with Channel' }).getAttribute('href')).toBe(
       '/integrations',
@@ -624,6 +636,17 @@ describe('Conversation', () => {
     expect((posts[2]?.body as { operationKey: string }).operationKey).not.toBe(
       (posts[0]?.body as { operationKey: string }).operationKey,
     );
+  });
+
+  it('keeps the extra tools behind a button the phone can open and close', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const toggle = await screen.findByRole('button', { name: 'Show extras' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await userEvent.click(toggle);
+    const hide = screen.getByRole('button', { name: 'Hide extras' });
+    expect(hide.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById(hide.getAttribute('aria-controls') ?? '')).toBeTruthy();
   });
 
   it('fills the box from a saved reply the staff member picks', async () => {

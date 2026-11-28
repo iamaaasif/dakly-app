@@ -115,7 +115,11 @@ function OrdersHeader({ heading, query }: OrdersHeaderProps) {
       <div className="flex flex-wrap items-start gap-2">
         {store?.canExportOrders ? <OrderExportMenu query={query} /> : null}
         {canCreate ? (
-          <Link href="/orders/new" className={cn(buttonVariants(), 'min-h-11 sm:min-h-10')}>
+          <Link
+            href="/orders/new"
+            data-shortcut="new"
+            className={cn(buttonVariants(), 'min-h-11 sm:min-h-10')}
+          >
             <span aria-hidden="true">+ </span>New order
           </Link>
         ) : null}

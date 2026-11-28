@@ -9,6 +9,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 
 import { useConversations } from '../api/conversations';
 import { conversationFilters, type ChatScreenQuery } from '../chat-filters';
+import { AiNotLiveBanner } from './ai-not-live-banner';
 import { ChatBulkBar } from './chat-bulk-bar';
 import { ChatRow } from './chat-row';
 import { ChatSearchBar } from './chat-search-bar';
@@ -41,6 +42,7 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
           </Button>
         ) : null}
       </div>
+      <AiNotLiveBanner query={query} />
       {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <ChatRows query={query} selected={selected} canSelect={canEdit} onSelect={setSelected} />

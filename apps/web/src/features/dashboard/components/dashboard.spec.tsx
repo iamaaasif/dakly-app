@@ -46,7 +46,15 @@ afterEach(cleanup);
 
 describe('Dashboard', () => {
   it('puts the shop overview and available shortcuts on the dashboard', () => {
-    render(<Dashboard period={30} setupCard={null} activity={{}} support={support} />);
+    render(
+      <Dashboard
+        period={30}
+        setupCard={null}
+        activityLoading={false}
+        activity={{}}
+        support={support}
+      />,
+    );
     expect(screen.getByRole('heading', { name: 'Good morning, Rina' })).toBeTruthy();
     const overview = screen.getByRole('region', { name: 'Shop overview' });
     expect(within(overview).getByText('৳2,100 in sales since yesterday.')).toBeTruthy();
@@ -66,11 +74,21 @@ describe('Dashboard', () => {
     expect(screen.queryByRole('navigation', { name: 'Reporting period' })).toBeNull();
   });
 
+  it('shows only a placeholder until the counts and setup steps have answered', () => {
+    render(
+      <Dashboard period={30} setupCard={null} activityLoading activity={{}} support={support} />,
+    );
+    expect(screen.getByRole('status').textContent).toContain('Loading your dashboard');
+    expect(screen.queryByRole('region', { name: 'Shop overview' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Your to-do list' })).toBeNull();
+  });
+
   it('shows live work that needs attention and links to the matching queues', () => {
     render(
       <Dashboard
         period={30}
         setupCard={null}
+        activityLoading={false}
         activity={{ chatsWaiting: 2, ordersToConfirm: 1, ordersToPack: 3 }}
         support={support}
       />,
@@ -92,6 +110,7 @@ describe('Dashboard', () => {
         <Dashboard
           period={30}
           setupCard={null}
+          activityLoading={false}
           activity={{ chatsWaiting: 2, ordersToConfirm: 1, ordersToPack: 3 }}
           support={support}
         />,

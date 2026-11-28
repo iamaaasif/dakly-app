@@ -161,6 +161,7 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
 // Set while the canvas is being edited.
 export type CanvasEditing = {
   canAdd: boolean;
+  canAddKind: (kind: NewStepKind) => boolean;
   insert: (edge: { parent: string; target: string }, kind: NewStepKind) => void;
   insertAfterMerge: (target: string, kind: NewStepKind) => void;
   remove: (key: string) => void;

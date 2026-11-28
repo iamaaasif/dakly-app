@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { useAutomations } from '../api/automations';
 import { AutomationRow } from './automation-row';
+import { AutomationsEmpty } from './automations-empty';
 import { useSessionContext } from '@/lib/session-context';
 
 const tabs = [
@@ -32,44 +33,48 @@ export function AutomationsScreen() {
   return (
     <main className="space-y-6 p-4 md:p-8">
       <WorkflowHeader canEdit={canEdit} />
-      <Tabs
-        value={selected}
-        activationMode="manual"
-        onValueChange={(tab) =>
-          router.push(tab === 'all' ? pathname : `${pathname}?tab=${tab}`, { scroll: false })
-        }
-        className="rounded-lg border border-border bg-surface"
-      >
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
-          <h2 className="font-semibold">Your workflows</h2>
-          <TabsList
-            aria-label="Workflow status"
-            className="max-w-full rounded-md border-0 bg-surface-muted p-0.5"
-          >
-            {tabs.map(({ key, label }) => {
-              const count = items.filter(({ status }) => key === 'all' || status === key).length;
-              return (
-                <TabsTrigger
-                  key={key}
-                  value={key}
-                  aria-label={workflows.data ? `${label} ${count}` : label}
-                  className="m-0 rounded-md border-0 px-2 text-sm data-[state=active]:bg-surface"
-                >
-                  {label}
-                  {workflows.data && (
-                    <span className="ml-1 text-text-muted tabular-nums">{count}</span>
-                  )}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </header>
-        {tabs.map(({ key }) => (
-          <TabsContent key={key} value={key} className="pt-0">
-            <WorkflowList workflows={workflows} items={selectedItems} canEdit={canEdit} />
-          </TabsContent>
-        ))}
-      </Tabs>
+      {workflows.data && items.length === 0 ? (
+        <AutomationsEmpty canEdit={canEdit} />
+      ) : (
+        <Tabs
+          value={selected}
+          activationMode="manual"
+          onValueChange={(tab) =>
+            router.push(tab === 'all' ? pathname : `${pathname}?tab=${tab}`, { scroll: false })
+          }
+          className="rounded-lg border border-border bg-surface"
+        >
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+            <h2 className="font-semibold">Your workflows</h2>
+            <TabsList
+              aria-label="Workflow status"
+              className="max-w-full rounded-md border-0 bg-surface-muted p-0.5"
+            >
+              {tabs.map(({ key, label }) => {
+                const count = items.filter(({ status }) => key === 'all' || status === key).length;
+                return (
+                  <TabsTrigger
+                    key={key}
+                    value={key}
+                    aria-label={workflows.data ? `${label} ${count}` : label}
+                    className="m-0 rounded-md border-0 px-2 text-sm data-[state=active]:bg-surface"
+                  >
+                    {label}
+                    {workflows.data && (
+                      <span className="ml-1 text-text-muted tabular-nums">{count}</span>
+                    )}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </header>
+          {tabs.map(({ key }) => (
+            <TabsContent key={key} value={key} className="pt-0">
+              <WorkflowList workflows={workflows} items={selectedItems} canEdit={canEdit} />
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
     </main>
   );
 }
@@ -85,7 +90,7 @@ function WorkflowHeader({ canEdit }: { canEdit: boolean }) {
         </p>
       </div>
       {canEdit && (
-        <Link href="/automations/new" className={buttonVariants()}>
+        <Link href="/automations/new" data-shortcut="new" className={buttonVariants()}>
           <Plus size={16} aria-hidden="true" /> Create workflow
         </Link>
       )}

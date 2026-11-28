@@ -16,6 +16,7 @@ import {
 } from './product-fields';
 import { ProductBrandField, ProductCategoryField } from './product-list-fields';
 import { ProductNegotiationFields } from './product-negotiation-fields';
+import { ProductCollectionsField, ProductTagsField } from './product-tags-field';
 import { ProductInventory, ProductVariantsCard } from './product-variants-card';
 
 export type ProductFormPage = {
@@ -78,7 +79,9 @@ function PageSidebar({ page }: { page: ProductFormPage }) {
       {page.status}
       <FieldCard title="Organisation">
         <ProductCategoryField />
+        <ProductTagsField />
         <ProductBrandField />
+        <ProductCollectionsField />
       </FieldCard>
       <FieldCard title="Packaging">
         <ProductDeliveryFields />
@@ -112,7 +115,7 @@ export function ProductFormPageLayout(props: ProductFormPageLayoutProps) {
           {conflict ? <ProductSaveError {...saveError} /> : null}
           <Card className="space-y-4">
             <ProductNameFields productId={productId} onPage />
-            <ProductDescriptionFields productId={productId} />
+            <ProductDescriptionFields productId={productId} onPage />
           </Card>
         </fieldset>
         <PageSidebar page={page} />

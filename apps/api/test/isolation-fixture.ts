@@ -247,6 +247,8 @@ export class IsolationFixture {
       'ad_sources',
       'ad_product_links',
       'product_variants',
+      'product_collection_links',
+      'product_collections',
       'product_tag_links',
       'product_tags',
       'products',

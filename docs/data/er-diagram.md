@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0121_snapshot.json`: **114 tables, 1483 columns, 447 explicit indexes and 352 foreign keys**.
+Built from `packages/db/migrations/meta/0122_snapshot.json`: **116 tables, 1490 columns, 450 explicit indexes and 356 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -907,7 +907,7 @@ erDiagram
 
 ## Products, orders and payments
 
-Schema files: `products.ts`, `product-tags.ts`, `orders.ts`, `payments.ts`.
+Schema files: `products.ts`, `product-tags.ts`, `product-collections.ts`, `orders.ts`, `payments.ts`.
 
 ```mermaid
 erDiagram
@@ -941,6 +941,10 @@ erDiagram
     stores ||..o{ product_tag_links : "store_id"
     products ||..o{ product_tag_links : "store_id, product_id"
     product_tags ||..o{ product_tag_links : "store_id, tag_id"
+    stores ||..o{ product_collections : "store_id"
+    stores ||..o{ product_collection_links : "store_id"
+    products ||..o{ product_collection_links : "store_id, product_id"
+    product_collections ||..o{ product_collection_links : "store_id, collection_id"
     stores ||..o{ delivery_zones : "store_id"
     stores ||..o{ discount_codes : "store_id"
     contacts |o..o{ discount_codes : "contact_id"
@@ -1114,6 +1118,17 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         uuid product_id PK,FK "NOT NULL; uuid"
         uuid tag_id PK,FK "NOT NULL; uuid"
+    }
+    product_collections {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text name "NOT NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    product_collection_links {
+        uuid store_id FK "NOT NULL; uuid"
+        uuid product_id PK,FK "NOT NULL; uuid"
+        uuid collection_id PK,FK "NOT NULL; uuid"
     }
     delivery_zones {
         uuid id PK "NOT NULL; uuid"
@@ -2424,6 +2439,10 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
 | `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
 | `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
+| `product_collection_links_store_id_stores_id_fk`                     | `product_collection_links(store_id)`                      | `stores(id)`                                | no action |
+| `product_collection_links_product_store_fk`                          | `product_collection_links(store_id, product_id)`          | `products(store_id, id)`                    | cascade   |
+| `product_collection_links_collection_store_fk`                       | `product_collection_links(store_id, collection_id)`       | `product_collections(store_id, id)`         | cascade   |
+| `product_collections_store_id_stores_id_fk`                          | `product_collections(store_id)`                           | `stores(id)`                                | no action |
 | `product_tag_links_store_id_stores_id_fk`                            | `product_tag_links(store_id)`                             | `stores(id)`                                | no action |
 | `product_tag_links_product_store_fk`                                 | `product_tag_links(store_id, product_id)`                 | `products(store_id, id)`                    | cascade   |
 | `product_tag_links_tag_store_fk`                                     | `product_tag_links(store_id, tag_id)`                     | `product_tags(store_id, id)`                | cascade   |

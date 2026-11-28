@@ -5,6 +5,7 @@ import { Badge } from '@dakly/ui/badge';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
+import { useAiBlockers } from '../ai-blockers';
 import { useConversationAssignees } from '../api/conversations';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
@@ -135,6 +136,19 @@ function UnreadCount({ count }: { count: number }) {
   );
 }
 
+// The AI badge on a chat the AI cannot answer yet would mislead the seller.
+function ResponderBadge({ responder }: { responder: ConversationResponse['responder'] }) {
+  const aiNotLive = useAiBlockers().length > 0;
+  let label = 'AI';
+  if (responder === 'paused') label = 'AI paused';
+  else if (aiNotLive) label = 'AI not live';
+  return (
+    <Badge variant="inverse" size="sm">
+      {label}
+    </Badge>
+  );
+}
+
 function ChatRowBadges({ conversation }: { conversation: ConversationResponse }) {
   const { status, handoverReason, responder, contactKind, assigneeUserId } = conversation;
   const waiting = waitingState(conversation, new Date());
@@ -149,11 +163,7 @@ function ChatRowBadges({ conversation }: { conversation: ConversationResponse })
         Waiting for them
       </Badge>
     ) : null,
-    responder === 'human' ? null : (
-      <Badge key="responder" variant="inverse" size="sm">
-        {responder === 'ai' ? 'AI' : 'AI paused'}
-      </Badge>
-    ),
+    responder === 'human' ? null : <ResponderBadge key="responder" responder={responder} />,
     contactKind === 'lead' ? (
       <Badge key="lead" variant="success" size="sm">
         Lead saved

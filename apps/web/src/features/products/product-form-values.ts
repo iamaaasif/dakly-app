@@ -42,6 +42,8 @@ export function formValues({
         initialStock: Number(initial?.stock || 0),
       },
     ],
+    tags: [],
+    collections: [],
     isStockTracked: true,
     status: 'hidden',
   };
@@ -55,6 +57,10 @@ function sourceFormValues(
   return {
     name: isDuplicate ? copyName(source.name) : source.name,
     description: source.description,
+    shortDescription: source.shortDescription,
+    barcode: source.barcode,
+    tags: source.tags,
+    collections: source.collections,
     categoryId: source.categoryId,
     brandId: source.brandId,
     weightGrams: weightText(source.weightGrams),

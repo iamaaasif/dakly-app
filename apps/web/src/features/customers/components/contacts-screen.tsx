@@ -41,7 +41,7 @@ export function ContactsScreen(initial: ContactsScreenState) {
   const { data: context } = useSessionContext();
   const hrefFor: ListHref = (chosen, change) => contactsHref(query, chosen, change);
   const addButton = context?.currentStore?.canCreateCustomer ? (
-    <Button onClick={() => setAdding('choose')} className="gap-2">
+    <Button onClick={() => setAdding('choose')} className="gap-2" data-shortcut="new">
       <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add contact
     </Button>
   ) : undefined;

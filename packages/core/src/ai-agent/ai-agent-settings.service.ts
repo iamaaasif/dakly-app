@@ -2,12 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type {
   AgentSettingsResponse,
+  AgentUsageResponse,
   SaveAgentSettingsInput,
 } from '@dakly/contracts/ai-agent-settings';
 
 import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { UsageService } from '../usage/usage.service';
 import { agentSettingsError } from './ai-agent-settings.errors';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 
@@ -18,10 +20,19 @@ export class AiAgentSettingsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(UsageService) private readonly usage: UsageService,
   ) {}
 
   view(storeId: string) {
     return this.settings.view(storeId);
+  }
+
+  async aiUsage(storeId: string): Promise<AgentUsageResponse> {
+    const { allowance, remaining, periodEnd } = await this.usage.summary(
+      storeId,
+      'ai_conversation',
+    );
+    return { allowance, remaining, periodEnd: periodEnd.toISOString() };
   }
 
   async save(storeId: string, userId: string, input: SaveAgentSettingsInput) {

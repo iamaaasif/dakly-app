@@ -7,6 +7,7 @@ import type { ProductFormValues, ProductResponse } from '@dakly/contracts/produc
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
+import { ProductInputField } from './product-input-field';
 import { ProductOptionEditor, useGridOptions } from './product-option-editor';
 import { ProductTrackStock } from './product-track-stock';
 import { ProductVariantTable } from './product-variant-table';
@@ -52,32 +53,40 @@ export function ProductInventory() {
     <>
       <ProductTrackStock />
       {hasOptions && tracked ? <ProductWarnAtField /> : null}
-      {hasOptions ? null : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {tracked ? (
-            <>
-              <FormField name="variants.0.initialStock" label="Available stock">
-                {(control) => (
-                  <Input
-                    {...control}
-                    inputMode="numeric"
-                    value={String(stock ?? 0)}
-                    onChange={(event) =>
-                      form.setValue(
-                        'variants.0.initialStock',
-                        Number(event.target.value.replace(/\D/g, '')) || 0,
-                        { shouldDirty: true },
-                      )
-                    }
-                  />
-                )}
-              </FormField>
-              <ProductWarnAtField />
-            </>
-          ) : null}
-          <ProductSkuField />
-        </div>
-      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {hasOptions ? null : (
+          <>
+            {tracked ? (
+              <>
+                <FormField name="variants.0.initialStock" label="Available stock">
+                  {(control) => (
+                    <Input
+                      {...control}
+                      inputMode="numeric"
+                      value={String(stock ?? 0)}
+                      onChange={(event) =>
+                        form.setValue(
+                          'variants.0.initialStock',
+                          Number(event.target.value.replace(/\D/g, '')) || 0,
+                          { shouldDirty: true },
+                        )
+                      }
+                    />
+                  )}
+                </FormField>
+                <ProductWarnAtField />
+              </>
+            ) : null}
+            <ProductSkuField />
+          </>
+        )}
+        <ProductInputField
+          name="barcode"
+          label="Barcode"
+          placeholder="e.g. 8901234567890"
+          optional
+        />
+      </div>
     </>
   );
 }

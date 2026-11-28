@@ -93,7 +93,7 @@ describe('product media uploaded before the product exists', () => {
     {} as never,
     {} as never,
     { unitsToConfirm: async () => [] } as never,
-    {} as never,
+    { save: async () => undefined } as never,
     media,
   );
   const actor = { kind: 'user', userId: f.userA } as const;
@@ -141,6 +141,83 @@ describe('product media uploaded before the product exists', () => {
     expect(() =>
       createProductSchema.parse({ name: 'x', imageFileIds: [fileId, fileId] }),
     ).toThrow();
+  });
+
+  it('gives a size one photo: a waiting upload is attached, a product photo is reused, null clears it', async () => {
+    const cover = await uploaded();
+    const sizePhoto = await uploaded();
+    const sizes = createProductSchema.parse({
+      name: 'Sized fixture',
+      imageFileIds: [cover],
+      options: [{ name: 'Size', values: ['S', 'M'] }],
+      variants: [
+        { optionValues: { Size: 'S' }, imageFileId: sizePhoto },
+        { optionValues: { Size: 'M' }, imageFileId: cover },
+      ],
+    });
+    const item = await service.create(f.a, sizes, actor);
+    const [small, medium] = item.variants;
+    expect(small).toMatchObject({ imageFileId: sizePhoto, imageFileIds: [sizePhoto] });
+    expect(medium).toMatchObject({ imageFileId: cover });
+    expect((await f.row('files', sizePhoto))!.expires_at).toBeNull();
+
+    const kept = await service.edit(f.a, item.id, { name: 'Sized fixture 2' }, actor);
+    expect(kept.variants.map((variant) => variant.imageFileId)).toEqual([sizePhoto, cover]);
+
+    const cleared = await service.edit(
+      f.a,
+      item.id,
+      {
+        options: item.options,
+        variants: item.variants.map(({ id, optionValues }, index) => ({
+          id,
+          optionValues,
+          imageFileId: index === 0 ? null : undefined,
+        })),
+      },
+      actor,
+    );
+    expect(cleared.variants.map((variant) => variant.imageFileId)).toEqual([null, cover]);
+    expect((await f.row('files', sizePhoto))!.expires_at).not.toBeNull();
+    expect((await f.row('files', cover))!.expires_at).toBeNull();
+  });
+
+  it('keeps a photo a size still uses when it is removed from the product', async () => {
+    const cover = await uploaded();
+    const item = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Kept size photo',
+        imageFileIds: [cover],
+        options: [{ name: 'Size', values: ['S'] }],
+        variants: [{ optionValues: { Size: 'S' }, imageFileId: cover }],
+      }),
+      actor,
+    );
+    await service.removePhoto(f.a, item.id, cover, actor);
+    const after = await service.getById(f.a, item.id);
+    expect(after.imageFileIds).toEqual([]);
+    expect(after.variants[0]).toMatchObject({ imageFileId: cover });
+    expect((await f.row('files', cover))!.expires_at).toBeNull();
+  });
+
+  it('refuses a size photo that is not a waiting upload or a photo of the product', async () => {
+    const used = await uploaded();
+    await create([used]);
+    const withPhoto = (imageFileId: string) =>
+      service.create(
+        f.a,
+        createProductSchema.parse({
+          name: 'Bad size photo',
+          options: [{ name: 'Size', values: ['S'] }],
+          variants: [{ optionValues: { Size: 'S' }, imageFileId }],
+        }),
+        actor,
+      );
+    await expect(withPhoto(used)).rejects.toMatchObject({ code: 'PRODUCT_PHOTO_NOT_FOUND' });
+    await expect(withPhoto(randomUUID())).rejects.toMatchObject({
+      code: 'PRODUCT_PHOTO_NOT_FOUND',
+    });
   });
 
   it('rejects a confirm that does not match the stored object and limits waiting photos', async () => {

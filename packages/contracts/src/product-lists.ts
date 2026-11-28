@@ -26,6 +26,10 @@ export type ProductBrandInput = z.infer<typeof productBrandSchema>;
 export type ProductTagResponse = { id: string; name: string; productCount: number };
 export type ProductTagListResponse = { items: ProductTagResponse[] };
 
+// Collections work like tags: made by typing a name on a product, listed by use.
+export type ProductCollectionResponse = { id: string; name: string; productCount: number };
+export type ProductCollectionListResponse = { items: ProductCollectionResponse[] };
+
 export type ProductCategoryResponse = {
   id: string;
   name: string;

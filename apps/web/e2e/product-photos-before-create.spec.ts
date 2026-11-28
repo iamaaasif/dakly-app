@@ -89,7 +89,7 @@ test('adds photos before the product exists, reorders them and attaches them on 
     await page.getByRole('button', { name: 'Photo 3 options' }).click();
     await page.getByRole('menuitem', { name: 'Remove' }).click();
     await expect(page.getByRole('img', { name: 'Photo 3' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Undo' }).click();
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(page.getByRole('img', { name: 'Photo 3' })).toBeVisible();
 
     // The second photo becomes the cover.

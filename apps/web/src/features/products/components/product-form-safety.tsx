@@ -9,6 +9,7 @@ import { useLeaveGuard } from '../use-leave-guard';
 import { clearProductDraft, readProductDraft, useProductDraft } from '../use-product-draft';
 import { SessionDialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
+import { submitFormFromKeyboard } from '@/lib/submit-form';
 
 type ProductFormSafetyProps = {
   formRef: RefObject<HTMLFormElement | null>;
@@ -81,9 +82,7 @@ function useSaveShortcuts(formRef: RefObject<HTMLFormElement | null>) {
     function handleKey(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || (event.key !== 's' && event.key !== 'Enter')) return;
       event.preventDefault();
-      const form = formRef.current;
-      const submit = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
-      if (form && submit && !submit.disabled) form.requestSubmit();
+      submitFormFromKeyboard(formRef.current);
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);

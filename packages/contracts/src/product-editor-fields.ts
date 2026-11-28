@@ -38,6 +38,11 @@ export const productEditorFields = {
     .array(z.string().trim().min(1, 'Enter a tag').max(50, 'Use 50 characters or fewer'))
     .max(30, 'Use 30 tags or fewer')
     .default([]),
+  // Collections are created by name too, like tags.
+  collections: z
+    .array(z.string().trim().min(1, 'Enter a collection').max(60, 'Use 60 characters or fewer'))
+    .max(30, 'Use 30 collections or fewer')
+    .default([]),
   // Read only when stock is not tracked; a tracked product follows its available count.
   stockStatus: z.enum(productStockStatuses).default('in_stock'),
 };
@@ -47,6 +52,7 @@ export const productEditorChanges = {
   shortDescription: productEditorFields.shortDescription.unwrap().optional(),
   barcode: productEditorFields.barcode.unwrap().optional(),
   tags: productEditorFields.tags.unwrap().optional(),
+  collections: productEditorFields.collections.unwrap().optional(),
   stockStatus: productEditorFields.stockStatus.unwrap().optional(),
 };
 

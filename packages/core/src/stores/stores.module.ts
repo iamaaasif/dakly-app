@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { UsersModule } from '../auth/users.module';
 import { BillingModule } from '../billing/billing.module';
+import { DeliveryModule } from '../delivery/delivery.module';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SessionsModule } from '../sessions/sessions.module';
@@ -23,6 +24,7 @@ import { StoresService } from './stores.service';
     TeamModule,
     ClockModule,
     OutboxModule,
+    DeliveryModule,
   ],
   controllers: [StoresController, PlansController, StoreSettingsController],
   providers: [StoresService, StoresRepository, MaintenanceStoresRepository],

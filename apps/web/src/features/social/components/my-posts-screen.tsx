@@ -152,7 +152,7 @@ function MyPostsHeader({ hasAccounts, canEdit, onSchedule }: HeaderProps) {
             <Clock aria-hidden="true" size={16} strokeWidth={1.75} /> Posting schedule
           </Button>
           {canEdit && (
-            <Link href="/social/posts/new" className={buttonVariants()}>
+            <Link href="/social/posts/new" data-shortcut="new" className={buttonVariants()}>
               <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Create post
             </Link>
           )}

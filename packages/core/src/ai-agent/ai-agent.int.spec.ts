@@ -369,6 +369,54 @@ it('hands over an exhausted allowance without calling the model or spending a un
   expect(await intentTags(active)).toEqual([null]);
 });
 
+it.each([
+  ['Bangla', 'পাঞ্জাবির দাম কত?'],
+  ['Banglish', 'panjabir dam koto? delivery kobe pabo'],
+  ['mixed', 'আমার size L, panjabi ta ache ki?'],
+])(
+  'hands over and alerts the team once the reply job gives up on a %s message',
+  async (_, text) => {
+    const active = await shop();
+    const message = await receive(active, text);
+    await agent.handOverAfterFailure(active.storeId, message.conversation_id, message.id);
+    await agent.handOverAfterFailure(active.storeId, message.conversation_id, message.id);
+    const seen = await observe(active);
+    expect(seen).toMatchObject({
+      conversations: [
+        { status: 'needs_you', responder: 'human', handover_reason: 'ai_unavailable' },
+      ],
+      notices: [{ user_id: active.owner, type: 'conversation.handed_over' }],
+      runs: [],
+      usage: [],
+    });
+    expect(seen.replies).toHaveLength(1);
+    expect(seen.replies[0]).toMatchObject({ author_type: 'system' });
+    expect(seen.replies[0].body).not.toMatch(/[৳\d]/);
+    const { rows } = await admin.pool.query<{ handover_summary: string }>(
+      'select handover_summary from conversations where store_id = $1',
+      [active.storeId],
+    );
+    expect(rows[0]!.handover_summary).toContain(`(the AI could not reply) | Issue: ${text}`);
+  },
+);
+
+it('leaves the chat alone when the customer wrote again or a person took over after a failed job', async () => {
+  const active = await shop();
+  const first = await receive(active, 'price koto?');
+  const second = await receive(active, 'ar size ache?');
+  await agent.handOverAfterFailure(active.storeId, first.conversation_id, first.id);
+  expect(await observe(active)).toMatchObject({
+    conversations: [{ responder: 'ai', handover_reason: null }],
+    replies: [],
+    notices: [],
+  });
+  await admin.pool.query("update conversations set responder = 'human' where store_id = $1", [
+    active.storeId,
+  ]);
+  await agent.handOverAfterFailure(active.storeId, second.conversation_id, second.id);
+  expect((await observe(active)).replies).toEqual([]);
+});
+
 it('hands a chat to people without calling the model while staff pause AI replies', async () => {
   const active = await shop();
   const staffId = randomUUID();
@@ -434,7 +482,7 @@ it('drops a holding reply when another message arrives during classification wit
   });
   await agent.reply(active.storeId, original.conversation_id, original.id);
   expect(await observe(active)).toMatchObject({
-    conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
+    conversations: [{ responder: 'ai', handover_reason: null }],
     replies: [],
     notices: [],
     usage: [],
@@ -483,7 +531,7 @@ it('answers after a routine classification', async () => {
   );
   await agent.reply(active.storeId, message.conversation_id, message.id);
   expect(await observe(active)).toMatchObject({
-    conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
+    conversations: [{ responder: 'ai', handover_reason: null }],
     replies: [
       {
         body: 'Assalamu alaikum, ki lagbe?',
@@ -656,7 +704,7 @@ it('answers price and delivery from tool results, saves the run and sources, and
   expect(inputs[2]).toContain('<tool_results untrusted="true" round="1">');
   expect(inputs[1]).toContain('<conversation untrusted="true">');
   expect(await observe(active)).toMatchObject({
-    conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
+    conversations: [{ responder: 'ai', handover_reason: null }],
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },

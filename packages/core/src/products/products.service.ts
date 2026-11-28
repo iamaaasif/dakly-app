@@ -40,7 +40,8 @@ import {
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductMediaService } from './product-media.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
-import { ProductTagsService } from './product-tags.service';
+import { ProductOrganisationService } from './product-organisation.service';
+import { planVariantPhotos, variantWrites } from './product-variant-writes';
 import { assertNegotiationTerms, assertProductVersion, productError } from './products.errors';
 import { type Product, ProductsRepository, type Variant } from './products.repository';
 
@@ -63,7 +64,7 @@ export class ProductsService {
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
     @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
     @Inject(OrderProductSalesService) private readonly sales: OrderProductSalesService,
-    @Inject(ProductTagsService) private readonly tagService: ProductTagsService,
+    @Inject(ProductOrganisationService) private readonly organisation: ProductOrganisationService,
     @Inject(ProductMediaService) private readonly media: ProductMediaService,
   ) {}
 
@@ -74,13 +75,13 @@ export class ProductsService {
     { showNegotiationPrices = false, source = 'manual' }: ProductCreateOptions = {},
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, tags, ...details } = input;
+      const { variants, tags, collections, ...details } = input;
       assertNegotiationTerms(input);
       await this.assertListsExist(storeId, details);
       const product = await this.repository.insert(storeId, details, source, this.clock.now());
       await this.media.attach(storeId, product.id, details.imageFileIds);
       await this.saveVariants(storeId, product, variants, []);
-      if (tags.length) await this.tagService.setForProduct(storeId, product.id, tags);
+      await this.organisation.save(storeId, product.id, { tags, collections }, true);
       await this.publishUpdated(storeId, product.id);
       return this.getById(storeId, product.id, showNegotiationPrices);
     });
@@ -93,7 +94,7 @@ export class ProductsService {
     _actor: Actor,
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, expectedVersion, tags, ...details } = input;
+      const { variants, expectedVersion, tags, collections, ...details } = input;
       const [current] = await this.orderVariantRepository.lockProducts(storeId, [id]);
       assertProductVersion(current, expectedVersion);
       await this.assertListsExist(storeId, details);
@@ -106,7 +107,7 @@ export class ProductsService {
       const product = await this.repository.update(storeId, id, details, this.clock.now());
       if (!product) throw productError('PRODUCT_NOT_FOUND');
       if (variants) await this.saveVariants(storeId, product, variants, currentVariants);
-      if (tags) await this.tagService.setForProduct(storeId, id, tags);
+      await this.organisation.save(storeId, id, { tags, collections });
       await this.publishUpdated(storeId, id);
       return this.getById(storeId, id, true);
     });
@@ -381,7 +382,9 @@ export class ProductsService {
       const imageFileIds = product.imageFileIds.filter((id) => id !== fileId);
       if (!(await this.repository.updatePhotos(storeId, productId, imageFileIds, now)))
         throw productError('PRODUCT_NOT_FOUND');
-      await this.repository.expirePhoto(storeId, fileId, now);
+      // A size may have been given this photo on purpose, so the file stays for it.
+      if (!product.variants.some((variant) => variant.imageFileIds.includes(fileId)))
+        await this.repository.expirePhoto(storeId, fileId, now);
       await this.publishUpdated(storeId, productId);
     });
   }
@@ -402,23 +405,17 @@ export class ProductsService {
             priceOverridePoisha: null,
             costPoisha: null,
             lowStockThreshold: null,
+            imageFileId: undefined,
           },
         ];
     if (variants.some((variant) => variant.id && !current.some((row) => row.id === variant.id)))
       throw productError('PRODUCT_VARIANT_NOT_FOUND');
-    const saved = await this.repository.saveVariants(
-      storeId,
-      product.id,
-      variants.map((variant, position) => ({
-        ...variant,
-        position,
-        isDefault: product.options.length === 0,
-        title: product.options.length
-          ? product.options.map((option) => variant.optionValues[option.name]).join(' / ')
-          : 'Default',
-      })),
-      this.clock.now(),
-    );
+    const photos = planVariantPhotos(product.imageFileIds, variants, current);
+    await this.media.attach(storeId, product.id, photos.toAttach);
+    for (const fileId of photos.released)
+      await this.repository.expirePhoto(storeId, fileId, this.clock.now());
+    const writes = variantWrites(product.options, variants, photos.ids);
+    const saved = await this.repository.saveVariants(storeId, product.id, writes, this.clock.now());
     if (!saved) throw productError('PRODUCT_SKU_TAKEN');
   }
 

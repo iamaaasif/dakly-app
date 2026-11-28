@@ -31,6 +31,7 @@ import { ReplyToCustomerJob } from './jobs/reply-to-customer.job';
 import { ReplyToFacebookCommentJob } from './jobs/reply-to-facebook-comment.job';
 import { RestartReturnOnStaffReply } from './jobs/restart-return-on-staff-reply.job';
 import { ScheduleAiReplyOnMessage } from './jobs/schedule-ai-reply-on-message.job';
+import { ReplyAllowanceService } from './reply-allowance.service';
 import { SalesAgentModule } from './sales-agent.module';
 import { SuggestedReplyService } from './suggested-reply.service';
 import { UnreadBurstService } from './unread-burst.service';
@@ -66,6 +67,7 @@ import { UnreadBurstService } from './unread-burst.service';
     ChatClassifierService,
     AnswerCardTap,
     DraftSuggestedReply,
+    ReplyAllowanceService,
     ReplyToCustomerJob,
     ReplyToFacebookCommentJob,
     RestartReturnOnStaffReply,

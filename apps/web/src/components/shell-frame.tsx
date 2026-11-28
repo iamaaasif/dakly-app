@@ -6,6 +6,7 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 import { cn } from '@dakly/ui/cn';
 
 import { AccountMenu } from './account-menu';
+import { KeyboardShortcuts } from './keyboard-shortcuts';
 import { MobileNavigation } from './mobile-navigation';
 import { ShellNavigation } from './shell-navigation';
 import { ShellNavigationCollapse } from './shell-navigation-collapse';
@@ -30,8 +31,11 @@ export function ShellFrame({
   actions,
   children,
 }: ShellFrameProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  // The Inbox asks for the rail; starting there means the server's first paint already has it.
+  const [collapsed, setCollapsed] = useState(
+    pathname === '/chats' || pathname.startsWith('/chats/'),
+  );
   const needsStore = !data.currentStore && pathname !== '/security' && pathname !== '/setup';
   return (
     <div className="flex min-h-dvh flex-col">
@@ -41,6 +45,7 @@ export function ShellFrame({
       >
         Skip to content
       </a>
+      <KeyboardShortcuts />
       <ShellHeader {...{ data, blocked, actions, onSwitch, onSignOut }} />
       <div className="flex min-h-0 flex-1">
         <aside

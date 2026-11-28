@@ -5,11 +5,11 @@ import { useCallback, useId, useRef, useState, useSyncExternalStore } from 'reac
 
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
+import { Skeleton } from '@dakly/ui/skeleton';
 
 import { useChatChannels } from '../api/chat-channels';
 import { chatScreenQuerySchema, chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
-import { ChatChannelFilter } from './chat-channel-filter';
 import { ChatFolders } from './chat-folders';
 import { ChatList } from './chat-list';
 import { ChatToolbar } from './chat-search-bar';
@@ -25,6 +25,7 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   const folders = useInboxFolders();
   const connections = useChatChannels();
+  const connectionsAnswered = useRef(false);
   useCollapsedShellNavigation();
   // A disconnected channel keeps its past chats, so only a shop with no connection at all sees this.
   // Staff who cannot read the connections get an error here and keep the inbox.
@@ -38,6 +39,9 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
       onClose={() => router.push(chatsHref(withoutAgent))}
     />
   );
+  // Wait for the connections: the inbox and the Connect page differ too much to swap on first paint.
+  if (connections.isLoading && !connectionsAnswered.current) return <InboxLoading />;
+  connectionsAnswered.current = true;
   if (connections.data && connections.data.items.length === 0)
     return (
       <>
@@ -76,6 +80,20 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
         )}
       </div>
       {agentDrawer}
+    </main>
+  );
+}
+
+function InboxLoading() {
+  return (
+    <main
+      data-full-width
+      role="status"
+      className="flex h-[calc(100dvh-6.5625rem)] min-h-[32rem] flex-col gap-3 bg-surface p-3.5 md:h-[calc(100dvh-3.5625rem)]"
+    >
+      <p className="sr-only">Loading your inbox…</p>
+      <Skeleton className="h-9 w-full max-w-md" />
+      <Skeleton className="min-h-0 w-full flex-1" />
     </main>
   );
 }
@@ -130,11 +148,7 @@ function InboxControls({ query, folders }: { query: ChatScreenQuery; folders: In
       ) : (
         <InboxHeading folders={folders} />
       )}
-      <ChatToolbar
-        query={query}
-        foldersOpen={folders.expanded}
-        channel={<ChatChannelFilter query={query} />}
-      />
+      <ChatToolbar query={query} foldersOpen={folders.expanded} />
     </div>
   );
 }

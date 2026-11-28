@@ -64,6 +64,34 @@ export const triggerEntryLabels: Record<TriggerKey, string> = {
   product_viewed: 'view a product',
 };
 
+// Names the trigger in the picker.
+export const triggerTitles: Record<TriggerKey, string> = {
+  consent_given: 'Subscribed to marketing',
+  tag_added: 'Tag added',
+  segment_joined: 'Joined a segment',
+  link_tapped: 'Link tapped',
+  birthday: 'Birthday',
+  chat_started: 'Chat started',
+  message_received: 'Message received',
+  comment_on_post: 'Comment on a post',
+  lead_captured: 'Lead captured',
+  back_in_stock: 'Back in stock',
+  price_dropped: 'Price dropped',
+  order_placed: 'Order placed',
+  order_paid: 'Order paid',
+  order_shipped: 'Order shipped',
+  order_delivered: 'Order delivered',
+  order_cancelled: 'Order cancelled',
+  order_returned: 'Order returned',
+  order_link_abandoned: 'Order link left unfinished',
+  lifecycle_stage_entered: 'Reached a new stage',
+  days_since_last_order: 'Not ordered for a while',
+  reorder_due: 'Due to reorder',
+  cart_abandoned: 'Cart abandoned',
+  checkout_abandoned: 'Checkout abandoned',
+  product_viewed: 'Product viewed',
+};
+
 export const statusLabels: Record<AutomationStatus, string> = {
   active: 'Active',
   draft: 'Draft',
