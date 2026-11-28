@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { Checkbox } from '@dakly/ui/checkbox';
@@ -14,7 +15,10 @@ type ListName = keyof AudienceForm;
 const maxSegments = 10;
 
 export function CampaignAudienceFields() {
-  const segments = useCampaignSegments();
+  const { getValues } = useFormContext<AudienceForm>();
+  // The draft's own picks, as saved: ticking boxes later must not refetch the list.
+  const [savedIds] = useState(() => getValues('includeSegmentIds'));
+  const segments = useCampaignSegments(savedIds);
   if (segments.isPending) return <Skeleton className="h-40 w-full" />;
   if (segments.isError) return <p role="alert">Your segments could not load. Try again soon.</p>;
   if (!segments.data.items.length)

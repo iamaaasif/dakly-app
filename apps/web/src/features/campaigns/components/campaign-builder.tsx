@@ -34,11 +34,20 @@ const detailsSchema = campaignDetailsSchema;
 type DetailsInput = z.input<typeof detailsSchema>;
 type Details = z.output<typeof detailsSchema>;
 
-export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
+export function CampaignBuilder({
+  campaign,
+  startingSegmentId,
+}: {
+  campaign?: CampaignResponse;
+  startingSegmentId?: string;
+}) {
   const { data } = useSessionContext();
   const contextTag = data?.contextTag;
   const canEdit = data?.currentStore?.canEditCampaigns;
-  if (!campaign) return canEdit ? <NewCampaignBuilder key={contextTag} /> : null;
+  if (!campaign)
+    return canEdit ? (
+      <NewCampaignBuilder key={contextTag} startingSegmentId={startingSegmentId} />
+    ) : null;
   const editable = canEdit && campaign.status === 'draft';
   return (
     <main className="space-y-6 p-6 md:p-8">
@@ -64,13 +73,24 @@ function DraftEditor({ campaign }: { campaign: CampaignResponse }) {
 
 const newCampaignSubtitle = 'Nothing is sent until you approve.';
 
-function NewCampaignBuilder() {
+function NewCampaignBuilder({ startingSegmentId }: { startingSegmentId?: string }) {
   const [step, setStep] = useState<'start' | 'details' | 'messenger' | 'channels'>('start');
   const pages = useMessengerPages().data ?? [];
   return (
     <main className="space-y-6 p-6 md:p-8">
-      {step === 'details' && <CampaignDetailsForm onBack={() => setStep('channels')} />}
-      {step === 'messenger' && <MessengerDraft pages={pages} onBack={() => setStep('channels')} />}
+      {step === 'details' && (
+        <CampaignDetailsForm
+          startingSegmentId={startingSegmentId}
+          onBack={() => setStep('channels')}
+        />
+      )}
+      {step === 'messenger' && (
+        <MessengerDraft
+          pages={pages}
+          startingSegmentId={startingSegmentId}
+          onBack={() => setStep('channels')}
+        />
+      )}
       {step !== 'details' && step !== 'messenger' && (
         <>
           <CampaignPageHeader title="New campaign" subtitle={newCampaignSubtitle} />
@@ -86,7 +106,7 @@ function NewCampaignBuilder() {
   );
 }
 
-function useCampaignDetailsForm() {
+function useCampaignDetailsForm(startingSegmentId?: string) {
   const save = useSaveCampaign();
   const router = useRouter();
   const form = useForm<DetailsInput, unknown, Details>({
@@ -100,16 +120,28 @@ function useCampaignDetailsForm() {
   });
   const submit = form.handleSubmit((input) =>
     save.mutate(
-      { input: { ...input, channel: 'sms' } },
+      {
+        input: {
+          ...input,
+          channel: 'sms',
+          ...(startingSegmentId && { includeSegmentIds: [startingSegmentId] }),
+        },
+      },
       { onSuccess: (saved) => router.replace(`/campaigns/${saved.id}`) },
     ),
   );
   return { form, submit, save, opening: save.isSuccess };
 }
 
-function CampaignDetailsForm({ onBack }: { onBack: () => void }) {
+function CampaignDetailsForm({
+  onBack,
+  startingSegmentId,
+}: {
+  onBack: () => void;
+  startingSegmentId?: string;
+}) {
   const formId = useId();
-  const { form, submit, save, opening } = useCampaignDetailsForm();
+  const { form, submit, save, opening } = useCampaignDetailsForm(startingSegmentId);
   const busy = save.isPending || opening;
   return (
     <>

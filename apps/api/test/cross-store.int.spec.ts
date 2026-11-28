@@ -2542,6 +2542,71 @@ fixture('POST /segments', async () => {
   expect((await f.row('segments', own)).store_id).toBe(b.id);
   expect(await f.row('segments', id)).toEqual(before);
 });
+async function handPickedSegment(shop: Shop, contactIds: string[]) {
+  const input = { name: `বাছাই ${randomUUID()}`, contactIds };
+  return (await success(shop, 'POST', '/segments/hand-picked', 201, input)).json().id as string;
+}
+fixture('POST /segments/hand-picked', async () => {
+  const { a, b } = await pair(),
+    own = await contact(a),
+    foreign = await contact(b);
+  const id = await handPickedSegment(a, [own, foreign]);
+  const members = await success(a, 'POST', '/segments/preview', 200, {
+    rules: (await f.row('segments', id)).rules,
+  });
+  expect(members.json().count).toBe(1);
+  expect((await f.row('segments', id)).store_id).toBe(a.id);
+  const oneOff = await success(a, 'POST', '/segments/hand-picked', 201, { contactIds: [own] });
+  const listed = async (shop: Shop, query = '') =>
+    (await success(shop, 'GET', `/segments${query}`, 200))
+      .json()
+      .items.map((item: { id: string }) => item.id);
+  expect(await listed(a)).not.toContain(oneOff.json().id);
+  expect(await listed(a, `?include=${oneOff.json().id}`)).toContain(oneOff.json().id);
+  expect(await listed(b, `?include=${oneOff.json().id}`)).not.toContain(oneOff.json().id);
+});
+fixture('POST /segments/:segmentId/customers', async () => {
+  const { a, b } = await pair(),
+    ownContact = await contact(a),
+    other = await contact(a),
+    id = await handPickedSegment(a, [ownContact]),
+    before = await f.row('segments', id);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/segments/${value}/customers`,
+    id,
+    () => ({
+      contactIds: [other],
+    }),
+  );
+  expect(await f.row('segments', id)).toEqual(before);
+  const added = await success(a, 'POST', `/segments/${id}/customers`, 200, {
+    contactIds: [other, await contact(b)],
+  });
+  expect(added.json().changedIds).toEqual([other]);
+});
+fixture('POST /segments/:segmentId/customers/remove', async () => {
+  const { a, b } = await pair(),
+    first = await contact(a),
+    second = await contact(a),
+    id = await handPickedSegment(a, [first, second]),
+    before = await f.row('segments', id);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/segments/${value}/customers/remove`,
+    id,
+    () => ({
+      contactIds: [second],
+    }),
+  );
+  expect(await f.row('segments', id)).toEqual(before);
+  const removed = await success(a, 'POST', `/segments/${id}/customers/remove`, 200, {
+    contactIds: [second],
+  });
+  expect(removed.json().changedIds).toEqual([second]);
+});
 fixture('POST /segments/preview', async () => {
   const { a, b } = await pair();
   await dhakaContact(a);

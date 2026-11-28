@@ -171,7 +171,7 @@ export const contactExportQuerySchema = contactListQuerySchema.omit({
 
 // A hand-picked group is at most one screenful of the list, so one request stays small.
 export const MAX_BULK_CONTACTS = 100;
-const bulkContactIds = z
+export const bulkContactIds = z
   .array(z.uuid())
   .min(1)
   .max(MAX_BULK_CONTACTS)

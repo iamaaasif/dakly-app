@@ -40,5 +40,5 @@ The three entries from the auth screens were built in ACC-19 parts 5 and 6: sign
 - Missing: Add tag, Add to segment, Send campaign and Export selected need an API that takes a list of contact ids.
 - Why: sellers act on a hand-picked group. Add tag must append one tag on the server and skip contacts whose tag list is full, because a PATCH replaces the whole tag list and would drop a tag added since the list loaded.
 - Expected API: `POST /contacts/bulk-tags` with up to 100 contact ids and one tag, appending when missing and emitting `contact.tag_added` for each; ids as a filter for segment, campaign and export.
-- Status: Add tag and Export selected are built (CUS-18). Add to segment and Send campaign are next and need a hand-picked segment condition.
+- Status: Add tag and Export selected are built (CUS-18). Add to segment and Send campaign are built (CUS-19) on a hand-picked segment condition.
 - Workaround in the UI: the bar shows the count, Add tag, Export selected and Clear.

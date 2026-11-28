@@ -64,7 +64,7 @@ Release 1 is split into one migration per feature area, in dependency order. The
 | `0030_move_customers_to_contacts`     | Copies the example `customers` rows into `contacts`, keeping their ids                    |
 | `0031_drop_customers`                 | Drops the example `customers` table                                                       |
 | `0039_bd_upazila_areas`               | Adds 495 upazilas and fills Bangla names for all areas                                    |
-| `0123_dhaka_city_areas`               | Adds 119 Dhaka city areas under the Dhaka district, ids from 90000001                     |
+| `0124_dhaka_city_areas`               | Adds 119 Dhaka city areas under the Dhaka district, ids from 90000001                     |
 
 `packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table.
 
@@ -102,7 +102,7 @@ for the request.
 
 ## Bangladesh areas
 
-Dhaka city areas such as Dhanmondi and Mirpur are not in the BBS list. Migration 0123 adds them as
+Dhaka city areas such as Dhanmondi and Mirpur are not in the BBS list. Migration 0124 adds them as
 upazilas of the Dhaka district from `dhaka-city.json` in the MIT licensed `bangladesh-geojson`
 package (version 1.0.0), with repeated names, Dhamrai, Tongi and Nawabganj left out. Some
 neighbourhood spellings in that file differ from each other, so the list is a picker aid, not an

@@ -397,11 +397,16 @@ export const segments = pgTable(
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     // Set when staff archive the segment; it stays saved but cannot be picked for new campaigns.
     archivedAt: timestamptz('archived_at'),
+    // The customers ticked for one campaign. It is read like any segment but never listed, so its
+    // name may repeat.
+    oneOff: boolean('one_off').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex('segments_store_id_name_key').on(table.storeId, table.name),
+    uniqueIndex('segments_store_id_name_key')
+      .on(table.storeId, table.name)
+      .where(sql`not ${table.oneOff}`),
     uniqueIndex('segments_store_id_ready_made_key_key')
       .on(table.storeId, table.readyMadeKey)
       .where(sql`${table.readyMadeKey} is not null`),
