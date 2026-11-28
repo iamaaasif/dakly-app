@@ -50,6 +50,7 @@ const targetFields = {
   scheduledFor: postTargets.scheduledFor,
   publishedAt: postTargets.publishedAt,
   externalPostId: postTargets.externalPostId,
+  permalink: postTargets.permalink,
   errorCode: postTargets.errorCode,
   errorMessage: postTargets.errorMessage,
   reach: postTargets.reach,
@@ -65,6 +66,7 @@ type TargetWrite = Partial<
     | 'attempts'
     | 'containerId'
     | 'externalPostId'
+    | 'permalink'
     | 'publishedAt'
     | 'errorCode'
     | 'errorMessage'

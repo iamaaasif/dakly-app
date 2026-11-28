@@ -64,6 +64,7 @@ const post = (id: string, caption: string, target: Partial<Target>): PostRespons
       scheduledFor: '2026-11-07T06:30:00.000Z',
       publishedAt: null,
       externalPostId: null,
+      permalink: null,
       errorCode: null,
       errorMessage: null,
       reach: null,
@@ -275,4 +276,18 @@ it('asks to connect a channel when none is connected', async () => {
   expect(screen.getByRole('link', { name: 'Connect with channel' }).getAttribute('href')).toBe(
     '/social',
   );
+});
+
+it('links a published post to where it was published', async () => {
+  query = 'tab=published';
+  show([
+    post('c', 'Mustard scarves', {
+      status: 'published',
+      publishedAt: '2026-11-02T14:00:00.000Z',
+      permalink: 'https://www.facebook.com/1001/posts/55',
+    }),
+  ]);
+  const link = await screen.findByRole('link', { name: /View on Facebook/ });
+  expect(link.getAttribute('href')).toBe('https://www.facebook.com/1001/posts/55');
+  expect(link.getAttribute('rel')).toBe('noopener noreferrer');
 });

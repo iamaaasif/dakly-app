@@ -40,6 +40,10 @@ const facebookCounts = z.object({
   shares: z.object({ count }).optional(),
 });
 const instagramCounts = z.object({ like_count: count, comments_count: count });
+const permalinkResult = z.object({
+  permalink_url: z.url().optional(),
+  permalink: z.url().optional(),
+});
 const containerResult = z.object({
   status_code: z.enum(['IN_PROGRESS', 'FINISHED', 'PUBLISHED', 'ERROR', 'EXPIRED']),
 });
@@ -174,6 +178,13 @@ export class MetaGraphPublishingDriver implements MetaPublishingDriver {
       shares: counts.shares ?? (insights && insightValue(insights, 'shares')),
       rejectedInsights: insights ? null : metrics,
     };
+  }
+
+  async postPermalink(account: MetaPostingAccount, post: MetaPostRef) {
+    const field = post.kind === 'facebook_page' ? 'permalink_url' : 'permalink';
+    const id = encodeURIComponent(post.externalPostId);
+    const result = await this.request(account, `${id}?fields=${field}`, permalinkResult);
+    return result.permalink_url ?? result.permalink ?? null;
   }
 
   // Stories have no likes or comments counts and expire after a day.

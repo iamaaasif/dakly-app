@@ -103,6 +103,17 @@ describe('SocialInsightsService', () => {
     expect(saved.nextMetricsAt).toEqual(new Date(sixHoursLater.getTime() + 6 * HOUR_MS));
   });
 
+  it('saves the post address from Meta once, so View post can open it', async () => {
+    const { target, externalPostId } = await publishedTarget(sixHoursLater);
+    const { service, driver } = insights(sixHoursLater);
+    const read = vi.spyOn(driver, 'postPermalink');
+    await service.refreshMetrics(fixture.a, target);
+    expect((await fixture.row('post_targets', target)).permalink).toBe(
+      `https://www.facebook.com/${externalPostId}`,
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   it('writes the same numbers on a repeat run and does not ask Meta again', async () => {
     const { target, externalPostId } = await publishedTarget(sixHoursLater);
     const { service, driver } = insights(sixHoursLater);

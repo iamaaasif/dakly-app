@@ -159,6 +159,8 @@ export const postTargets = pgTable(
     // Instagram container id, saved before publish so a retry continues instead of posting twice.
     containerId: text('container_id'),
     externalPostId: text('external_post_id'),
+    // The post's address on Facebook or Instagram, read from Meta after it is published.
+    permalink: text('permalink'),
     publishedAt: timestamptz('published_at'),
     attempts: smallint('attempts').notNull().default(0),
     errorCode: text('error_code'),

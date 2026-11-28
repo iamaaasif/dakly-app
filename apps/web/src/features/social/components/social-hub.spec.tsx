@@ -52,6 +52,7 @@ const draft = (overrides: Partial<PostResponse>): PostResponse => ({
       scheduledFor: null,
       publishedAt: null,
       externalPostId: null,
+      permalink: null,
       errorCode: null,
       errorMessage: null,
       reach: null,

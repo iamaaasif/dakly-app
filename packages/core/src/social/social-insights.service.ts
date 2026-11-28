@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import {
   MetaPublishingError,
+  type MetaPostRef,
+  type MetaPostingAccount,
   type MetaPublishingDriver,
 } from '@dakly/providers/social/meta-publishing-driver';
 
@@ -46,7 +48,12 @@ export class SocialInsightsService {
 
   private async readMetrics(
     storeId: string,
-    target: { channelConnectionId: string; externalPostId: string; postKind: string },
+    target: {
+      channelConnectionId: string;
+      externalPostId: string;
+      permalink: string | null;
+      postKind: string;
+    },
   ) {
     const credential = await this.channels.postingCredential(storeId, target.channelConnectionId);
     if (!credential || (credential.expiresAt && credential.expiresAt <= this.clock.now())) return;
@@ -62,15 +69,7 @@ export class SocialInsightsService {
       isStory: target.postKind === 'story',
     };
     try {
-      const { rejectedInsights, ...metrics } = await measureVendorCall(
-        this.logger,
-        'post_metrics',
-        'Meta post metrics request measured',
-        () => this.driver.postMetrics(account, post),
-      );
-      if (rejectedInsights)
-        this.logger.warn(`Meta rejected the insights metric ${rejectedInsights}`);
-      return metrics;
+      return await this.pull(account, post, target.permalink);
     } catch (failure) {
       if (!(failure instanceof MetaPublishingError)) throw failure;
       // A rate limit or outage retries through the queue; anything else would fail again.
@@ -80,5 +79,24 @@ export class SocialInsightsService {
           .recordRejectedToken(storeId, target.channelConnectionId, credential.ciphertext)
           .catch(() => this.logger.error('Could not record the rejected Meta credential'));
     }
+  }
+
+  private async pull(
+    account: MetaPostingAccount,
+    post: MetaPostRef,
+    knownPermalink: string | null,
+  ) {
+    const { rejectedInsights, ...metrics } = await measureVendorCall(
+      this.logger,
+      'post_metrics',
+      'Meta post metrics request measured',
+      () => this.driver.postMetrics(account, post),
+    );
+    if (rejectedInsights) this.logger.warn(`Meta rejected the insights metric ${rejectedInsights}`);
+    // A missing address must not lose the counts, and the next pull tries again.
+    const permalink = knownPermalink
+      ? null
+      : await this.driver.postPermalink(account, post).catch(() => null);
+    return permalink ? { ...metrics, permalink } : metrics;
   }
 }

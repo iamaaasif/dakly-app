@@ -128,6 +128,7 @@ export type PostResponse = Omit<CreatePostInput, 'targets'> & {
     scheduledFor: string | null;
     publishedAt: string | null;
     externalPostId: string | null;
+    permalink: string | null;
     errorCode: string | null;
     errorMessage: string | null;
     // Null until the first insights pull after publishing.
