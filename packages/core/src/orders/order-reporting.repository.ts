@@ -372,6 +372,20 @@ export class OrderReportingRepository {
     );
   }
 
+  // Read live from orders, not from contact_stats, so a workflow that starts on this order sees it
+  // before the stats job has run.
+  async buyerTotals(storeId: string, contactId: string) {
+    const result = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ ordersCount: number; netSpendPoisha: string }>(sql`
+        select count(*)::int as "ordersCount", ${NET_SPEND} as "netSpendPoisha"
+        from orders
+        where store_id = ${storeId} and buyer_contact_id = ${contactId} and stage <> 'cancelled'
+      `),
+    );
+    const totals = result.rows[0]!;
+    return { ordersCount: totals.ordersCount, netSpendPoisha: Number(totals.netSpendPoisha) };
+  }
+
   async contactOrderTotals(storeId: string, contactId: string, timeZone: string) {
     const result = await this.database.forStore(storeId, (tx) =>
       tx.execute<{

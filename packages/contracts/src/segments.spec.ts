@@ -37,6 +37,19 @@ describe('segmentRulesSchema', () => {
     ]);
   });
 
+  it('takes total spent and order count with at least or at most', () => {
+    const rules = {
+      match: 'all',
+      conditions: [
+        { field: 'total_spent', operator: 'at_least', amountPoisha: 500000 },
+        { field: 'order_count', operator: 'at_most', count: 0 },
+      ],
+    };
+    expect(segmentRulesSchema.safeParse(rules).success).toBe(true);
+    const negative = { match: 'all', conditions: [{ ...rules.conditions[0], amountPoisha: -1 }] };
+    expect(segmentRulesSchema.safeParse(negative).success).toBe(false);
+  });
+
   it('refuses an empty group, an unknown field and a not a customer kind', () => {
     for (const rules of [
       { match: 'all', conditions: [] },

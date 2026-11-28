@@ -11,13 +11,16 @@ import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import {
+  atLeastOrAtMost,
   type Condition,
+  isTotalCondition,
   hasHappened,
   isChatChannel,
   MESSENGER_WINDOW_MS,
   type PathChoice,
   type RunFacts,
   type SendStep,
+  type TotalCondition,
 } from './automation-step-rules';
 
 // The goal, exit conditions, workflow filters and condition paths, read for one run.
@@ -94,8 +97,16 @@ export class AutomationConditionsService {
     return undefined;
   }
 
+  private async holdsTotal(storeId: string, contactId: string, condition: TotalCondition) {
+    const totals = await this.orders.buyerTotals(storeId, contactId);
+    return condition.kind === 'total_spent'
+      ? atLeastOrAtMost(condition, totals.netSpendPoisha, condition.amountPoisha)
+      : atLeastOrAtMost(condition, totals.ordersCount, condition.count);
+  }
+
   private async holds(condition: Condition, facts: RunFacts, at: Date): Promise<boolean> {
     const { storeId, contactId } = facts;
+    if (isTotalCondition(condition)) return this.holdsTotal(storeId, contactId, condition);
     switch (condition.kind) {
       // Publish refuses tap conditions until taps on workflow messages are recorded.
       case 'tapped':

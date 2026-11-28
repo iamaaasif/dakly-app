@@ -329,6 +329,45 @@ describe('Segment builder', () => {
     expect(createSegmentSchema.safeParse(saved?.body).success).toBe(true);
   }, 15_000);
 
+  it('saves a total spent condition in poisha and an order count as typed', async () => {
+    const user = userEvent.setup();
+    const requests = listServer([], ({ method, path }) =>
+      method === 'POST' && path === '/segments'
+        ? json({ ...vip, name: 'Best buyers' }, 201)
+        : undefined,
+    );
+    show(<SegmentsScreen view={{ ...emptyView, edit: 'new' }} canEdit />);
+    await user.type(await screen.findByLabelText('Segment name'), 'Best buyers');
+    const first = screen.getByRole('group', { name: 'Group 1, condition 1' });
+    await choose(first, 'Field', 'Total spent');
+    await user.clear(within(first).getByLabelText('Amount in taka'));
+    await user.type(within(first).getByLabelText('Amount in taka'), '10000');
+    await user.click(screen.getByRole('button', { name: 'Add condition to group 1' }));
+    const second = screen.getByRole('group', { name: 'Group 1, condition 2' });
+    await choose(second, 'Field', 'Orders placed');
+    await choose(second, 'Operator', 'at most');
+    await user.clear(within(second).getByLabelText('Number of orders'));
+    await user.type(within(second).getByLabelText('Number of orders'), '5');
+    await user.click(screen.getByRole('button', { name: 'Save segment' }));
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/segments'));
+    const saved = requests.find(({ path, method }) => path === '/segments' && method === 'POST');
+    expect(saved?.body).toEqual({
+      name: 'Best buyers',
+      rules: {
+        match: 'all',
+        conditions: [
+          {
+            match: 'all',
+            conditions: [
+              { field: 'total_spent', operator: 'at_least', amountPoisha: 1_000_000 },
+              { field: 'order_count', operator: 'at_most', count: 5 },
+            ],
+          },
+        ],
+      },
+    });
+  }, 15_000);
+
   it('opens a saved segment with its loose conditions in a group, and refuses an empty value', async () => {
     const user = userEvent.setup();
     const requests = listServer([vip], ({ method }) =>

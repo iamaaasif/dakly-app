@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
+import { automationTriggers, type TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { commentIntents } from '@dakly/contracts/comments';
 import { Button } from '@dakly/ui/button';
@@ -17,6 +17,7 @@ import { changeTrigger, pickableTriggers, type TriggerChange } from '../workflow
 import { findFilter, setFilter, toggleValue } from '../workflow-trigger-filters';
 import { ChoiceChips, KeywordChips } from './workflow-filter-chips';
 import { PostPicker, ProductPicker } from './workflow-filter-pickers';
+import { OrderTotalFilters } from './workflow-total-filters';
 import { SessionDialog } from '@/components/session-dialog';
 
 type Props = {
@@ -130,8 +131,16 @@ function CommentFilters({ graph, onChange }: FormProps) {
   );
 }
 
+function hasOrderTotals(graph: AutomationGraph) {
+  return 'customer_spend' in automationTriggers[graph.trigger.key].filters;
+}
+
 function hasTriggerForm(graph: AutomationGraph) {
-  return graph.trigger.key === 'comment_on_post' || graph.trigger.key === 'message_received';
+  return (
+    graph.trigger.key === 'comment_on_post' ||
+    graph.trigger.key === 'message_received' ||
+    hasOrderTotals(graph)
+  );
 }
 
 function plural(count: number, one: string, many: string) {
@@ -225,6 +234,7 @@ export function WorkflowTriggerPanel({ graph, onChange, onClose }: Props) {
         {graph.trigger.key === 'message_received' && (
           <MessageFilters graph={graph} onChange={onChange} />
         )}
+        {hasOrderTotals(graph) && <OrderTotalFilters graph={graph} onChange={onChange} />}
         {!hasTriggerForm(graph) && (
           <p className="text-sm text-text-muted">This trigger has no filters to edit.</p>
         )}

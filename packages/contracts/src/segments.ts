@@ -34,6 +34,17 @@ export const segmentConditionSchema = z.discriminatedUnion('field', [
   listCondition('source', z.enum(contactSources)),
   // Not a customer contacts never match a segment, so they cannot be asked for.
   listCondition('kind', z.enum(contactKinds).exclude(['not_customer'])),
+  // Net spend and order count are the same numbers the customer list shows (contact_stats).
+  z.strictObject({
+    field: z.literal('total_spent'),
+    operator: z.enum(['at_least', 'at_most']),
+    amountPoisha: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  }),
+  z.strictObject({
+    field: z.literal('order_count'),
+    operator: z.enum(['at_least', 'at_most']),
+    count: z.number().int().min(0).max(100_000),
+  }),
   z.strictObject({
     field: z.literal('consent'),
     channel: z.enum(consentChannels),
