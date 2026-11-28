@@ -148,9 +148,12 @@ describe('New order page lookups', () => {
   it('searches areas by the start of the name and names the district', async () => {
     const delivery = app.get(DeliveryService);
     const upazila = await delivery.searchAreas(f.a, { search: 'mirp', limit: 8 });
-    expect(upazila.items).toMatchObject([
-      { name: 'Mirpur', kind: 'upazila', districtName: 'Kushtia' },
-    ]);
+    expect(upazila.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Mirpur', kind: 'upazila', districtName: 'Dhaka' }),
+        expect.objectContaining({ name: 'Mirpur', kind: 'upazila', districtName: 'Kushtia' }),
+      ]),
+    );
     const district = await delivery.searchAreas(f.a, { search: 'dhaka', limit: 8 });
     expect(district.items).toContainEqual(
       expect.objectContaining({

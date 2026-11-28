@@ -66,6 +66,14 @@ describe('DeliveryService with Postgres', () => {
     });
   });
 
+  it('finds a Dhaka city area by name and prices it as Inside Dhaka', async () => {
+    const areaId = await service.findAreaIdByName(f.a, 'Dhanmondi');
+    expect(await service.calculateDeliveryCharge(f.a, areaId)).toMatchObject({
+      chargePoisha: 6000,
+      district: 'Dhaka',
+    });
+  });
+
   it('quotes a mapped district, its parent zone, a more specific area and the default', async () => {
     expect(await service.calculateDeliveryCharge(f.a, 301)).toMatchObject({ chargePoisha: 6000 });
     expect(await service.calculateDeliveryCharge(f.a, 303)).toMatchObject({ chargePoisha: 10000 });
