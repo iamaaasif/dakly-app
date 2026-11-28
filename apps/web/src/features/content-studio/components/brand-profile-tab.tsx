@@ -29,6 +29,7 @@ export function BrandProfileTab() {
     <BrandProfileForm
       profile={profile.data}
       canEdit={Boolean(session?.currentStore?.canEditSocial)}
+      shopName={session?.currentStore?.name ?? ''}
     />
   );
 }

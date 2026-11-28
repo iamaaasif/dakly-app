@@ -5995,6 +5995,8 @@ fixture('POST /post-media/confirm', async () => {
 const brandProfile = {
   voice: 'Warm',
   audience: 'Parents',
+  languages: ['bn'],
+  hashtags: ['#handmade'],
   preferredWords: ['made by hand'],
   wordsToAvoid: ['cheap'],
   callToActionBn: 'অর্ডার করুন',
