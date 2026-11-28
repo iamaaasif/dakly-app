@@ -11,16 +11,18 @@ type DraftsCardProps = {
   drafts: PostResponse[];
   accounts: SocialAccount[];
   canEdit: boolean;
+  // Inside the My posts Draft tab the tab names the list, so the card drops its own heading.
+  bare?: boolean;
   onNotice: (message: string, tone?: 'error') => void;
 };
 
-export function DraftsCard({ drafts, accounts, canEdit, onNotice }: DraftsCardProps) {
+export function DraftsCard({ drafts, accounts, canEdit, bare, onNotice }: DraftsCardProps) {
   const [deleting, setDeleting] = useState<PostResponse | null>(null);
   const duplicate = useDuplicateDraft();
   return (
     <section aria-labelledby="drafts" className="rounded-lg border border-border bg-surface">
       <header className="p-4 md:px-6">
-        <h2 id="drafts" className="text-lg font-semibold">
+        <h2 id="drafts" className={bare ? 'sr-only' : 'text-lg font-semibold'}>
           Drafts
         </h2>
         <p className="text-sm text-text-muted">

@@ -1,20 +1,23 @@
 'use client';
-import { Calendar, CircleCheck, Clock, Plus } from 'lucide-react';
+import { Clock, Inbox, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { Button, buttonVariants } from '@dakly/ui/button';
-import { cn } from '@dakly/ui/cn';
+import { EmptyState } from '@dakly/ui/empty-state';
 import { QueryError } from '@dakly/ui/query-error';
 
+import { useDrafts } from '../api/get-drafts';
 import { usePosts } from '../api/get-posts';
 import { useSocialAccounts, type SocialAccount } from '../api/get-social-accounts';
 import { buildEntries, timeOnDay, type CalendarEntry } from '../post-calendar';
 import { useMovePost } from '../use-move-post';
 import { useMyPostsParams } from '../use-my-posts-params';
 import { CalendarPanel } from './calendar-panel';
+import { DraftsCard } from './drafts-card';
 import { HubDialogs, type HubDialog } from './hub-dialogs';
 import { HubNotice } from './hub-notice';
+import { MyPostsTabs } from './my-posts-tabs';
 import { PostDetailsDialog } from './post-details-dialog';
 import { PublishedList } from './published-list';
 import { ReconnectBanner } from './reconnect-banner';
@@ -27,27 +30,29 @@ const ignoreNotice = () => undefined;
 export function MyPostsScreen() {
   const accounts = useSocialAccounts();
   const posts = usePosts();
-  const failed = accounts.error ?? posts.error;
+  const drafts = useDrafts();
+  const failed = accounts.error ?? posts.error ?? drafts.error;
   if (failed)
     return (
       <main className="p-4 md:p-8">
         <QueryError
           message={failed.message}
-          onRetry={() => void Promise.all([accounts.refetch(), posts.refetch()])}
+          onRetry={() => void Promise.all([accounts.refetch(), posts.refetch(), drafts.refetch()])}
           retryLabel="Retry my posts"
         />
       </main>
     );
-  if (!accounts.data || !posts.data) return <SocialHubLoading />;
-  return <MyPosts accounts={accounts.data} posts={posts.data} />;
+  if (!accounts.data || !posts.data || !drafts.data) return <SocialHubLoading />;
+  return <MyPosts accounts={accounts.data} posts={posts.data} drafts={drafts.data} />;
 }
 
 type MyPostsProps = {
   accounts: SocialAccount[];
   posts: NonNullable<ReturnType<typeof usePosts>['data']>;
+  drafts: NonNullable<ReturnType<typeof useDrafts>['data']>;
 };
 
-function MyPosts({ accounts, posts }: MyPostsProps) {
+function MyPosts({ accounts, posts, drafts }: MyPostsProps) {
   const { data: session } = useSessionContext();
   const url = useMyPostsParams(accounts);
   const [dialog, setDialog] = useState<HubDialog>(null);
@@ -55,7 +60,9 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
   const store = session?.currentStore;
   const canEdit = Boolean(store?.canEditSocial);
   const all = buildEntries(posts, accounts, null);
-  const { notice, move } = useMovePost();
+  const { notice: moveNotice, move } = useMovePost();
+  const [draftNotice, setDraftNotice] = useState<{ message: string; tone?: 'error' } | null>(null);
+  const notice = url.tab === 'draft' ? draftNotice : moveNotice;
   return (
     <main className="space-y-6 p-4 md:p-8">
       <MyPostsHeader
@@ -75,6 +82,8 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
       <MyPostsBody
         accounts={accounts}
         posts={posts}
+        drafts={drafts}
+        onDraftNotice={(message, tone) => setDraftNotice({ message, tone })}
         url={url}
         canEdit={canEdit}
         onOpen={setOpen}
@@ -95,43 +104,6 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
         onNotice={ignoreNotice}
       />
     </main>
-  );
-}
-
-type PostTabsProps = {
-  tab: 'calendar' | 'published';
-  entries: CalendarEntry[];
-  onTab: (tab: 'calendar' | 'published') => void;
-};
-
-function PostTabs({ tab, entries, onTab }: PostTabsProps) {
-  const published = entries.filter(({ status }) => status === 'published').length;
-  const tabs = [
-    { value: 'calendar', label: 'Calendar', icon: Calendar, count: entries.length - published },
-    { value: 'published', label: 'Published', icon: CircleCheck, count: published },
-  ] as const;
-  return (
-    <div role="tablist" aria-label="My posts" className="flex gap-1 border-b border-border">
-      {tabs.map(({ value, label, icon: Icon, count }) => (
-        <button
-          key={value}
-          type="button"
-          role="tab"
-          aria-selected={tab === value}
-          onClick={() => onTab(value)}
-          className={cn(
-            '-mb-px flex min-h-10 items-center gap-2 border-b-2 px-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-            tab === value
-              ? 'border-action font-medium text-text'
-              : 'border-transparent text-text-muted hover:text-text',
-          )}
-        >
-          <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
-          {label}
-          <span className="rounded-full bg-surface-muted px-2 text-xs">{count}</span>
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -191,42 +163,76 @@ function ReconnectBanners({ accounts, entries, canReconnect, onReconnect }: Bann
 
 function ConnectFirst() {
   return (
-    <section className="rounded-lg border border-border bg-surface p-8 text-center">
-      <h2 className="text-lg font-semibold">Connect your Facebook Page</h2>
-      <p className="mt-1 text-text-muted">Connect an account to plan and publish posts.</p>
-      <Link href="/social" className={cn(buttonVariants(), 'mt-4')}>
-        Go to Social hub
-      </Link>
+    <section className="rounded-lg border border-border bg-surface">
+      <EmptyState
+        icon={Inbox}
+        title="Connect your channel"
+        description="Once you connect your channels, your posts will show here."
+        action={
+          <Link href="/social" className={buttonVariants()}>
+            <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Connect with channel
+          </Link>
+        }
+      />
     </section>
   );
 }
 
 type BodyProps = MyPostsProps & {
+  onDraftNotice: (message: string, tone?: 'error') => void;
   url: ReturnType<typeof useMyPostsParams>;
   canEdit: boolean;
   onOpen: (entry: CalendarEntry) => void;
   onMove?: (entry: CalendarEntry, day: string) => void;
 };
 
-function MyPostsBody({ accounts, posts, url, canEdit, onOpen, onMove }: BodyProps) {
+function MyPostsBody({
+  accounts,
+  posts,
+  drafts,
+  onDraftNotice,
+  url,
+  canEdit,
+  onOpen,
+  onMove,
+}: BodyProps) {
   if (accounts.length === 0) return <ConnectFirst />;
   const all = buildEntries(posts, accounts, null);
   const shown = buildEntries(posts, accounts, url.accountId);
+  const published = all.filter(({ status }) => status === 'published').length;
+  const counts = {
+    calendar: all.length - published,
+    published,
+    draft: drafts.length,
+  };
   return (
     <>
-      <PostTabs
+      <MyPostsTabs
         tab={url.tab}
-        entries={all}
+        counts={counts}
         onTab={(tab) => url.setParams({ tab: tab === 'calendar' ? null : tab })}
       />
-      {url.tab === 'published' ? (
+      {url.tab === 'published' && (
         <PublishedList
+          accounts={accounts}
+          accountId={url.accountId}
+          onAccount={(account) => url.setParams({ account })}
           entries={shown.filter(({ status }) => status === 'published')}
           sort={url.sort}
           onSort={(sort) => url.setParams({ sort: sort === 'newest' ? null : sort })}
           onOpen={onOpen}
         />
-      ) : (
+      )}
+      {url.tab === 'draft' && (
+        <DraftsCard
+          bare
+          drafts={drafts}
+          accounts={accounts}
+          canEdit={canEdit}
+          onNotice={onDraftNotice}
+        />
+      )}
+      {url.tab === 'calendar' && (
         <CalendarPanel
           {...url}
           accounts={accounts}

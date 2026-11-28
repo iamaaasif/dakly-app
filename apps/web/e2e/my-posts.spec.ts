@@ -122,6 +122,23 @@ const seeds: Seed[] = [
   },
 ];
 
+async function seedDrafts(
+  pool: ReturnType<typeof createDatabase>['pool'],
+  owner: { storeId: string; userId: string },
+  photoId: string,
+) {
+  const drafts: [string, string, boolean][] = [
+    ['Mustard silk scarves are back in stock.', '2026-11-06T16:20:00+06:00', true],
+    ['Navy or maroon? Our new cotton Panjabi comes in both.', '2026-11-05T11:05:00+06:00', true],
+    ['', '2026-11-03T21:40:00+06:00', false],
+  ];
+  for (const [caption, editedAt, hasPhoto] of drafts)
+    await pool.query(
+      'insert into posts(id,store_id,kind,caption,created_by_user_id,created_at,updated_at,media_file_ids) values(gen_random_uuid(),$1,$2,$3,$4,$5,$5,$6)',
+      [owner.storeId, 'post', caption || null, owner.userId, editedAt, hasPhoto ? [photoId] : []],
+    );
+}
+
 test('shows scheduled and published posts on a calendar', async ({ page, context, baseURL }) => {
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
     token: string;
@@ -186,6 +203,7 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
         );
       }
     }
+    await seedDrafts(database.pool, { storeId, userId }, photo.rows[0]!.id);
     await page.route('**/posts/calendar.jpg*', (route) =>
       route.fulfill({ contentType: 'image/png', body: Buffer.from(samplePhoto, 'base64') }),
     );
@@ -199,6 +217,7 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
     );
     await expect(page.getByRole('tab', { name: /Calendar/ })).toContainText('9');
     await expect(page.getByRole('tab', { name: /Published/ })).toContainText('4');
+    await expect(page.getByRole('tab', { name: /Draft/ })).toContainText('3');
     await capture(page, 'month');
 
     await page.getByRole('button', { name: 'Week', exact: true }).click();
@@ -225,6 +244,12 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
     await page.getByLabel('Sort published posts').click();
     await page.getByRole('option', { name: 'Most reach' }).click();
     await expect(page.getByRole('listitem').first()).toContainText('Pohela Falgun gift boxes');
+
+    await page.getByRole('tab', { name: /Draft/ }).click();
+    await expect(
+      page.getByText('3 drafts · only you can see these until you schedule them'),
+    ).toBeVisible();
+    await capture(page, 'draft');
 
     // A phone starts on the list, because the month grid is too small to read.
     await page.setViewportSize({ width: 360, height: 800 });
@@ -305,4 +330,21 @@ test('moves a scheduled post to another day by dragging it', async ({ page, cont
     await database.pool.query('delete from channel_connections where store_id=$1', [storeId]);
     await database.pool.end();
   }
+});
+
+test('asks to connect a channel when none is connected', async ({ page, context, baseURL }) => {
+  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    token: string;
+    storeIds: [string, string];
+  };
+  await context.addCookies([
+    { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
+  ]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/social/posts');
+  await expect(page.getByRole('heading', { name: 'Connect your channel' })).toBeVisible();
+  await page.getByRole('link', { name: 'Connect with channel' }).click();
+  await expect(page).toHaveURL(/\/social$/);
+  await page.goBack();
+  await capture(page, 'empty');
 });

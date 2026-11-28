@@ -3,7 +3,6 @@ import Link from 'next/link';
 
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import type { SocialAccount } from '../api/get-social-accounts';
 import {
@@ -16,6 +15,7 @@ import {
   type CalendarStatus,
 } from '../post-calendar';
 import type { CalendarView } from '../use-my-posts-params';
+import { AccountFilter } from './account-filter';
 import { CalendarGrid } from './calendar-grid';
 import { statusDots } from './post-chip';
 import { PostListView } from './post-list-view';
@@ -69,22 +69,11 @@ function CalendarToolbar({ accounts, view, date, accountId, setParams }: Toolbar
         ›
       </Button>
       <h2 className="mr-auto text-lg font-semibold">{heading(view, date)}</h2>
-      <Select
-        value={accountId ?? 'all'}
-        onValueChange={(value) => setParams({ account: value === 'all' ? null : value })}
-      >
-        <SelectTrigger aria-label="Filter by account" className="w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All accounts</SelectItem>
-          {accounts.map(({ id, displayName }) => (
-            <SelectItem key={id} value={id}>
-              {displayName}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <AccountFilter
+        accounts={accounts}
+        accountId={accountId}
+        onChange={(account) => setParams({ account })}
+      />
       <div role="group" aria-label="Calendar view" className="flex rounded-md bg-surface-muted p-1">
         {views.map(({ value, label, icon: Icon }) => (
           <button
@@ -130,7 +119,6 @@ export function CalendarPanel(props: CalendarPanelProps) {
         accountId={accountId}
         setParams={setParams}
       />
-      <StatusLegend />
       {!hasPosts && (
         <p className="flex flex-wrap items-center gap-3 border-t border-border p-4 text-text-muted">
           No posts planned yet.
@@ -157,16 +145,26 @@ export function CalendarPanel(props: CalendarPanelProps) {
           onMove={onMove}
         />
       )}
+      <CalendarFooter canMove={Boolean(onMove)} />
     </section>
+  );
+}
+
+function CalendarFooter({ canMove }: { canMove: boolean }) {
+  return (
+    <footer className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-border px-4 py-3 text-sm text-text-muted">
+      <StatusLegend />
+      <p>
+        {canMove ? 'Drag a scheduled post to another day to move it. ' : ''}Times are in Dhaka time
+        (GMT+6).
+      </p>
+    </footer>
   );
 }
 
 function StatusLegend() {
   return (
-    <ul
-      aria-label="Colour legend"
-      className="flex flex-wrap gap-4 px-4 pb-3 text-sm text-text-muted"
-    >
+    <ul aria-label="Colour legend" className="flex flex-wrap gap-4">
       {legend.map((status) => (
         <li key={status} className="flex items-center gap-2">
           <span aria-hidden="true" className={cn('size-2 rounded-full', statusDots[status])} />
