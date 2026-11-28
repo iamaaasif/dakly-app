@@ -3,6 +3,7 @@ import { useContext, useRef, useState, type RefObject } from 'react';
 
 import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
 import { Button, buttonVariants } from '@dakly/ui/button';
+import { Dialog } from '@dakly/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +20,7 @@ import { orderSourceLabels } from '../order-labels';
 import { EditOrderDialog } from './edit-order-dialog';
 import { OrderDetails } from './order-details';
 import {
+  leavesDelivered,
   orderStageActions,
   stageActionLabels,
   type StageAction,
@@ -218,6 +220,66 @@ function PrintInvoiceLink({ orderId }: { orderId: string }) {
   );
 }
 
+type LeaveDeliveredDialogProps = {
+  order: OrderDetail;
+  action: StageAction;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+function LeaveDeliveredDialog({ order, action, onCancel, onConfirm }: LeaveDeliveredDialogProps) {
+  return (
+    <Dialog title={`Move order #${order.number} out of Delivered?`} open onClose={onCancel}>
+      <p className="mb-4">
+        {stageActionLabels[action]} takes back the COD collected for this order and puts the stock
+        count back to where it was before delivery.
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onCancel}>
+          Keep delivered
+        </Button>
+        <Button onClick={onConfirm}>{stageActionLabels[action]}</Button>
+      </div>
+    </Dialog>
+  );
+}
+
+type StageDialogsProps = {
+  order: OrderDetail;
+  stage: RefObject<HTMLSpanElement | null>;
+  exitAction: StageAction | null;
+  activeDialog: StageFormAction | null;
+  onCancelExit: () => void;
+  onConfirmExit: () => void;
+  onCloseDialog: (open: boolean) => void;
+};
+
+function StageDialogs(props: StageDialogsProps) {
+  const { order, stage, exitAction, activeDialog } = props;
+  return (
+    <>
+      {exitAction && (
+        <LeaveDeliveredDialog
+          order={order}
+          action={exitAction}
+          onCancel={props.onCancelExit}
+          onConfirm={props.onConfirmExit}
+        />
+      )}
+      {activeDialog && (
+        <OrderStageDialog
+          key={activeDialog}
+          order={order}
+          action={activeDialog}
+          stage={stage}
+          open
+          onOpenChange={props.onCloseDialog}
+        />
+      )}
+    </>
+  );
+}
+
 type OrderStageFooterProps = {
   order: OrderDetail;
   transition: ReturnType<typeof useOrderStage>;
@@ -227,16 +289,31 @@ type OrderStageFooterProps = {
   editable: boolean;
 };
 
+function useStageActionState(order: OrderDetail, mutate: (change: OrderStageChange) => void) {
+  const [activeDialog, setActiveDialog] = useState<StageFormAction | null>(null);
+  const [exitAction, setExitAction] = useState<StageAction | null>(null);
+  const runAction = (a: StageAction) =>
+    a === 'to_confirm' || a === 'to_pack' || a === 'delivered'
+      ? mutate({ to: a })
+      : setActiveDialog(a);
+  // Leaving Delivered undoes the COD collection and the stock count, so staff confirm it first.
+  const handleAction = (a: StageAction) =>
+    leavesDelivered(order.stage) && a !== 'cod' ? setExitAction(a) : runAction(a);
+  const confirmExit = () => {
+    if (exitAction) runAction(exitAction);
+    setExitAction(null);
+  };
+  return { activeDialog, setActiveDialog, exitAction, setExitAction, handleAction, confirmExit };
+}
+
 function OrderStageFooter(props: OrderStageFooterProps) {
   const { order, transition, stage, canConfirm, actions, editable } = props;
-  const [activeDialog, setActiveDialog] = useState<StageFormAction | null>(null);
   const cancel = actions.find((a): a is 'cancelled' => a === 'cancelled');
   const other = actions.filter((a) => a !== 'cancelled');
   const secondary = canConfirm ? other : other.slice(1);
   const mutate = changeStage(transition, order.id, stage);
-
-  const handleAction = (a: StageAction) =>
-    a === 'to_confirm' || a === 'delivered' ? mutate({ to: a }) : setActiveDialog(a);
+  const { activeDialog, setActiveDialog, exitAction, setExitAction, handleAction, confirmExit } =
+    useStageActionState(order, mutate);
 
   const closeDialog = (open: boolean) => {
     if (open) return;
@@ -277,16 +354,15 @@ function OrderStageFooter(props: OrderStageFooterProps) {
           />
         </div>
       </div>
-      {activeDialog && (
-        <OrderStageDialog
-          key={activeDialog}
-          order={order}
-          action={activeDialog}
-          stage={stage}
-          open
-          onOpenChange={closeDialog}
-        />
-      )}
+      <StageDialogs
+        order={order}
+        stage={stage}
+        exitAction={exitAction}
+        activeDialog={activeDialog}
+        onCancelExit={() => setExitAction(null)}
+        onConfirmExit={confirmExit}
+        onCloseDialog={closeDialog}
+      />
     </div>
   );
 }

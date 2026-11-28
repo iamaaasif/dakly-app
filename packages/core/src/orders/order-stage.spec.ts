@@ -5,14 +5,21 @@ import { orderStageTransitions } from '@dakly/contracts/orders';
 import { orderStageCounts, stagesForOrderTab } from './order-stage';
 
 describe('Order stage transitions', () => {
-  it('allows only the fulfilment moves in the order rules', () => {
+  it('allows the fulfilment moves and staff moves back out of Courier and Delivered', () => {
     expect(orderStageTransitions).toEqual({
       to_confirm: ['to_pack', 'on_hold', 'cancelled'],
       on_hold: ['to_confirm', 'to_pack', 'cancelled'],
       to_pack: ['with_courier', 'on_hold', 'cancelled'],
-      with_courier: ['delivered', 'partially_delivered', 'returned'],
-      delivered: ['returned'],
-      partially_delivered: ['returned'],
+      with_courier: [
+        'delivered',
+        'partially_delivered',
+        'returned',
+        'to_confirm',
+        'on_hold',
+        'to_pack',
+      ],
+      delivered: ['returned', 'with_courier', 'to_confirm', 'on_hold', 'to_pack'],
+      partially_delivered: ['returned', 'with_courier', 'to_confirm', 'on_hold', 'to_pack'],
       returned: [],
       cancelled: [],
     });
