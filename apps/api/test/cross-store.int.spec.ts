@@ -4635,6 +4635,17 @@ fixture('GET /posts/queue-slots', async () => {
   await hidden(b, 'GET', (id) => `/posts/queue-slots?channelConnectionId=${id}`, foreign);
 });
 
+fixture('GET /posts/queue-slots/recommended', async () => {
+  const { a, b } = await pair();
+  for (const shop of [a, b]) {
+    const result = await success(shop, 'GET', '/posts/queue-slots/recommended', 200);
+    // Neither shop has orders, so a shop never sees another shop's busy hours.
+    expect(result.json()).toMatchObject({ basis: 'default' });
+    expect(result.json().slots).toHaveLength(14);
+  }
+  expect((await f.request(a.member, 'GET', '/posts/queue-slots/recommended')).statusCode).toBe(403);
+});
+
 fixture('PUT /posts/queue-slots', async () => {
   const { a, b } = await pair();
   const own = await seedChannel(b);

@@ -1,12 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { PostingSlotsResponse, SavePostingSlotsInput } from '@dakly/contracts/social';
+import type {
+  PostingSlotsResponse,
+  RecommendedPostingSlots,
+  SavePostingSlotsInput,
+} from '@dakly/contracts/social';
 
 import { AuditService } from '../audit/audit.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { OrderReportingService } from '../orders/order-reporting.service';
+import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
-import { recommendedPostingSlots } from './next-posting-slot';
+import { recommendPostingSlots } from './recommended-posting-times';
 import { socialError } from './social.errors';
 
 type PostingConnection = Awaited<
@@ -20,11 +27,24 @@ export class PostingSlotsService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(OrderReportingService) private readonly orders: OrderReportingService,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   async postingSlots(storeId: string, channelConnectionId: string): Promise<PostingSlotsResponse> {
     const [connection] = await this.channels.postingConnections(storeId, [channelConnectionId]);
     return this.response(storeId, connection);
+  }
+
+  // The hours with the most orders in the last 30 days, in the shop's own time zone.
+  async recommendedSlots(storeId: string): Promise<RecommendedPostingSlots> {
+    const since = new Date(this.clock.now().getTime() - 30 * DAY_MS);
+    const hours = await this.orders.orderHourCounts(
+      storeId,
+      since,
+      await this.stores.timeZone(storeId),
+    );
+    return recommendPostingSlots(hours);
   }
 
   replaceSlots(
@@ -54,7 +74,7 @@ export class PostingSlotsService {
     return {
       channelConnectionId: connection.id,
       timeZone: await this.stores.timeZone(storeId),
-      slots: connection.postingSlots ?? recommendedPostingSlots,
+      slots: connection.postingSlots ?? recommendPostingSlots([]).slots,
     };
   }
 }

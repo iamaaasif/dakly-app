@@ -5,6 +5,7 @@ import { Button } from '@dakly/ui/button';
 
 import { useSavePostingSlots } from '../api/save-posting-slots';
 import { weekdays } from '../social-labels';
+import { RecommendedTimes } from './recommended-times';
 import { WeekdaySlots } from './weekday-slots';
 import { formatTimeZone } from '@/lib/format-date';
 
@@ -29,6 +30,7 @@ export function PostingScheduleForm({
   };
   return (
     <div>
+      {canEdit && <RecommendedTimes onUse={setSlots} />}
       <ul className="divide-y divide-border rounded-lg border border-border">
         {weekdays.map(({ weekday, label }) => (
           <WeekdaySlots

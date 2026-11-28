@@ -49,6 +49,8 @@ export const postingSlotsSchema = z
     'Use each time once on a day',
   );
 export type PostingSlot = z.infer<typeof postingSlotsSchema>[number];
+// Orders when the shop has enough recent orders to show busy hours, otherwise the standard times.
+export type RecommendedPostingSlots = { slots: PostingSlot[]; basis: 'orders' | 'default' };
 
 const postIdSchema = z.uuid().transform((id) => id.toLowerCase());
 const postText = z.string().refine((value) => !value.includes('\0'), 'Remove null characters');
