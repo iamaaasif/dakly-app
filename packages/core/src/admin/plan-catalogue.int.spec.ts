@@ -67,7 +67,7 @@ const change = {
   confirmed: true,
 };
 
-function request(headers: Headers, method: 'GET' | 'PUT', url: string, payload?: object) {
+function request(headers: Headers, method: 'GET' | 'PUT' | 'POST', url: string, payload?: object) {
   return app.inject({
     method,
     url,
@@ -81,7 +81,12 @@ async function starter() {
   const rows = await database.pool.query(
     "select name, trial_days, monthly_price_poisha, limits from plans where code='starter'",
   );
-  return rows.rows[0] as { name: string; trial_days: number; monthly_price_poisha: string };
+  return rows.rows[0] as {
+    name: string;
+    trial_days: number;
+    monthly_price_poisha: string;
+    limits: Record<string, number>;
+  };
 }
 
 beforeAll(async () => {
@@ -140,15 +145,56 @@ describe('Staff plan catalogue over Fastify and Postgres', () => {
     expect(list.json().plans.map((plan: { code: string }) => plan.code)).toContain('starter');
   });
 
-  it('refuses a limit name the plan does not have and changes nothing', async () => {
+  it('adds and removes an allowance, and records the old limits in the audit row', async () => {
     const headers = await staff();
-    const before = await starter();
+    const kept = Object.fromEntries(
+      Object.entries(change.limits).filter(([name]) => name !== 'ai_content'),
+    );
+    const reason = 'Add reels allowance, drop content drafts';
     const response = await request(headers, 'PUT', '/admin/plans/starter', {
       ...change,
-      limits: { ...change.limits, rockets: 3 },
+      limits: { ...kept, reels: 5 },
+      reason,
     });
-    expect(response.statusCode).toBe(422);
-    expect(await starter()).toEqual(before);
+    expect(response.statusCode, response.body).toBe(200);
+    expect((await starter()).limits).toEqual({ ...kept, reels: 5 });
+    const audit = await database.pool.query(
+      "select action_details from staff_audit_log where action='plan.updated' and reason=$1",
+      [reason],
+    );
+    expect(audit.rows[0].action_details.previousLimits).toHaveProperty('ai_content');
+    const badName = await request(headers, 'PUT', '/admin/plans/starter', {
+      ...change,
+      limits: { 'Bad Name': 1 },
+    });
+    expect(badName.statusCode).toBe(400);
+  });
+
+  it('creates a plan, refuses a duplicate code, then retires it', async () => {
+    const headers = await staff();
+    const code = `promo_${randomInt(1000, 9999)}`;
+    const created = await request(headers, 'POST', '/admin/plans', { ...change, code });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json()).toMatchObject({ code, retiredAt: null });
+    const audit = await database.pool.query(
+      "select 1 from staff_audit_log where action='plan.created' and action_details->>'code'=$1",
+      [code],
+    );
+    expect(audit.rowCount).toBe(1);
+    expect((await request(headers, 'POST', '/admin/plans', { ...change, code })).statusCode).toBe(
+      409,
+    );
+
+    const retire = { reason: 'Campaign ended, plan closed', confirmed: true };
+    const retired = await request(headers, 'POST', `/admin/plans/${code}/retire`, retire);
+    expect(retired.statusCode, retired.body).toBe(201);
+    expect(retired.json()).toMatchObject({ isPublic: false });
+    expect(retired.json().retiredAt).not.toBeNull();
+    expect((await request(headers, 'PUT', `/admin/plans/${code}`, change)).statusCode).toBe(409);
+    expect((await request(headers, 'POST', `/admin/plans/${code}/retire`, retire)).statusCode).toBe(
+      409,
+    );
+    await database.pool.query('delete from plans where code=$1', [code]);
   });
 
   it('refuses a missing confirmation, an unknown plan and the wrong role', async () => {
@@ -163,6 +209,9 @@ describe('Staff plan catalogue over Fastify and Postgres', () => {
     const ops = await staff('ops');
     expect((await request(ops, 'PUT', '/admin/plans/starter', change)).statusCode).toBe(403);
     expect((await request(ops, 'GET', '/admin/plans')).statusCode).toBe(403);
+    expect(
+      (await request(ops, 'POST', '/admin/plans', { ...change, code: 'nope' })).statusCode,
+    ).toBe(403);
   });
 
   it('lets an analyst read the catalogue but not change it', async () => {

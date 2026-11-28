@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0124_snapshot.json`: **116 tables, 1491 columns, 450 explicit indexes and 356 foreign keys**.
+Built from `packages/db/migrations/meta/0125_snapshot.json`: **116 tables, 1492 columns, 450 explicit indexes and 356 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1875,6 +1875,7 @@ erDiagram
         jsonb limits "NOT NULL; jsonb"
         boolean is_public "NOT NULL; boolean"
         smallint position "NOT NULL; smallint"
+        timestamp_with_time_zone retired_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }

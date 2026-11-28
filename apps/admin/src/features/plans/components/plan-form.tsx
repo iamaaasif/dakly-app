@@ -38,7 +38,7 @@ export function PlanForm({ plan, onDone }: { plan: AdminPlan; onDone: () => void
         ),
       )}
     >
-      <PlanFields form={form} id={id} limitNames={Object.keys(plan.limits)} />
+      <PlanFields form={form} id={id} />
       {Object.keys(form.formState.errors).length > 0 ? (
         <p role="alert" className="text-danger">
           Check the highlighted fields: every number needs a value and the reason needs 10
