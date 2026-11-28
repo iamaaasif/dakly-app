@@ -88,8 +88,8 @@ export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = 
   ],
   delivered: ['returned', 'with_courier', 'to_confirm', 'on_hold', 'to_pack'],
   partially_delivered: ['returned', 'with_courier', 'to_confirm', 'on_hold', 'to_pack'],
-  returned: [],
-  cancelled: [],
+  returned: ['with_courier', 'to_confirm', 'on_hold', 'to_pack'],
+  cancelled: ['to_confirm', 'on_hold', 'to_pack'],
 };
 
 export const editableOrderStages: readonly OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];

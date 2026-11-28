@@ -21,6 +21,10 @@ export function leavesDelivered(stage: OrderStage): boolean {
   return stage === 'delivered' || stage === 'partially_delivered';
 }
 
+export function reopensOrder(stage: OrderStage): boolean {
+  return stage === 'returned' || stage === 'cancelled';
+}
+
 export function orderStageActions(
   order: OrderDetail | undefined,
   canEditOrders: boolean | undefined,
@@ -30,7 +34,13 @@ export function orderStageActions(
   const multipleUnits = order.items.length > 1 || order.items.some(({ quantity }) => quantity > 1);
   const stages: StageAction[] = orderStageTransitions[stage]
     // Confirm covers the move to packing from the confirmation stages.
-    .filter((next) => next !== 'to_pack' || stage === 'with_courier' || leavesDelivered(stage))
+    .filter(
+      (next) =>
+        next !== 'to_pack' ||
+        stage === 'with_courier' ||
+        leavesDelivered(stage) ||
+        reopensOrder(stage),
+    )
     .filter((next) => next !== 'partially_delivered' || multipleUnits);
   if (
     leavesDelivered(stage) &&

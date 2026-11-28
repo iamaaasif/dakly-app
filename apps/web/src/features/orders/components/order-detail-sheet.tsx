@@ -1,7 +1,7 @@
 import { MoreHorizontal, Printer } from 'lucide-react';
 import { useContext, useRef, useState, type RefObject } from 'react';
 
-import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
+import type { OrderDetail, OrderStage, OrderStageChange } from '@dakly/contracts/orders';
 import { Button, buttonVariants } from '@dakly/ui/button';
 import { Dialog } from '@dakly/ui/dialog';
 import {
@@ -21,6 +21,7 @@ import { EditOrderDialog } from './edit-order-dialog';
 import { OrderDetails } from './order-details';
 import {
   leavesDelivered,
+  reopensOrder,
   orderStageActions,
   stageActionLabels,
   type StageAction,
@@ -220,6 +221,24 @@ function PrintInvoiceLink({ orderId }: { orderId: string }) {
   );
 }
 
+const leftStageNames: Partial<Record<OrderStage, string>> = {
+  cancelled: 'Cancelled',
+  returned: 'Returned',
+};
+
+const keepLabels: Partial<Record<OrderStage, string>> = {
+  cancelled: 'Keep cancelled',
+  returned: 'Keep returned',
+};
+
+function leaveStageWarning(stage: OrderStage, label: string): string {
+  if (stage === 'cancelled')
+    return `${label} reserves the stock for this order again. It fails if there is not enough stock left.`;
+  if (stage === 'returned')
+    return `${label} takes the returned units off the shelf again and sets the payment back to what it was before the return. It fails if the units are gone.`;
+  return `${label} takes back the COD collected for this order and puts the stock count back to where it was before delivery.`;
+}
+
 type LeaveDeliveredDialogProps = {
   order: OrderDetail;
   action: StageAction;
@@ -229,14 +248,15 @@ type LeaveDeliveredDialogProps = {
 
 function LeaveDeliveredDialog({ order, action, onCancel, onConfirm }: LeaveDeliveredDialogProps) {
   return (
-    <Dialog title={`Move order #${order.number} out of Delivered?`} open onClose={onCancel}>
-      <p className="mb-4">
-        {stageActionLabels[action]} takes back the COD collected for this order and puts the stock
-        count back to where it was before delivery.
-      </p>
+    <Dialog
+      title={`Move order #${order.number} out of ${leftStageNames[order.stage] ?? 'Delivered'}?`}
+      open
+      onClose={onCancel}
+    >
+      <p className="mb-4">{leaveStageWarning(order.stage, stageActionLabels[action])}</p>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel}>
-          Keep delivered
+          {keepLabels[order.stage] ?? 'Keep delivered'}
         </Button>
         <Button onClick={onConfirm}>{stageActionLabels[action]}</Button>
       </div>
@@ -296,9 +316,9 @@ function useStageActionState(order: OrderDetail, mutate: (change: OrderStageChan
     a === 'to_confirm' || a === 'to_pack' || a === 'delivered'
       ? mutate({ to: a })
       : setActiveDialog(a);
-  // Leaving Delivered undoes the COD collection and the stock count, so staff confirm it first.
+  // Leaving Delivered, Returned or Cancelled undoes the COD collection and the stock count, so staff confirm it first.
   const handleAction = (a: StageAction) =>
-    leavesDelivered(order.stage) && a !== 'cod' && a !== 'returned'
+    (leavesDelivered(order.stage) || reopensOrder(order.stage)) && a !== 'cod' && a !== 'returned'
       ? setExitAction(a)
       : runAction(a);
   const confirmExit = () => {

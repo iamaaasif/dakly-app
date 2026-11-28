@@ -158,6 +158,8 @@ export const orders = pgTable(
     followUpOn: date('follow_up_on'),
     cancelReason: text('cancel_reason', { enum: cancelReasons }),
     returnReason: text('return_reason'),
+    // Damaged returns never went back on the shelf, so reopening must not take them off again.
+    isReturnDamaged: boolean('is_return_damaged').notNull().default(false),
     paymentStatus: text('payment_status', { enum: orderPaymentStatuses })
       .notNull()
       .default('cod_pending'),

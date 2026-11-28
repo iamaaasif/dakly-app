@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0125_snapshot.json`: **116 tables, 1492 columns, 450 explicit indexes and 356 foreign keys**.
+Built from `packages/db/migrations/meta/0126_snapshot.json`: **116 tables, 1493 columns, 450 explicit indexes and 356 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1184,6 +1184,7 @@ erDiagram
         date follow_up_on "NULL; date"
         text cancel_reason "NULL; text"
         text return_reason "NULL; text"
+        boolean is_return_damaged "NOT NULL; boolean"
         text payment_status "NOT NULL; text"
         bigint items_subtotal_poisha "NOT NULL; bigint"
         bigint order_discount_poisha "NOT NULL; bigint"

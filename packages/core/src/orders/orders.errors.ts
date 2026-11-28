@@ -61,6 +61,14 @@ const ORDER_ERRORS = {
     status: 409,
     message: 'This customer must pay the delivery charge in advance before the order is confirmed',
   },
+  ORDER_REOPEN_STOCK_SHORT: {
+    status: 409,
+    message: 'There is not enough stock to reopen this order. Add stock first, then try again',
+  },
+  ORDER_REOPEN_REFUNDED: {
+    status: 409,
+    message: 'The refund for this order is already paid, so it cannot be reopened',
+  },
   ORDER_STAGE_NOT_ALLOWED: { status: 409, message: 'This order cannot move to that stage' },
 } as const satisfies ErrorCatalog;
 
