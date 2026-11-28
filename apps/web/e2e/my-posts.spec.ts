@@ -185,8 +185,8 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
       for (const account of seed.accounts) {
         const [reach, reactions, comments, linkTaps] = seed.published ?? [null, null, null, null];
         await database.pool.query(
-          `insert into post_targets(id,store_id,post_id,channel_connection_id,status,scheduled_for,published_at,external_post_id,reach,reactions,comments,link_taps)
-           values(gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          `insert into post_targets(id,store_id,post_id,channel_connection_id,status,scheduled_for,published_at,external_post_id,reach,reactions,comments,link_taps,permalink)
+           values(gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
           [
             storeId,
             post.rows[0]!.id,
@@ -199,6 +199,7 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
             reactions,
             comments,
             linkTaps,
+            seed.published ? `https://www.facebook.com/${post.rows[0]!.id}` : null,
           ],
         );
       }

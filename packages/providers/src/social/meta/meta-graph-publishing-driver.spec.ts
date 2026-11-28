@@ -193,6 +193,23 @@ describe('MetaGraphPublishingDriver', () => {
     });
   });
 
+  it('reads the address of a Facebook post and an Instagram post, or null when Meta gives none', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ permalink_url: 'https://www.facebook.com/1/posts/2' }))
+      .mockResolvedValueOnce(Response.json({ permalink: 'https://www.instagram.com/p/abc/' }))
+      .mockResolvedValueOnce(Response.json({ id: '999' }));
+    vi.stubGlobal('fetch', fetch);
+    const facebook = { kind: 'facebook_page' as const, externalPostId: '1_2', isStory: false };
+    const instagram = { kind: 'instagram' as const, externalPostId: '999', isStory: false };
+    expect(await driver.postPermalink(account, facebook)).toBe(
+      'https://www.facebook.com/1/posts/2',
+    );
+    expect(await driver.postPermalink(account, instagram)).toBe('https://www.instagram.com/p/abc/');
+    expect(await driver.postPermalink(account, instagram)).toBeNull();
+    expect(String(fetch.mock.calls[0]![0])).toContain('fields=permalink_url');
+  });
+
   it('reports a rate limit as retryable', async () => {
     vi.stubGlobal(
       'fetch',

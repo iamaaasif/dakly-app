@@ -10,6 +10,7 @@ import { Label } from '@dakly/ui/label';
 import type { SocialAccount } from '../api/get-social-accounts';
 import { attentionReason, canMove, statusLabels, type CalendarEntry } from '../post-calendar';
 import { postTitle } from './post-chip';
+import { ViewPostLink } from './view-post-link';
 import { dhakaTimeOfDay, formatShortDateTime } from '@/lib/format-date';
 
 const targetLabels = {
@@ -77,6 +78,7 @@ export function PostDetailsDialog({ entry, accounts, onMove, onClose }: PostDeta
                 <Badge variant={targetVariants[target.status]}>{targetLabels[target.status]}</Badge>
               </p>
               {time && <p className="text-sm text-text-muted">{formatShortDateTime(time)}</p>}
+              <ViewPostLink permalink={target.permalink} kind={account?.kind} />
               {reason && <p className="text-sm text-warning">{reason}</p>}
               {target.errorMessage && <p className="text-sm text-danger">{target.errorMessage}</p>}
             </li>

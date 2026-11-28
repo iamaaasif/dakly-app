@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0126_snapshot.json`: **116 tables, 1493 columns, 450 explicit indexes and 356 foreign keys**.
+Built from `packages/db/migrations/meta/0127_snapshot.json`: **116 tables, 1494 columns, 450 explicit indexes and 356 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1635,6 +1635,7 @@ erDiagram
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         text container_id "NULL; text"
         text external_post_id "NULL; text"
+        text permalink "NULL; text"
         timestamp_with_time_zone published_at "NULL; timestamp with time zone"
         smallint attempts "NOT NULL; smallint"
         text error_code "NULL; text"

@@ -36,6 +36,8 @@ export type MetaPublishingDriver = {
   publishInstagram(account: MetaPostingAccount, containerId: string): Promise<string>;
   comment(account: MetaPostingAccount, postId: string, message: string): Promise<void>;
   postMetrics(account: MetaPostingAccount, post: MetaPostRef): Promise<MetaPostMetrics>;
+  // Null when Meta gives no address for the post.
+  postPermalink(account: MetaPostingAccount, post: MetaPostRef): Promise<string | null>;
 };
 
 const messages = {

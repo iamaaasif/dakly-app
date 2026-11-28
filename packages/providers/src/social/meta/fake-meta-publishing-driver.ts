@@ -40,6 +40,13 @@ export class FakeMetaPublishingDriver implements MetaPublishingDriver {
 
   async comment() {}
 
+  async postPermalink(
+    _account: MetaPostingAccount,
+    { externalPostId }: { externalPostId: string },
+  ) {
+    return `https://www.facebook.com/${externalPostId}`;
+  }
+
   async postMetrics(_account: MetaPostingAccount, { externalPostId }: { externalPostId: string }) {
     return (
       this.metrics.get(externalPostId) ?? {
