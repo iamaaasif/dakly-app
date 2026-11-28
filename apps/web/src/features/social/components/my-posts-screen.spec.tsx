@@ -258,6 +258,9 @@ it('shows the saved drafts on the Draft tab, with their count on the tab', async
   expect(await screen.findByText('Navy or maroon?')).toBeTruthy();
   expect(screen.getByText('1 draft · only you can see these until you schedule them')).toBeTruthy();
   expect(screen.getByRole('tab', { name: /Draft/ }).textContent).toBe('Draft1');
+  expect(
+    screen.getByRole('link', { name: 'Edit draft: Navy or maroon?' }).getAttribute('href'),
+  ).toBe('/social/posts/d/edit');
 });
 
 it('counts the published posts in the Published tab header', async () => {

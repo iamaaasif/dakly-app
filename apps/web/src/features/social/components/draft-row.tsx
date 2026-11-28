@@ -1,9 +1,10 @@
-import { Copy, Image as ImageIcon, Trash2, TriangleAlert } from 'lucide-react';
+import { Copy, Image as ImageIcon, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import type { PostResponse } from '@dakly/contracts/social';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 
 import type { SocialAccount } from '../api/get-social-accounts';
 import { networkNames } from '../social-labels';
@@ -56,6 +57,13 @@ export function DraftRow({
       <DraftSummary draft={draft} accounts={accounts} />
       {canEdit && (
         <div className="flex gap-1">
+          <Link
+            href={`/social/posts/${draft.id}/edit`}
+            aria-label={`Edit draft: ${label}`}
+            className={buttonVariants({ variant: 'secondary', className: 'px-2' })}
+          >
+            <Pencil aria-hidden="true" size={16} strokeWidth={1.75} />
+          </Link>
           <Button
             variant="secondary"
             aria-label={`Duplicate draft: ${label}`}

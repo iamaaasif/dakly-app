@@ -9,6 +9,7 @@ import type { SocialAccount } from '../../api/get-social-accounts';
 import { networkNames } from '../../social-labels';
 import type { CaptionSettings } from './caption-settings';
 import { CaptionTools } from './caption-tools';
+import { SuggestedHashtags } from './suggested-hashtags';
 
 type CaptionFieldProps = {
   accounts: SocialAccount[];
@@ -26,6 +27,7 @@ export function CaptionField({ accounts, settings, onAiText }: CaptionFieldProps
     ({ channelConnectionId }) =>
       accounts.find(({ id }) => id === channelConnectionId)?.kind === 'instagram',
   );
+  const setCaption = (text: string) => setValue('caption', text, { shouldDirty: true });
   const setCustomised = (on: boolean) =>
     setValue(
       'targets',
@@ -58,7 +60,7 @@ export function CaptionField({ accounts, settings, onAiText }: CaptionFieldProps
           className="min-h-48"
           placeholder="Write a caption, or generate one with Dakly AI above"
           value={caption}
-          onChange={(event) => setValue('caption', event.target.value, { shouldDirty: true })}
+          onChange={(event) => setCaption(event.target.value)}
         />
       )}
       <CaptionTools
@@ -67,11 +69,30 @@ export function CaptionField({ accounts, settings, onAiText }: CaptionFieldProps
         settings={settings}
         disabled={customised}
         onCaption={(text, byAi) => {
-          setValue('caption', text, { shouldDirty: true });
+          setCaption(text);
           if (byAi) onAiText();
         }}
       />
+      <CaptionFooter caption={caption} disabled={customised} onCaption={setCaption} />
     </section>
+  );
+}
+
+type CaptionFooterProps = { caption: string; disabled: boolean; onCaption: (text: string) => void };
+
+function CaptionFooter({ caption, disabled, onCaption }: CaptionFooterProps) {
+  const count = caption.length;
+  return (
+    <>
+      <p className="text-xs text-text-muted">
+        {count} {count === 1 ? 'character' : 'characters'}
+      </p>
+      <SuggestedHashtags
+        caption={caption}
+        disabled={disabled}
+        onAdd={(tag) => onCaption(`${caption.trimEnd()}${caption.trim() ? ' ' : ''}${tag}`)}
+      />
+    </>
   );
 }
 

@@ -53,7 +53,7 @@ export function CaptionTools({ caption, kind, settings, disabled, onCaption }: C
           <Button
             key={operation}
             variant="secondary"
-            className="min-h-9 px-3 text-sm"
+            className="min-h-9 rounded-full px-3 text-sm"
             disabled={off}
             loading={write.isPending && write.variables?.operation === operation}
             onClick={() => rewrite(operation)}
@@ -63,7 +63,7 @@ export function CaptionTools({ caption, kind, settings, disabled, onCaption }: C
         ))}
         <Button
           variant="secondary"
-          className="min-h-9 px-3 text-sm"
+          className="min-h-9 rounded-full px-3 text-sm"
           disabled={off}
           onClick={() => onCaption(addHashtags(caption), false)}
         >

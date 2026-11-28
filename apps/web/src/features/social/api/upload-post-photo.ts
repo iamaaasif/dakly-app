@@ -8,7 +8,8 @@ import {
 
 import { useStoreRequest } from '@/lib/store-request';
 
-export type UploadedPostPhoto = PostPhotoResponse & { contentType: string };
+// A photo a saved draft already has comes without its type, so only a known non-JPEG is flagged.
+export type UploadedPostPhoto = PostPhotoResponse & { contentType?: string };
 
 export function useUploadPostPhoto() {
   const { request } = useStoreRequest();

@@ -2,13 +2,18 @@ import type { CreatePostInput } from '@dakly/contracts/social';
 
 import { useProductPhotos } from '../../api/get-product-photos';
 import type { SocialAccount } from '../../api/get-social-accounts';
+import type { UploadedPostPhoto } from '../../api/upload-post-photo';
 import { captionFor } from '../../post-caption';
 import type { PreviewNetwork } from './post-preview';
 import { useUploadedPhotos } from './use-uploaded-photos';
 
 // What the preview shows for the accounts selected so far.
-export function usePostPreview(post: CreatePostInput, accounts: SocialAccount[]) {
-  const uploads = useUploadedPhotos();
+export function usePostPreview(
+  post: CreatePostInput,
+  accounts: SocialAccount[],
+  savedPhotos?: UploadedPostPhoto[],
+) {
+  const uploads = useUploadedPhotos(savedPhotos);
   const products = useProductPhotos(post.mediaFileIds.length > 0);
   const known = new Map([
     ...(products.data ?? []).flatMap(({ photos }) =>
