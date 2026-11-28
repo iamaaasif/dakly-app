@@ -161,12 +161,6 @@ test('lists chats by folder, state and channel and shows the folder counts', asy
     await expect(page.getByRole('link', { name: /^Unassigned\s*3$/ })).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeVisible();
     await capture(page, 'all');
-    // A mouse picks chats from the tick box that covers the avatar on hover.
-    await page.getByRole('link', { name: /Sadia Islam/ }).hover();
-    await page.getByRole('checkbox', { name: 'Select Sadia Islam' }).click();
-    await expect(page.getByText('1 selected')).toBeVisible();
-    await capture(page, 'bulk-select');
-    await page.getByRole('button', { name: 'Cancel' }).click();
 
     await page.getByRole('link', { name: /^Snoozed/ }).click();
     await expect(page).toHaveURL(/state=snoozed/);

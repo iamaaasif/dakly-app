@@ -1,7 +1,4 @@
 'use client';
-import { ListChecks } from 'lucide-react';
-import { useState } from 'react';
-
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
@@ -10,15 +7,10 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useConversations } from '../api/conversations';
 import { conversationFilters, type ChatScreenQuery } from '../chat-filters';
 import { AiNotLiveBanner } from './ai-not-live-banner';
-import { ChatBulkBar } from './chat-bulk-bar';
 import { ChatRow } from './chat-row';
 import { ChatSearchBar } from './chat-search-bar';
-import { useSessionContext } from '@/lib/session-context';
 
 export function ChatList({ query }: { query: ChatScreenQuery }) {
-  const canEdit = Boolean(useSessionContext().data?.currentStore?.canEditChats);
-  // Picking chats is screen state: it is not worth a link and it ends when the person leaves.
-  const [selected, setSelected] = useState<string[] | null>(null);
   return (
     <section
       aria-label="Chat list"
@@ -29,36 +21,16 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3.5 py-3">
         <ChatSearchBar query={query} />
-        {canEdit && !selected ? (
-          // Touch screens have no hover to show the tick box on the avatar.
-          <Button
-            variant="secondary"
-            aria-label="Select chats"
-            title="Select chats"
-            className="hidden shrink-0 p-0 pointer-coarse:inline-flex"
-            onClick={() => setSelected([])}
-          >
-            <ListChecks aria-hidden="true" size={16} />
-          </Button>
-        ) : null}
       </div>
       <AiNotLiveBanner query={query} />
-      {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ChatRows query={query} selected={selected} canSelect={canEdit} onSelect={setSelected} />
+        <ChatRows query={query} />
       </div>
     </section>
   );
 }
 
-type ChatRowsProps = {
-  query: ChatScreenQuery;
-  selected: string[] | null;
-  canSelect: boolean;
-  onSelect: (selected: string[]) => void;
-};
-
-function ChatRows({ query, selected, canSelect, onSelect }: ChatRowsProps) {
+function ChatRows({ query }: { query: ChatScreenQuery }) {
   const conversations = useConversations(conversationFilters(query));
   if (conversations.error)
     return (
@@ -90,13 +62,7 @@ function ChatRows({ query, selected, canSelect, onSelect }: ChatRowsProps) {
     <>
       <ul className="divide-y divide-border">
         {items.map((conversation) => (
-          <ChatRow
-            key={conversation.id}
-            conversation={conversation}
-            query={query}
-            selection={selectionFor(conversation.id, selected, onSelect)}
-            onStartSelection={canSelect ? () => onSelect([conversation.id]) : undefined}
-          />
+          <ChatRow key={conversation.id} conversation={conversation} query={query} />
         ))}
       </ul>
       {conversations.hasNextPage ? (
@@ -113,18 +79,4 @@ function ChatRows({ query, selected, canSelect, onSelect }: ChatRowsProps) {
       ) : null}
     </>
   );
-}
-
-function selectionFor(
-  id: string,
-  selected: string[] | null,
-  onSelect: (selected: string[]) => void,
-) {
-  if (!selected) return undefined;
-  const isSelected = selected.includes(id);
-  return {
-    selected: isSelected,
-    onToggle: () =>
-      onSelect(isSelected ? selected.filter((other) => other !== id) : [...selected, id]),
-  };
 }
