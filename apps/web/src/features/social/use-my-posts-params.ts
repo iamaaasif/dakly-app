@@ -11,6 +11,12 @@ export type CalendarView = 'month' | 'week' | 'list';
 const calendarViews: readonly string[] = ['month', 'week', 'list'];
 const publishedSorts: readonly string[] = ['reach', 'reactions'];
 
+export type MyPostsTab = 'calendar' | 'published' | 'draft';
+
+function myPostsTab(value: string | null): MyPostsTab {
+  return value === 'published' || value === 'draft' ? value : 'calendar';
+}
+
 function defaultView(): CalendarView {
   // Month is too small to read on a phone, so a phone starts on List.
   const phone = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
@@ -29,7 +35,7 @@ export function useMyPostsParams(accounts: SocialAccount[]) {
   const sort = params.get('sort') ?? '';
   return {
     today,
-    tab: params.get('tab') === 'published' ? ('published' as const) : ('calendar' as const),
+    tab: myPostsTab(params.get('tab')),
     view: calendarViews.includes(view) ? (view as CalendarView) : defaultView(),
     date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today,
     accountId: accounts.some(({ id }) => id === account) ? account : null,
