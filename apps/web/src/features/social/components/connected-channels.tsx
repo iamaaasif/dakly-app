@@ -6,6 +6,7 @@ import { Button } from '@dakly/ui/button';
 import type { SocialAccount } from '../api/get-social-accounts';
 import { accountTypeLabels } from '../social-labels';
 import { NetworkIcon } from './network-icon';
+import { NotifyMeButton } from './notify-me-button';
 
 type ConnectedChannelsProps = {
   accounts: SocialAccount[];
@@ -51,14 +52,15 @@ export function ConnectedChannels({
             onReconnect={() => onReconnect(account)}
           />
         ))}
-        <li className="flex items-center gap-3 px-4 py-3 md:px-6">
+        <li className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6">
           <NetworkIcon kind="tiktok" />
-          <div>
+          <div className="min-w-40 flex-1">
             <p className="font-semibold">TikTok</p>
             <p className="text-sm text-text-muted">
               Coming soon. Schedule TikTok videos from Dakly.
             </p>
           </div>
+          <NotifyMeButton />
         </li>
       </ul>
     </section>

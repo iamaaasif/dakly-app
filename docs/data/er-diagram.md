@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0127_snapshot.json`: **116 tables, 1494 columns, 450 explicit indexes and 356 foreign keys**.
+Built from `packages/db/migrations/meta/0128_snapshot.json`: **117 tables, 1499 columns, 452 explicit indexes and 358 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1531,6 +1531,8 @@ erDiagram
     channel_connections ||..o{ post_targets : "channel_connection_id"
     posts ||..o{ post_targets : "store_id, post_id"
     channel_connections ||..o{ post_targets : "store_id, channel_connection_id"
+    stores ||..o{ platform_interests : "store_id"
+    users ||..o{ platform_interests : "user_id"
     stores ||..o{ whatsapp_templates : "store_id"
     channel_connections ||..o{ whatsapp_templates : "channel_connection_id"
     channel_connections ||..o{ whatsapp_templates : "store_id, channel_connection_id"
@@ -1649,6 +1651,13 @@ erDiagram
         timestamp_with_time_zone next_metrics_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    platform_interests {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid user_id FK "NOT NULL; uuid"
+        text platform "NOT NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     whatsapp_templates {
         uuid id PK "NOT NULL; uuid"
@@ -2481,6 +2490,8 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `brand_profiles_updated_by_user_id_users_id_fk`                      | `brand_profiles(updated_by_user_id)`                      | `users(id)`                                 | no action |
 | `content_pieces_store_id_stores_id_fk`                               | `content_pieces(store_id)`                                | `stores(id)`                                | no action |
 | `content_pieces_created_by_user_id_users_id_fk`                      | `content_pieces(created_by_user_id)`                      | `users(id)`                                 | no action |
+| `platform_interests_store_id_stores_id_fk`                           | `platform_interests(store_id)`                            | `stores(id)`                                | no action |
+| `platform_interests_user_id_users_id_fk`                             | `platform_interests(user_id)`                             | `users(id)`                                 | no action |
 | `post_targets_store_id_stores_id_fk`                                 | `post_targets(store_id)`                                  | `stores(id)`                                | no action |
 | `post_targets_post_id_posts_id_fk`                                   | `post_targets(post_id)`                                   | `posts(id)`                                 | cascade   |
 | `post_targets_channel_connection_id_channel_connections_id_fk`       | `post_targets(channel_connection_id)`                     | `channel_connections(id)`                   | no action |
