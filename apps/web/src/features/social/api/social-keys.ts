@@ -5,6 +5,8 @@ export const socialKeys = {
   productPhotos: (contextTag: string | undefined) =>
     [...root, contextTag, 'product-photos'] as const,
   accounts: (contextTag: string | undefined) => [...root, contextTag, 'accounts'] as const,
+  platformInterests: (contextTag: string | undefined) =>
+    [...root, contextTag, 'platform-interests'] as const,
   drafts: (contextTag: string | undefined) => [...root, contextTag, 'drafts'] as const,
   posts: (contextTag: string | undefined) => [...root, contextTag, 'posts'] as const,
   slots: (contextTag: string | undefined, channelConnectionId: string) =>

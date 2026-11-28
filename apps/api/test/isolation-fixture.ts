@@ -262,6 +262,7 @@ export class IsolationFixture {
       'files',
       'saved_replies',
       'brand_profiles',
+      'platform_interests',
       'usage_events',
       'ai_runs',
       'content_pieces',

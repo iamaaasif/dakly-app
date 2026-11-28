@@ -70,7 +70,7 @@ function show({
   canEdit = true,
   rejectCopy = false,
 } = {}) {
-  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+  const hubFetch = async (url: string, init: RequestInit) => {
     requests.push({ method: init.method ?? 'GET', url, body: init.body as string | undefined });
     const headers = { 'x-session-context': 'verified' };
     if (init.method === 'DELETE') return new Response(null, { status: 204, headers });
@@ -100,7 +100,14 @@ function show({
       );
     if (init.method === 'POST') return Response.json(draft({ id: 'copy' }), { headers });
     return Response.json({ items: drafts, nextCursor: null }, { headers });
-  });
+  };
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) =>
+    url.includes('platform-interests')
+      ? Promise.resolve(
+          Response.json({ platforms: [] }, { headers: { 'x-session-context': 'verified' } }),
+        )
+      : hubFetch(url, init),
+  );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
     contextTag: 'verified',

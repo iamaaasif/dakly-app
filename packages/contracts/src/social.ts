@@ -20,6 +20,12 @@ export const contentKinds = [
   'sms',
   'product_description',
 ] as const;
+// Networks Dakly does not post to yet; a shop can ask to hear when one arrives.
+export const upcomingSocialPlatforms = ['tiktok'] as const;
+export const platformInterestParamsSchema = z.strictObject({
+  platform: z.enum(upcomingSocialPlatforms),
+});
+export type PlatformInterests = { platforms: (typeof upcomingSocialPlatforms)[number][] };
 export const contentLanguages = ['bn', 'en', 'banglish'] as const;
 
 export const savedContentSchema = z

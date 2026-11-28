@@ -8,6 +8,9 @@ import { FileStorageModule } from '../platform/file-storage/file-storage.module'
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
+import { PlatformInterestController } from './platform-interest.controller';
+import { PlatformInterestRepository } from './platform-interest.repository';
+import { PlatformInterestService } from './platform-interest.service';
 import { PostMediaController } from './post-media.controller';
 import { PostMediaService } from './post-media.service';
 import { PostingSlotsController } from './posting-slots.controller';
@@ -33,8 +36,15 @@ import { SocialService } from './social.service';
     StoresModule,
     TeamModule,
   ],
-  controllers: [PostingSlotsController, PostMediaController, SocialController],
+  controllers: [
+    PlatformInterestController,
+    PostingSlotsController,
+    PostMediaController,
+    SocialController,
+  ],
   providers: [
+    PlatformInterestRepository,
+    PlatformInterestService,
     PostingSlotsService,
     PostMediaService,
     PublishedPostsRepository,

@@ -18,6 +18,7 @@ import {
   contentLanguages,
   postKinds,
   postTargetStatuses,
+  upcomingSocialPlatforms,
 } from '@dakly/contracts/social';
 
 import { users } from './auth';
@@ -213,5 +214,26 @@ export const postTargets = pgTable(
       'post_targets_scheduled_has_time',
       sql`${table.status} not in ('scheduled', 'publishing') or ${table.scheduledFor} is not null`,
     ),
+  ],
+);
+
+// One person asking to hear when a network Dakly does not support yet arrives.
+export const platformInterests = pgTable(
+  'platform_interests',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    platform: text('platform', { enum: upcomingSocialPlatforms }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('platform_interests_key').on(table.storeId, table.userId, table.platform),
+    index('platform_interests_user_id_idx').on(table.userId),
+    check('platform_interests_platform', isOneOf(table.platform, upcomingSocialPlatforms)),
   ],
 );

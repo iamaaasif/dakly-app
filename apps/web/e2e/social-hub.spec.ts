@@ -103,6 +103,8 @@ test('shows accounts, drafts and the reconnect banner', async ({ page, context, 
     await expect(channels.getByText('Access expired')).toBeVisible();
     await expect(page.getByText('Add a caption or photo')).toBeVisible();
     await expect(page.locator('img[src*="posts/scarves.jpg"]')).toBeVisible();
+    await channels.getByRole('button', { name: 'Notify me' }).click();
+    await expect(channels.getByRole('button', { name: 'We’ll tell you' })).toBeVisible();
     await capture(page, 'hub');
 
     await page.getByRole('button', { name: 'Connect account' }).click();
@@ -141,6 +143,7 @@ test('shows accounts, drafts and the reconnect banner', async ({ page, context, 
     await page.getByRole('dialog').getByRole('button', { name: 'Delete draft' }).click();
     await expect(page.getByText('Draft deleted.')).toBeVisible();
   } finally {
+    await database.pool.query('delete from platform_interests where store_id=$1', [storeId]);
     await database.pool.query('delete from post_targets where store_id=$1', [storeId]);
     await database.pool.query('delete from posts where store_id=$1', [storeId]);
     await database.pool.query('delete from files where store_id=$1', [storeId]);
