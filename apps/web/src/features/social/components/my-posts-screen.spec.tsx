@@ -77,7 +77,10 @@ const post = (id: string, caption: string, target: Partial<Target>): PostRespons
 
 const requests: { method: string; url: string; body?: string }[] = [];
 
-function show(posts: PostResponse[]) {
+const listFor = (url: string, posts: PostResponse[], drafts: PostResponse[]) =>
+  url.includes('drafts=mine') ? drafts : posts;
+
+function show(posts: PostResponse[], drafts: PostResponse[] = [], items = [page, instagram]) {
   vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
     const headers = { 'x-session-context': 'verified' };
     if (init.method === 'POST') {
@@ -85,8 +88,8 @@ function show(posts: PostResponse[]) {
       return Response.json(posts[0], { headers });
     }
     if (url.includes('/channel-connections'))
-      return Response.json({ items: [page, instagram], nextCursor: null }, { headers });
-    return Response.json({ items: posts, nextCursor: null }, { headers });
+      return Response.json({ items, nextCursor: null }, { headers });
+    return Response.json({ items: listFor(url, posts, drafts), nextCursor: null }, { headers });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
@@ -246,4 +249,30 @@ it('offers no move field for a published post', async () => {
   await userEvent.click(await screen.findByRole('button', { name: /Mustard scarves/ }));
 
   expect(screen.queryByLabelText('Move to')).toBeNull();
+});
+
+it('shows the saved drafts on the Draft tab, with their count on the tab', async () => {
+  query = 'tab=draft';
+  show([], [post('d', 'Navy or maroon?', { status: 'draft' })]);
+  expect(await screen.findByText('Navy or maroon?')).toBeTruthy();
+  expect(screen.getByText('1 draft · only you can see these until you schedule them')).toBeTruthy();
+  expect(screen.getByRole('tab', { name: /Draft/ }).textContent).toBe('Draft1');
+});
+
+it('counts the published posts in the Published tab header', async () => {
+  query = 'tab=published';
+  show([
+    post('c', 'Mustard scarves', { status: 'published', publishedAt: '2026-11-02T14:00:00.000Z' }),
+  ]);
+  const list = await screen.findByRole('region', { name: 'Published posts' });
+  expect(within(list).getByText('1 post published')).toBeTruthy();
+  expect(within(list).getByRole('combobox', { name: 'Filter by account' })).toBeTruthy();
+});
+
+it('asks to connect a channel when none is connected', async () => {
+  show([], [], []);
+  expect(await screen.findByText('Connect your channel')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Connect with channel' }).getAttribute('href')).toBe(
+    '/social',
+  );
 });
