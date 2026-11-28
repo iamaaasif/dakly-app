@@ -66,7 +66,7 @@ describe('WorkflowCanvasGraph', () => {
     expect(steps.getByText('Give a coupon')).toBeTruthy();
     expect(steps.getByText('10% off, valid 3 days')).toBeTruthy();
     expect(steps.getByText('Random split')).toBeTruthy();
-    expect(steps.getByText('Exit')).toBeTruthy();
+    expect(steps.getAllByText('Exit').length).toBeGreaterThan(0);
     expect(steps.getAllByText(/^Step \d$/)).toHaveLength(5);
     expect(steps.getByText('Yes: step 4')).toBeTruthy();
     expect(steps.getByText('No: step 5')).toBeTruthy();

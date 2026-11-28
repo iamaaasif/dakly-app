@@ -132,22 +132,25 @@ describe('layoutWorkflow', () => {
     }
   });
 
-  it('draws two paths to the same step as one labelled line', () => {
+  it('gives each branch that ends the workflow its own exit', () => {
     const graph: AutomationGraph = {
       ...base,
-      firstStepKey: 'dice',
+      firstStepKey: 'split',
       steps: {
-        dice: {
-          kind: 'random_split',
-          paths: [
-            { percent: 50, next: 'end' },
-            { percent: 50, next: 'end' },
-          ],
+        split: {
+          kind: 'condition',
+          paths: [{ condition: { kind: 'placed_order' }, next: 'end' }],
+          elseNext: 'end',
         },
         end: { kind: 'exit' },
       },
     };
-    const { edges } = layoutWorkflow(graph);
-    expect(edges.map(({ label }) => label)).toEqual([undefined, '50% + 50%']);
+    const { edges, nodes } = layoutWorkflow(graph);
+    expect(edges.map(({ label }) => label)).toEqual([undefined, 'Yes', 'No']);
+    const exits = nodes.filter((node) => node.step?.kind === 'exit');
+    expect(exits).toHaveLength(2);
+    expect(exits[0]!.x).not.toBe(exits[1]!.x);
+    expect(exits[0]!.y).toBe(exits[1]!.y);
+    expect(edges.map(({ to }) => to).slice(1)).toEqual(['end', 'end']);
   });
 });
