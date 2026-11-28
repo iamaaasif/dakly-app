@@ -78,6 +78,10 @@ test('writes options, saves one to the library and opens it in Create post', asy
         json: {
           voice: 'Friendly, Warm',
           audience: null,
+          whatYouSell: null,
+          website: null,
+          languages: [],
+          hashtags: [],
           preferredWords: [],
           wordsToAvoid: [],
           callToActionBn: null,

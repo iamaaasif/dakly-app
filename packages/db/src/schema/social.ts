@@ -34,6 +34,8 @@ export const brandProfiles = pgTable(
       .references(() => stores.id),
     voice: text('voice'),
     audience: text('audience'),
+    whatYouSell: text('what_you_sell'),
+    website: text('website'),
     preferredWords: text('preferred_words')
       .array()
       .notNull()
@@ -44,6 +46,7 @@ export const brandProfiles = pgTable(
     defaultTone: text('default_tone'),
     languages: text('languages')
       .array()
+      .$type<(typeof contentLanguages)[number][]>()
       .notNull()
       .default(sql`'{}'::text[]`),
     wordsToAvoid: text('words_to_avoid')

@@ -5,9 +5,15 @@ import { brandProfileSchema, type BrandProfile } from '@dakly/contracts/content'
 export const voiceChoices = ['Friendly', 'Warm', 'Premium', 'Playful', 'Simple', 'Bold'] as const;
 
 // The screen edits words as comma-separated text and the voice as chips; the API stores arrays and text.
+export type BrandLanguage = BrandProfile['languages'][number];
+
 export type BrandValues = {
   voice: string[];
   audience: string;
+  whatYouSell: string;
+  website: string;
+  language: BrandLanguage;
+  hashtags: string;
   preferredWords: string;
   wordsToAvoid: string;
   callToActionBn: string;
@@ -20,11 +26,22 @@ const words = (text: string) =>
     .map((word) => word.trim())
     .filter(Boolean);
 
+// Hashtags are typed separated by spaces or commas; a missing # is added.
+const hashtagsOf = (text: string) =>
+  text
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((tag) => (tag.startsWith('#') ? tag : `#${tag}`));
+
 export function profileOf(values: BrandValues): BrandProfile {
   const text = (value: string) => value.trim() || null;
   return {
     voice: values.voice.join(', ') || null,
     audience: text(values.audience),
+    whatYouSell: text(values.whatYouSell),
+    website: text(values.website),
+    languages: [values.language],
+    hashtags: hashtagsOf(values.hashtags),
     preferredWords: words(values.preferredWords),
     wordsToAvoid: words(values.wordsToAvoid),
     callToActionBn: text(values.callToActionBn),
@@ -40,6 +57,10 @@ export function valuesOf(profile: BrandProfile): BrandValues {
       .map((word) => word.trim())
       .filter(Boolean),
     audience: profile.audience ?? '',
+    whatYouSell: profile.whatYouSell ?? '',
+    website: profile.website ?? '',
+    language: profile.languages[0] ?? 'bn',
+    hashtags: profile.hashtags.join(' '),
     preferredWords: profile.preferredWords.join(', '),
     wordsToAvoid: profile.wordsToAvoid.join(', '),
     callToActionBn: profile.callToActionBn ?? '',
@@ -50,6 +71,10 @@ export function valuesOf(profile: BrandProfile): BrandValues {
 const fields: Record<keyof BrandProfile, keyof BrandValues> = {
   voice: 'voice',
   audience: 'audience',
+  whatYouSell: 'whatYouSell',
+  website: 'website',
+  languages: 'language',
+  hashtags: 'hashtags',
   preferredWords: 'preferredWords',
   wordsToAvoid: 'wordsToAvoid',
   callToActionBn: 'callToActionBn',

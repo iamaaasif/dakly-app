@@ -26,6 +26,10 @@ describe('content filters without RLS assistance', () => {
     const first = {
       voice: 'সহজ',
       audience: null,
+      whatYouSell: null,
+      website: null,
+      languages: [],
+      hashtags: [],
       preferredWords: [],
       wordsToAvoid: [],
       callToActionBn: null,

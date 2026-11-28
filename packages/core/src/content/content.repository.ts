@@ -13,6 +13,10 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 const profileFields = {
   voice: brandProfiles.voice,
   audience: brandProfiles.audience,
+  whatYouSell: brandProfiles.whatYouSell,
+  website: brandProfiles.website,
+  languages: brandProfiles.languages,
+  hashtags: brandProfiles.hashtags,
   preferredWords: brandProfiles.preferredWords,
   wordsToAvoid: brandProfiles.wordsToAvoid,
   callToActionBn: brandProfiles.callToActionBn,

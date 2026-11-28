@@ -7,7 +7,7 @@ import { createDatabase } from '@dakly/db/client';
 
 test.use({ screenshot: 'off' });
 
-const evidence = resolve(process.cwd(), '../../docs/design/evidence/soc-5-content-studio-brand');
+const evidence = resolve(process.cwd(), '../../docs/design/evidence/soc-8-brand-profile');
 
 async function capture(page: Page, name: string, scrollTo?: Locator) {
   await mkdir(evidence, { recursive: true });
@@ -62,6 +62,9 @@ test('saves the brand profile', async ({ page, context, baseURL }) => {
     await page.getByLabel('Who your customers are').fill('Women and men aged 22-40 in Dhaka');
     await page.getByRole('button', { name: 'Friendly' }).click();
     await page.getByRole('button', { name: 'Warm' }).click();
+    await page.getByLabel('Website or page link').fill('urbantrend.com.bd');
+    await page.getByLabel('What you sell').fill('Kurtis, panjabis and everyday wear');
+    await page.getByLabel('Your hashtags').fill('#UrbanTrend #DhakaFashion');
     await page.getByLabel('Words you like to use').fill('comfort, everyday style');
     await page.getByLabel('Words to never use').fill('cheap, guaranteed');
     await page.getByLabel('In English').fill('Inbox us to order.');
@@ -69,13 +72,17 @@ test('saves the brand profile', async ({ page, context, baseURL }) => {
     await page.getByRole('button', { name: 'Save brand profile' }).click();
     await expect(page.getByText('Brand profile saved')).toBeVisible();
     const saved = await database.pool.query(
-      'select voice, audience, preferred_words, words_to_avoid, call_to_action_en, call_to_action_bn from brand_profiles where store_id=$1',
+      'select voice, audience, website, what_you_sell, languages, hashtags, preferred_words, words_to_avoid, call_to_action_en, call_to_action_bn from brand_profiles where store_id=$1',
       [storeId],
     );
     expect(saved.rows).toEqual([
       {
         voice: 'Friendly, Warm',
         audience: 'Women and men aged 22-40 in Dhaka',
+        website: 'urbantrend.com.bd',
+        what_you_sell: 'Kurtis, panjabis and everyday wear',
+        languages: ['bn'],
+        hashtags: ['#UrbanTrend', '#DhakaFashion'],
         preferred_words: ['comfort', 'everyday style'],
         words_to_avoid: ['cheap', 'guaranteed'],
         call_to_action_en: 'Inbox us to order.',
