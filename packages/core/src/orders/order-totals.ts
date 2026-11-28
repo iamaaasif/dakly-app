@@ -20,7 +20,7 @@ export function editedOrderTotals(
 }
 
 export function orderTotals(
-  items: OrderItemWrite[],
+  items: Pick<OrderItemWrite, 'quantity' | 'unitPricePoisha' | 'lineDiscountPoisha'>[],
   {
     orderDiscountPoisha,
     deliveryChargePoisha,

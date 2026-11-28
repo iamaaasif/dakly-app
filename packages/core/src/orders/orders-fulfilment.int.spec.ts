@@ -236,6 +236,83 @@ describe('Manual dispatch and delivery', () => {
     });
     expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 1, reserved: 0 });
   });
+  it('moves a delivered order back to shipped and delivers it again with stock and COD unchanged', async () => {
+    const orderId = await order(f.a, 'to_pack');
+    const { variantId } = await trackedLine(orderId, 2);
+    await service.changeStage(f.a, orderId, { to: 'with_courier', courier: 'pathao' }, editor());
+    await service.changeStage(f.a, orderId, { to: 'delivered' }, editor());
+    await service.recordCodCollected(f.a, orderId, { amountPoisha: 381000 }, editor());
+    const shippedStock = { on_hand: 0, reserved: 0 };
+    expect(await f.row('product_variants', variantId)).toMatchObject(shippedStock);
+
+    const reopened = await service.changeStage(f.a, orderId, { to: 'with_courier' }, editor());
+    expect(reopened).toMatchObject({
+      stage: 'with_courier',
+      courier: 'pathao',
+      paymentStatus: 'cod_pending',
+      codCollectedPoisha: null,
+      codCollectedAt: null,
+      deliveredAt: null,
+      codAmountPoisha: 381000,
+      items: [{ deliveredQuantity: null }],
+    });
+    expect(await f.row('product_variants', variantId)).toMatchObject(shippedStock);
+    await expect(
+      service.changeStage(f.a, orderId, { to: 'with_courier' }, editor()),
+    ).rejects.toMatchObject({ code: 'ORDER_STAGE_NOT_ALLOWED' });
+
+    const again = await service.changeStage(f.a, orderId, { to: 'delivered' }, editor());
+    expect(again).toMatchObject({ stage: 'delivered', items: [{ deliveredQuantity: 2 }] });
+    const collected = await service.recordCodCollected(
+      f.a,
+      orderId,
+      { amountPoisha: 381000 },
+      editor(),
+    );
+    expect(collected).toMatchObject({ paymentStatus: 'cod_collected', codCollectedPoisha: 381000 });
+    expect(await f.row('product_variants', variantId)).toMatchObject(shippedStock);
+    const { rows } = await f.connection.pool.query(
+      "select before, after, actor_user_id from audit_log where store_id=$1 and entity_id=$2 and action='order.stage_changed' order by created_at",
+      [f.a, orderId],
+    );
+    expect(rows.map(({ before, after }) => `${before.state}>${after.state}`)).toEqual([
+      'to_pack>with_courier',
+      'with_courier>delivered',
+      'delivered>with_courier',
+      'with_courier>delivered',
+    ]);
+    expect(rows[2].actor_user_id).toBe(f.userA);
+  });
+
+  it('puts a partly delivered order back with its full totals and reserves the stock again', async () => {
+    const orderId = await order(f.a, 'to_pack');
+    const { variantId, itemId } = await trackedLine(orderId, 3);
+    await service.changeStage(f.a, orderId, { to: 'with_courier' }, editor());
+    await service.changeStage(
+      f.a,
+      orderId,
+      { to: 'partially_delivered', note: 'Kept one', items: [{ itemId, quantity: 1 }] },
+      editor(),
+    );
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 2, reserved: 0 });
+
+    const held = await service.changeStage(
+      f.a,
+      orderId,
+      { to: 'on_hold', reason: 'customer_asked_to_wait' },
+      editor(),
+    );
+    expect(held).toMatchObject({
+      stage: 'on_hold',
+      courier: null,
+      shippedAt: null,
+      deliveredItemsSubtotalPoisha: null,
+      codAmountPoisha: 381000,
+      items: [{ deliveredQuantity: null }],
+    });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 3, reserved: 3 });
+  });
+
   it('uses only the recipient phone and this store’s completed parcels for risk', async () => {
     const phone = '01710000006';
     await order(f.a, 'returned', { phone });

@@ -1,9 +1,9 @@
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type { OrderStageChange } from '@dakly/contracts/orders';
+import type { OrderStage, OrderStageChange } from '@dakly/contracts/orders';
 import type { StockMovementKind } from '@dakly/contracts/products';
 
 import type { ProductStockService } from '../products/product-stock.service';
-import { partialOrderTotals } from './order-totals';
+import { orderTotals, partialOrderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import type { OrdersRepository, StageWrite } from './orders.repository';
 
@@ -24,6 +24,8 @@ export async function applyOrderFulfilment(
 ): Promise<StageWrite> {
   const orderId = order.id;
   const reference = { orderId, actor };
+  if (isReopening(order.stage, change.to))
+    return reopenOrder(storeId, { order, change, actor }, { orders, stock });
   switch (change.to) {
     case 'with_courier':
       if (actor.kind !== 'user') throw orderError('ORDER_STAGE_NOT_ALLOWED');
@@ -130,4 +132,97 @@ async function moveOrderStock(
     if (isStockTracked && quantity > 0)
       await stock.moveStock(storeId, variantId, { ...movement, quantity });
   }
+}
+
+const reopenTargets: OrderStageChange['to'][] = [
+  'with_courier',
+  'to_confirm',
+  'on_hold',
+  'to_pack',
+];
+
+function isReopening(from: OrderStage, to: OrderStageChange['to']): boolean {
+  const leavable =
+    from === 'with_courier' || from === 'delivered' || from === 'partially_delivered';
+  return leavable && reopenTargets.includes(to);
+}
+
+// Staff move an order back out of Courier or Delivered. Stock and COD return to where they were
+// before that step, so moving forward again does not count the parcel twice.
+async function reopenOrder(
+  storeId: string,
+  { order, change, actor }: { order: LockedOrder; change: OrderStageChange; actor: Actor },
+  { orders, stock }: FulfilmentDependencies,
+): Promise<StageWrite> {
+  if (actor.kind !== 'user') throw orderError('ORDER_STAGE_NOT_ALLOWED');
+  const items = await orders.items(storeId, order.id);
+  const reference = { orderId: order.id, actor, reason: 'Delivery reopened' };
+  const write: StageWrite = { deliveredAt: null };
+  if (order.stage !== 'with_courier')
+    Object.assign(
+      write,
+      await reverseDelivery(storeId, { order, items, reference }, { orders, stock }),
+    );
+
+  if (change.to === 'with_courier') {
+    const { courier, courierOtherName, trackingCode } = change;
+    return { ...write, ...(courier !== undefined && { courier, courierOtherName, trackingCode }) };
+  }
+  // Back to a step before the courier: undo the ship movement so the units are only reserved.
+  for (const { variantId, quantity, isStockTracked } of items) {
+    if (!isStockTracked) continue;
+    await stock.moveStock(storeId, variantId, { kind: 'return', quantity, reference });
+    await stock.moveStock(storeId, variantId, { kind: 'reserve', quantity, reference });
+  }
+  return {
+    ...write,
+    courier: null,
+    courierOtherName: null,
+    trackingCode: null,
+    shippedAt: null,
+    shippedByUserId: null,
+  };
+}
+
+async function reverseDelivery(
+  storeId: string,
+  {
+    order,
+    items,
+    reference,
+  }: {
+    order: LockedOrder;
+    items: Items;
+    reference: { orderId: string; actor: Actor; reason: string };
+  },
+  { orders, stock }: FulfilmentDependencies,
+): Promise<StageWrite> {
+  // A partial delivery put the undelivered units back on the shelf; take them off again.
+  for (const { variantId, quantity, deliveredQuantity, isStockTracked } of items) {
+    const undelivered = quantity - (deliveredQuantity ?? quantity);
+    if (isStockTracked && undelivered > 0)
+      await stock.moveStock(storeId, variantId, {
+        kind: 'adjust',
+        quantity: -undelivered,
+        reference,
+      });
+  }
+  await orders.recordDelivery(
+    storeId,
+    order.id,
+    items.map(({ id }) => ({ itemId: id, quantity: null })),
+  );
+  return {
+    deliveredItemsSubtotalPoisha: null,
+    deliveredOrderDiscountPoisha: null,
+    // Only a partial delivery rewrote the COD amount.
+    ...(order.deliveredItemsSubtotalPoisha !== null && {
+      codAmountPoisha: orderTotals(items, order).codAmountPoisha,
+    }),
+    ...(order.paymentStatus === 'cod_collected' && {
+      paymentStatus: order.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
+      codCollectedPoisha: null,
+      codCollectedAt: null,
+    }),
+  };
 }

@@ -97,6 +97,8 @@ export type StageWrite = Partial<
     | 'deliveredItemsSubtotalPoisha'
     | 'deliveredOrderDiscountPoisha'
     | 'codAmountPoisha'
+    | 'codCollectedPoisha'
+    | 'codCollectedAt'
     | 'updatedAt'
   >
 >;
@@ -334,7 +336,7 @@ export class OrdersRepository {
   async recordDelivery(
     storeId: string,
     orderId: string,
-    lines: { itemId: string; quantity: number; discountPoisha?: number }[],
+    lines: { itemId: string; quantity: number | null; discountPoisha?: number | null }[],
   ): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
       tx.execute(sql`

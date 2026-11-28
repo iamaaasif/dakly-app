@@ -12,9 +12,31 @@ describe('order stage actions', () => {
       paymentStatus: 'cod_pending',
       items: [{ quantity: 1 }],
     } as OrderDetail;
-    expect(orderStageActions(order, true)).toEqual(['delivered', 'returned']);
+    expect(orderStageActions(order, true)).toEqual([
+      'delivered',
+      'returned',
+      'to_confirm',
+      'on_hold',
+      'to_pack',
+    ]);
     expect(
       orderStageActions({ ...order, items: [{ ...order.items[0]!, quantity: 2 }] }, true),
     ).toContain('partially_delivered');
+  });
+
+  it('lets staff move a delivered order back to any earlier stage', () => {
+    const order = {
+      stage: 'delivered',
+      source: 'manual',
+      paymentStatus: 'cod_collected',
+      items: [{ quantity: 1 }],
+    } as OrderDetail;
+    expect(orderStageActions(order, true)).toEqual([
+      'returned',
+      'with_courier',
+      'to_confirm',
+      'on_hold',
+      'to_pack',
+    ]);
   });
 });

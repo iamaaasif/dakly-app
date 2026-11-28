@@ -2,11 +2,12 @@ import { orderStageTransitions, type OrderDetail, type OrderStage } from '@dakly
 
 import { canChangeOrderStage } from '../order-actions';
 
-export type StageAction = Exclude<OrderStage, 'to_pack'> | 'cod';
-export type StageFormAction = Exclude<StageAction, 'to_confirm' | 'delivered'>;
+export type StageAction = OrderStage | 'cod';
+export type StageFormAction = Exclude<StageAction, 'to_confirm' | 'to_pack' | 'delivered'>;
 
 export const stageActionLabels: Record<StageAction, string> = {
   to_confirm: 'Back to confirmation',
+  to_pack: 'Back to packing',
   on_hold: 'Put on hold',
   with_courier: 'Sent with courier',
   delivered: 'Mark delivered',
@@ -16,6 +17,10 @@ export const stageActionLabels: Record<StageAction, string> = {
   cod: 'Record COD collected',
 };
 
+export function leavesDelivered(stage: OrderStage): boolean {
+  return stage === 'delivered' || stage === 'partially_delivered';
+}
+
 export function orderStageActions(
   order: OrderDetail | undefined,
   canEditOrders: boolean | undefined,
@@ -24,10 +29,11 @@ export function orderStageActions(
   const { stage, paymentStatus } = order;
   const multipleUnits = order.items.length > 1 || order.items.some(({ quantity }) => quantity > 1);
   const stages: StageAction[] = orderStageTransitions[stage]
-    .filter((next) => next !== 'to_pack')
+    // Confirm covers the move to packing from the confirmation stages.
+    .filter((next) => next !== 'to_pack' || stage === 'with_courier' || leavesDelivered(stage))
     .filter((next) => next !== 'partially_delivered' || multipleUnits);
   if (
-    (stage === 'delivered' || stage === 'partially_delivered') &&
+    leavesDelivered(stage) &&
     (paymentStatus === 'cod_pending' || paymentStatus === 'advance_paid')
   )
     stages.push('cod');
