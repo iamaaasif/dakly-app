@@ -1,7 +1,7 @@
 import { ArrowLeft, Clock } from 'lucide-react';
 import Link from 'next/link';
 
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 
 type EditorHeaderProps = {
   title: string;
@@ -23,7 +23,7 @@ export function EditorHeader({
   onQueue,
 }: EditorHeaderProps) {
   return (
-    <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-3 md:px-6">
+    <header className="flex flex-wrap items-center gap-3">
       <Link
         href={backHref}
         aria-label="Back to My posts"
@@ -32,7 +32,10 @@ export function EditorHeader({
         <ArrowLeft aria-hidden="true" size={20} strokeWidth={1.75} />
       </Link>
       <h1 className="min-w-0 flex-1 text-lg font-bold">{title}</h1>
-      <div className="flex gap-3 max-sm:w-full [&>button]:max-sm:flex-1">
+      <div className="flex gap-3 max-sm:w-full [&>*]:max-sm:flex-1">
+        <Link href={backHref} className={buttonVariants({ variant: 'secondary' })}>
+          Cancel
+        </Link>
         <Button variant="secondary" disabled={pending} onClick={onSaveDraft}>
           Save draft
         </Button>

@@ -144,6 +144,21 @@ test('writes a caption with AI and queues the post', async ({ page, context, bas
       [storeId],
     );
     expect(drafts.rows).toEqual([{ is_ai_written: false, status: 'draft' }]);
+
+    await page.goto('/social/posts?tab=draft');
+    await page.getByRole('link', { name: 'Edit draft: Typed by a person' }).click();
+    await expect(page.getByRole('heading', { name: 'Edit draft', level: 1 })).toBeVisible();
+    const caption = page.getByRole('textbox', { name: 'Caption', exact: true });
+    await expect(caption).toHaveValue('Typed by a person');
+    await capture(page, 'edit-draft');
+    await caption.fill('Changed by a person');
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page).toHaveURL(/\/social\/posts\?tab=draft$/);
+    const edited = await database.pool.query<{ caption: string; status: string }>(
+      "select p.caption, t.status from posts p join post_targets t on t.post_id = p.id where p.store_id=$1 and p.caption like '% by a person'",
+      [storeId],
+    );
+    expect(edited.rows).toEqual([{ caption: 'Changed by a person', status: 'draft' }]);
   } finally {
     await database.pool.query('delete from post_targets where store_id=$1', [storeId]);
     await database.pool.query('delete from posts where store_id=$1', [storeId]);

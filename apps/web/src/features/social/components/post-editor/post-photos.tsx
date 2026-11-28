@@ -87,7 +87,8 @@ function usePhotoChoice(uploads: UploadedPhotos, open: boolean) {
       ...uploads.photos.map(({ id, url }) => ({ id, url, name: 'Uploaded' })),
     ],
     hasNonJpeg: uploads.photos.some(
-      ({ id, contentType }) => chosen.includes(id) && contentType !== 'image/jpeg',
+      ({ id, contentType }) =>
+        chosen.includes(id) && contentType !== undefined && contentType !== 'image/jpeg',
     ),
     toggle: (id: string) =>
       choose(chosen.includes(id) ? chosen.filter((item) => item !== id) : [...chosen, id]),
