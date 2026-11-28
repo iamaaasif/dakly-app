@@ -2,7 +2,9 @@ import type { AuditEntry } from '@dakly/contracts/audit';
 import type { OrderStage, OrderStageChange } from '@dakly/contracts/orders';
 import type { StockMovementKind } from '@dakly/contracts/products';
 
+import { AppError } from '../platform/errors/app-error';
 import type { ProductStockService } from '../products/product-stock.service';
+import { moveOrderReservations } from './order-reservations';
 import { orderTotals, partialOrderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import type { OrdersRepository, StageWrite } from './orders.repository';
@@ -25,7 +27,7 @@ export async function applyOrderFulfilment(
   const orderId = order.id;
   const reference = { orderId, actor };
   if (isReopening(order.stage, change.to))
-    return reopenOrder(storeId, { order, change, actor }, { orders, stock });
+    return reopenAnyOrder(storeId, { order, change, actor }, { orders, stock });
   switch (change.to) {
     case 'with_courier':
       if (actor.kind !== 'user') throw orderError('ORDER_STAGE_NOT_ALLOWED');
@@ -57,6 +59,7 @@ export async function applyOrderFulfilment(
       return {
         returnedAt: now,
         returnReason: change.reason,
+        isReturnDamaged: change.isDamaged,
         ...(['paid', 'advance_paid', 'cod_collected'].includes(order.paymentStatus) && {
           paymentStatus: 'refund_due',
         }),
@@ -142,9 +145,9 @@ const reopenTargets: OrderStageChange['to'][] = [
 ];
 
 function isReopening(from: OrderStage, to: OrderStageChange['to']): boolean {
-  const leavable =
-    from === 'with_courier' || from === 'delivered' || from === 'partially_delivered';
-  return leavable && reopenTargets.includes(to);
+  return (
+    from !== 'to_confirm' && from !== 'on_hold' && from !== 'to_pack' && reopenTargets.includes(to)
+  );
 }
 
 // Staff move an order back out of Courier or Delivered. Stock and COD return to where they were
@@ -225,4 +228,102 @@ async function reverseDelivery(
       codCollectedAt: null,
     }),
   };
+}
+
+function reopenAnyOrder(
+  storeId: string,
+  args: { order: LockedOrder; change: OrderStageChange; actor: Actor },
+  dependencies: FulfilmentDependencies,
+): Promise<StageWrite> {
+  if (args.order.stage === 'returned') return reopenReturnedOrder(storeId, args, dependencies);
+  if (args.order.stage === 'cancelled') return reopenCancelledOrder(storeId, args, dependencies);
+  return reopenOrder(storeId, args, dependencies);
+}
+
+// A returned order goes back to the shipped state first, then follows the same path as a parcel
+// leaving the courier. Restocked units come off the shelf again, and if they are gone the move fails.
+async function reopenReturnedOrder(
+  storeId: string,
+  { order, change, actor }: { order: LockedOrder; change: OrderStageChange; actor: Actor },
+  { orders, stock }: FulfilmentDependencies,
+): Promise<StageWrite> {
+  if (actor.kind !== 'user') throw orderError('ORDER_STAGE_NOT_ALLOWED');
+  if (order.paymentStatus === 'refunded') throw orderError('ORDER_REOPEN_REFUNDED');
+  const items = await orders.items(storeId, order.id);
+  if (!order.isReturnDamaged) {
+    const reference = { orderId: order.id, actor, reason: 'Return reopened' };
+    await requireStock(async () => {
+      for (const { variantId, quantity, deliveredQuantity, isStockTracked } of items) {
+        const returned = deliveredQuantity ?? quantity;
+        if (isStockTracked && returned > 0)
+          await stock.moveStock(storeId, variantId, {
+            kind: 'adjust',
+            quantity: -returned,
+            reference,
+          });
+      }
+    });
+  }
+  const paymentStatus = paymentBeforeReturn(order);
+  const write = await requireStock(() =>
+    reopenOrder(
+      storeId,
+      {
+        order: { ...order, stage: order.deliveredAt ? 'delivered' : 'with_courier', paymentStatus },
+        change,
+        actor,
+      },
+      { orders, stock },
+    ),
+  );
+  return {
+    paymentStatus,
+    ...write,
+    returnedAt: null,
+    returnReason: null,
+    isReturnDamaged: false,
+  };
+}
+
+// The return turned a paid order into refund due without clearing what was collected.
+function paymentBeforeReturn(order: LockedOrder): LockedOrder['paymentStatus'] {
+  if (order.paymentStatus !== 'refund_due') return order.paymentStatus;
+  if (order.codCollectedPoisha !== null) return 'cod_collected';
+  return order.advancePaidPoisha > 0 ? 'advance_paid' : 'paid';
+}
+
+// Reserving again is what stops a reopened order from selling units that went to someone else.
+async function reopenCancelledOrder(
+  storeId: string,
+  { order, change, actor }: { order: LockedOrder; change: OrderStageChange; actor: Actor },
+  { orders, stock }: FulfilmentDependencies,
+): Promise<StageWrite> {
+  if (actor.kind !== 'user') throw orderError('ORDER_STAGE_NOT_ALLOWED');
+  if (order.paymentStatus === 'refunded') throw orderError('ORDER_REOPEN_REFUNDED');
+  const items = await orders.items(storeId, order.id);
+  await requireStock(() =>
+    moveOrderReservations(
+      storeId,
+      stock,
+      { orderId: order.id, actor, reason: `Reopened as ${change.to}` },
+      { before: [], after: items },
+    ),
+  );
+  return {
+    cancelledAt: null,
+    // Cancelling an order with an advance made it refund due.
+    ...(order.paymentStatus === 'refund_due' && {
+      paymentStatus: order.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
+    }),
+  };
+}
+
+async function requireStock<T>(move: () => Promise<T>): Promise<T> {
+  try {
+    return await move();
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'STOCK_NOT_AVAILABLE')
+      throw orderError('ORDER_REOPEN_STOCK_SHORT');
+    throw error;
+  }
 }

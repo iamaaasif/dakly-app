@@ -433,4 +433,116 @@ describe('Manual dispatch and delivery', () => {
     await order(f.a, 'delivered', { phone });
     expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('good');
   });
+  it('reopens a cancelled order, reserves its stock again and restores the advance', async () => {
+    const orderId = await order(f.a, 'to_pack', { advance: 20000 });
+    const { variantId } = await trackedLine(orderId, 2);
+    const cancelled = await service.changeStage(
+      f.a,
+      orderId,
+      { to: 'cancelled', reason: 'customer_changed_mind' },
+      editor(),
+    );
+    expect(cancelled).toMatchObject({ stage: 'cancelled', paymentStatus: 'refund_due' });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 2, reserved: 0 });
+
+    const reopened = await service.changeStage(f.a, orderId, { to: 'to_pack' }, editor());
+    expect(reopened).toMatchObject({
+      stage: 'to_pack',
+      paymentStatus: 'advance_paid',
+      codAmountPoisha: 361000,
+      cancelReason: null,
+    });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 2, reserved: 2 });
+    await service.changeStage(f.a, orderId, { to: 'with_courier' }, editor());
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 0, reserved: 0 });
+  });
+
+  it('refuses to reopen a cancelled order when its stock was sold meanwhile', async () => {
+    const orderId = await order(f.a, 'to_confirm');
+    const { variantId } = await trackedLine(orderId, 2);
+    await service.changeStage(
+      f.a,
+      orderId,
+      { to: 'cancelled', reason: 'customer_changed_mind' },
+      editor(),
+    );
+    await f.connection.pool.query('update product_variants set on_hand=1 where id=$1', [variantId]);
+    await expect(
+      service.changeStage(f.a, orderId, { to: 'to_confirm' }, editor()),
+    ).rejects.toMatchObject({ code: 'ORDER_REOPEN_STOCK_SHORT' });
+    expect(await f.row('orders', orderId)).toMatchObject({ stage: 'cancelled' });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 1, reserved: 0 });
+  });
+
+  it('reopens a returned order with stock and COD back where they were before delivery', async () => {
+    const orderId = await order(f.a, 'to_pack');
+    const { variantId } = await trackedLine(orderId, 2);
+    await service.changeStage(f.a, orderId, { to: 'with_courier' }, editor());
+    await service.changeStage(f.a, orderId, { to: 'delivered' }, editor());
+    await service.recordCodCollected(f.a, orderId, { amountPoisha: 381000 }, editor());
+    await service.changeStage(
+      f.a,
+      orderId,
+      { to: 'returned', reason: 'Refused at the door', isDamaged: false },
+      editor(),
+    );
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 2, reserved: 0 });
+
+    const reopened = await service.changeStage(f.a, orderId, { to: 'with_courier' }, editor());
+    expect(reopened).toMatchObject({
+      stage: 'with_courier',
+      paymentStatus: 'cod_pending',
+      codCollectedPoisha: null,
+      codAmountPoisha: 381000,
+      returnedAt: null,
+      returnReason: null,
+      deliveredAt: null,
+    });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 0, reserved: 0 });
+
+    await service.changeStage(
+      f.a,
+      orderId,
+      { to: 'returned', reason: 'Again', isDamaged: false },
+      editor(),
+    );
+    const packing = await service.changeStage(f.a, orderId, { to: 'to_pack' }, editor());
+    expect(packing).toMatchObject({ stage: 'to_pack', paymentStatus: 'cod_pending' });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 2, reserved: 2 });
+  });
+
+  it('does not take damaged units off the shelf when a return is reopened, and refuses when restocked units are gone', async () => {
+    const damagedId = await order(f.a, 'to_pack');
+    const damaged = await trackedLine(damagedId, 1);
+    await service.changeStage(f.a, damagedId, { to: 'with_courier' }, editor());
+    await service.changeStage(
+      f.a,
+      damagedId,
+      { to: 'returned', reason: 'Damaged parcel', isDamaged: true },
+      editor(),
+    );
+    await service.changeStage(f.a, damagedId, { to: 'with_courier' }, editor());
+    expect(await f.row('product_variants', damaged.variantId)).toMatchObject({
+      on_hand: 0,
+      reserved: 0,
+    });
+
+    const soldId = await order(f.a, 'to_pack');
+    const sold = await trackedLine(soldId, 2);
+    await service.changeStage(f.a, soldId, { to: 'with_courier' }, editor());
+    await service.changeStage(
+      f.a,
+      soldId,
+      { to: 'returned', reason: 'Refused', isDamaged: false },
+      editor(),
+    );
+    await f.connection.pool.query('update product_variants set on_hand=1 where id=$1', [
+      sold.variantId,
+    ]);
+    await expect(
+      service.changeStage(f.a, soldId, { to: 'with_courier' }, editor()),
+    ).rejects.toMatchObject({ code: 'ORDER_REOPEN_STOCK_SHORT' });
+    expect(await f.row('orders', soldId)).toMatchObject({ stage: 'returned' });
+    expect(await f.row('product_variants', sold.variantId)).toMatchObject({ on_hand: 1 });
+  });
 });

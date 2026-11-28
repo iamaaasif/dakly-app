@@ -39,4 +39,24 @@ describe('order stage actions', () => {
       'to_pack',
     ]);
   });
+
+  it('lets staff reopen a returned or cancelled order', () => {
+    const returned = {
+      stage: 'returned',
+      source: 'manual',
+      paymentStatus: 'refund_due',
+      items: [{ quantity: 1 }],
+    } as OrderDetail;
+    expect(orderStageActions(returned, true)).toEqual([
+      'with_courier',
+      'to_confirm',
+      'on_hold',
+      'to_pack',
+    ]);
+    expect(orderStageActions({ ...returned, stage: 'cancelled' }, true)).toEqual([
+      'to_confirm',
+      'on_hold',
+      'to_pack',
+    ]);
+  });
 });

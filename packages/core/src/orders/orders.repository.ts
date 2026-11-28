@@ -51,6 +51,7 @@ const summaryColumns = {
 
 const detailColumns = {
   ...summaryColumns,
+  isReturnDamaged: orders.isReturnDamaged,
   createdByType: orders.createdByType,
   updatedAt: orders.updatedAt,
   buyerContactId: orders.buyerContactId,
@@ -93,6 +94,7 @@ export type StageWrite = Partial<
     | 'deliveredAt'
     | 'returnedAt'
     | 'returnReason'
+    | 'isReturnDamaged'
     | 'paymentStatus'
     | 'deliveredItemsSubtotalPoisha'
     | 'deliveredOrderDiscountPoisha'
